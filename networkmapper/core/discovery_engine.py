@@ -1,7 +1,7 @@
 import nmap
 
 
-class NetworkScanner:
+class DiscoveryEngine:
 
     def __init__(self):
         self.scanner = nmap.PortScanner()
