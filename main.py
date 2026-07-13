@@ -1,12 +1,11 @@
-from networkmapper.scanner import NetworkScanner
+from networkmapper.application import Application
 
-scanner = NetworkScanner()
 
-subnet = input("Subnet (192.168.1.0/24): ")
+def main() -> None:
+    """Application entry point."""
+    app = Application()
+    app.run()
 
-devices = scanner.discover(subnet)
 
-print(f"Found {len(devices)} device(s)\n")
-
-for device in devices:
-    print(device)
+if __name__ == "__main__":
+    main()
