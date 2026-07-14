@@ -309,3 +309,13 @@ NetworkMapper should require no development tools on the technician's laptop.
 The final product will be distributed as a self-contained Windows executable.
 
 The application should function completely offline and require minimal configuration.
+
+---
+
+## Documentation First
+
+The primary purpose of NetworkMapper is to create accurate network documentation where none exists.
+
+Discovery is not the final product.
+
+Documentation is.
