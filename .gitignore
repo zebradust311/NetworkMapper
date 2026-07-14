@@ -1,8 +1,9 @@
-# Python
+# Python cache
 __pycache__/
 *.py[cod]
 *.pyo
 *.pyd
+*.pyc
 
 # Virtual Environment
 venv/
@@ -25,3 +26,6 @@ Thumbs.db
 # Coverage
 .coverage
 htmlcov/
+
+# Environment files
+.env
