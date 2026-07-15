@@ -1,0 +1,942 @@
+{
+  "customer_name": "Test Network",
+  "created_date": "2026-07-15T13:22:27.167991",
+  "modified_date": "2026-07-15T13:22:27.168018",
+  "devices": [
+    {
+      "ip_address": "172.16.100.1",
+      "hostname": null,
+      "mac_address": "C8:4C:75:73:1B:C1",
+      "vendor": "Cisco Systems",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.2",
+      "hostname": null,
+      "mac_address": "18:C2:41:56:AE:C0",
+      "vendor": "SonicWall",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.4",
+      "hostname": null,
+      "mac_address": "FC:EC:DA:46:DC:EF",
+      "vendor": "Ubiquiti",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.6",
+      "hostname": "sw2.wrf.scterm.com",
+      "mac_address": "18:C2:41:04:39:88",
+      "vendor": "SonicWall",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.7",
+      "hostname": null,
+      "mac_address": "FC:EC:DA:46:DD:03",
+      "vendor": "Ubiquiti",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.8",
+      "hostname": null,
+      "mac_address": "90:EC:77:98:3B:FF",
+      "vendor": "silicom",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.10",
+      "hostname": null,
+      "mac_address": "FC:EC:DA:7A:59:09",
+      "vendor": "Ubiquiti",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.11",
+      "hostname": "SCTVSH01.wrf.scterm.com",
+      "mac_address": "C8:1F:66:BA:22:71",
+      "vendor": "Dell",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.12",
+      "hostname": "SCTVSH02.wrf.scterm.com",
+      "mac_address": "C8:1F:66:BA:28:05",
+      "vendor": "Dell",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.14",
+      "hostname": "SCT0020.wrf.scterm.com",
+      "mac_address": "00:15:5D:64:0B:00",
+      "vendor": "Microsoft",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.15",
+      "hostname": "SCTSEPS.wrf.scterm.com",
+      "mac_address": "00:15:5D:64:0B:01",
+      "vendor": "Microsoft",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.17",
+      "hostname": "sct0003.wrf.scterm.com",
+      "mac_address": "00:15:5D:64:0B:22",
+      "vendor": "Microsoft",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.18",
+      "hostname": "sct0007.wrf.scterm.com",
+      "mac_address": "00:22:19:6D:80:91",
+      "vendor": "Dell",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.19",
+      "hostname": "SCT0008.wrf.scterm.com",
+      "mac_address": "4C:D9:8F:B6:39:6C",
+      "vendor": "Dell",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.20",
+      "hostname": "SCT00DC1.wrf.scterm.com",
+      "mac_address": "50:9A:4C:6C:6F:0E",
+      "vendor": "Dell",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.21",
+      "hostname": "SCT00DC2.wrf.scterm.com",
+      "mac_address": "50:9A:4C:6C:78:D6",
+      "vendor": "Dell",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.25",
+      "hostname": "PWD.wrf.scterm.com",
+      "mac_address": "00:15:5D:64:0C:08",
+      "vendor": "Microsoft",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.28",
+      "hostname": "SCTVSH03.wrf.scterm.com",
+      "mac_address": "50:7C:6F:01:45:0E",
+      "vendor": "Intel Corporate",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.30",
+      "hostname": null,
+      "mac_address": "00:15:5D:66:9E:08",
+      "vendor": "Microsoft",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.31",
+      "hostname": "status.wrf.scterm.com",
+      "mac_address": "00:15:5D:66:9E:09",
+      "vendor": "Microsoft",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.32",
+      "hostname": "ci-cd.wrf.scterm.com",
+      "mac_address": "00:15:5D:66:9E:0A",
+      "vendor": "Microsoft",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.33",
+      "hostname": "planning.wrf.scterm.com",
+      "mac_address": "00:15:5D:66:9E:0B",
+      "vendor": "Microsoft",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.40",
+      "hostname": null,
+      "mac_address": "70:F3:5A:74:D5:13",
+      "vendor": "Cisco Systems",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.49",
+      "hostname": "SCT0035.wrf.scterm.com",
+      "mac_address": "00:15:5D:66:9E:05",
+      "vendor": "Microsoft",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.52",
+      "hostname": "sctts01.wrf.scterm.com",
+      "mac_address": "00:15:5D:64:0B:14",
+      "vendor": "Microsoft",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.53",
+      "hostname": "sctts02.wrf.scterm.com",
+      "mac_address": "00:14:22:B1:49:5A",
+      "vendor": "Dell",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.54",
+      "hostname": "SCTRDS1.wrf.scterm.com",
+      "mac_address": "00:15:5D:66:9E:00",
+      "vendor": "Microsoft",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.55",
+      "hostname": "sctts04.wrf.scterm.com",
+      "mac_address": "00:15:5D:64:0B:19",
+      "vendor": "Microsoft",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.64",
+      "hostname": null,
+      "mac_address": "00:50:F9:51:92:FC",
+      "vendor": "Sensormatic Electronics",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.67",
+      "hostname": null,
+      "mac_address": "00:60:35:23:1E:67",
+      "vendor": "Dallas Semiconductor",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.82",
+      "hostname": null,
+      "mac_address": "D8:5E:D3:80:12:30",
+      "vendor": "Giga-byte Technology",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.83",
+      "hostname": "WRFCAMSRV.wrf.scterm.com",
+      "mac_address": "B4:83:51:10:B5:B0",
+      "vendor": "Intel Corporate",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.89",
+      "hostname": null,
+      "mac_address": "18:E8:29:4F:6E:0F",
+      "vendor": "Ubiquiti",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.90",
+      "hostname": null,
+      "mac_address": "F0:9F:C2:23:C3:E9",
+      "vendor": "Ubiquiti",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.91",
+      "hostname": null,
+      "mac_address": "F0:9F:C2:70:0D:C3",
+      "vendor": "Ubiquiti",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.92",
+      "hostname": null,
+      "mac_address": "78:8A:20:50:D3:B4",
+      "vendor": "Ubiquiti",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.93",
+      "hostname": null,
+      "mac_address": "74:AC:B9:23:F4:70",
+      "vendor": "Ubiquiti",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.95",
+      "hostname": null,
+      "mac_address": "FC:EC:DA:37:B8:50",
+      "vendor": "Ubiquiti",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.96",
+      "hostname": null,
+      "mac_address": "78:8A:20:D0:1F:D8",
+      "vendor": "Ubiquiti",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.97",
+      "hostname": null,
+      "mac_address": "78:8A:20:D3:78:3A",
+      "vendor": "Ubiquiti",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.98",
+      "hostname": null,
+      "mac_address": "78:8A:20:D6:C2:21",
+      "vendor": "Ubiquiti",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.99",
+      "hostname": null,
+      "mac_address": "74:AC:B9:BC:5E:C7",
+      "vendor": "Ubiquiti",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.100",
+      "hostname": null,
+      "mac_address": "F4:92:BF:56:29:E8",
+      "vendor": "Ubiquiti",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.101",
+      "hostname": null,
+      "mac_address": "78:8A:20:D6:DE:6E",
+      "vendor": "Ubiquiti",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.102",
+      "hostname": null,
+      "mac_address": "FC:EC:DA:13:7E:22",
+      "vendor": "Ubiquiti",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.104",
+      "hostname": null,
+      "mac_address": "74:83:C2:C9:38:F0",
+      "vendor": "Ubiquiti",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.105",
+      "hostname": null,
+      "mac_address": "74:AC:B9:26:31:50",
+      "vendor": "Ubiquiti",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.106",
+      "hostname": null,
+      "mac_address": "74:AC:B9:29:5B:4F",
+      "vendor": "Ubiquiti",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.107",
+      "hostname": null,
+      "mac_address": "74:83:C2:C9:39:F6",
+      "vendor": "Ubiquiti",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.120",
+      "hostname": null,
+      "mac_address": "00:26:AB:BF:60:93",
+      "vendor": "Seiko Epson",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.123",
+      "hostname": null,
+      "mac_address": "00:03:F4:0D:83:FF",
+      "vendor": "NetBurner",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.124",
+      "hostname": null,
+      "mac_address": "00:0C:26:1F:06:81",
+      "vendor": "Weintek Labs.",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.125",
+      "hostname": "SCT2042.wrf.scterm.com",
+      "mac_address": "6C:2B:59:D8:6A:93",
+      "vendor": "Dell",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.148",
+      "hostname": null,
+      "mac_address": "D8:EB:97:73:BB:37",
+      "vendor": "TRENDnet",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.152",
+      "hostname": null,
+      "mac_address": "B4:39:D6:04:2C:80",
+      "vendor": "ProCurve Networking by HP",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.153",
+      "hostname": null,
+      "mac_address": "74:AC:B9:AA:D0:90",
+      "vendor": "Ubiquiti",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.155",
+      "hostname": null,
+      "mac_address": "B4:39:D6:04:3C:00",
+      "vendor": "ProCurve Networking by HP",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.156",
+      "hostname": null,
+      "mac_address": "80:C1:6E:C2:B4:60",
+      "vendor": "Hewlett Packard",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.160",
+      "hostname": null,
+      "mac_address": "B4:FB:E4:1A:2E:77",
+      "vendor": "Ubiquiti",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.166",
+      "hostname": null,
+      "mac_address": "40:9B:CD:FF:84:39",
+      "vendor": "D-Link International",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.172",
+      "hostname": null,
+      "mac_address": "F4:E2:C6:C0:17:0F",
+      "vendor": "Ubiquiti",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.178",
+      "hostname": null,
+      "mac_address": "3C:C1:2C:E0:6A:EE",
+      "vendor": "AES",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.190",
+      "hostname": null,
+      "mac_address": "00:50:AA:48:78:B6",
+      "vendor": "Konica Minolta Holdings",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.191",
+      "hostname": null,
+      "mac_address": "00:50:AA:48:90:50",
+      "vendor": "Konica Minolta Holdings",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.192",
+      "hostname": null,
+      "mac_address": "00:50:AA:48:7B:62",
+      "vendor": "Konica Minolta Holdings",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.193",
+      "hostname": null,
+      "mac_address": "00:50:AA:51:8F:22",
+      "vendor": "Konica Minolta Holdings",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.197",
+      "hostname": null,
+      "mac_address": "84:69:93:FB:94:E3",
+      "vendor": "HP",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.198",
+      "hostname": null,
+      "mac_address": "E8:39:35:8E:56:5F",
+      "vendor": "Hewlett Packard",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.200",
+      "hostname": null,
+      "mac_address": "58:38:79:C8:3D:CF",
+      "vendor": "Ricoh Company",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.201",
+      "hostname": null,
+      "mac_address": "08:00:37:EA:CC:F0",
+      "vendor": "Fujifilm Business Innovation",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.202",
+      "hostname": null,
+      "mac_address": "00:9C:02:84:1A:06",
+      "vendor": "Hewlett Packard",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.204",
+      "hostname": null,
+      "mac_address": "B0:5C:DA:C3:20:37",
+      "vendor": "HP",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.207",
+      "hostname": null,
+      "mac_address": "EC:9A:74:31:B9:CA",
+      "vendor": "Hewlett Packard",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.208",
+      "hostname": null,
+      "mac_address": "BC:0F:F3:4C:6E:FC",
+      "vendor": "HP",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.211",
+      "hostname": null,
+      "mac_address": "B4:22:00:54:6A:DE",
+      "vendor": "Brother Industries",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.217",
+      "hostname": null,
+      "mac_address": "C0:18:03:91:DB:89",
+      "vendor": "HP",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.218",
+      "hostname": null,
+      "mac_address": "10:B1:DF:8E:02:57",
+      "vendor": "Cloud Network Technology Singapore PTE.",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.220",
+      "hostname": null,
+      "mac_address": "80:5E:C0:6A:4F:82",
+      "vendor": "Yealink(Xiamen) Network Technology",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.221",
+      "hostname": null,
+      "mac_address": "80:5E:C0:69:F9:91",
+      "vendor": "Yealink(Xiamen) Network Technology",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.230",
+      "hostname": null,
+      "mac_address": "00:07:05:31:5D:A3",
+      "vendor": "Endress & Hauser GmbH &",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.231",
+      "hostname": null,
+      "mac_address": "00:07:05:33:01:7E",
+      "vendor": "Endress & Hauser GmbH &",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.232",
+      "hostname": null,
+      "mac_address": "00:07:05:00:50:4A",
+      "vendor": "Endress & Hauser GmbH &",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.233",
+      "hostname": null,
+      "mac_address": "00:0D:8D:A2:82:E6",
+      "vendor": "Prosoft Technology",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.234",
+      "hostname": null,
+      "mac_address": "00:0D:8D:B0:70:71",
+      "vendor": "Prosoft Technology",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.240",
+      "hostname": null,
+      "mac_address": "AC:8B:A9:B0:7D:DD",
+      "vendor": "Ubiquiti",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    }
+  ]
+}
