@@ -1,7 +1,7 @@
 {
   "customer_name": "Test Network",
-  "created_date": "2026-07-15T16:24:50.958461",
-  "modified_date": "2026-07-15T16:24:50.958490",
+  "created_date": "2026-07-15T16:44:35.776564",
+  "modified_date": "2026-07-15T16:44:35.776590",
   "devices": [
     {
       "ip_address": "172.16.100.1",
@@ -543,6 +543,17 @@
       ]
     },
     {
+      "ip_address": "172.16.100.110",
+      "hostname": null,
+      "mac_address": "78:8A:20:50:E7:E1",
+      "vendor": "Ubiquiti",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
       "ip_address": "172.16.100.120",
       "hostname": null,
       "mac_address": "00:26:AB:BF:60:93",
@@ -587,9 +598,31 @@
       ]
     },
     {
+      "ip_address": "172.16.100.144",
+      "hostname": null,
+      "mac_address": "2C:B8:ED:E9:0B:57",
+      "vendor": "SonicWall",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
       "ip_address": "172.16.100.145",
       "hostname": null,
       "mac_address": "2C:B8:ED:E9:0C:95",
+      "vendor": "SonicWall",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.146",
+      "hostname": null,
+      "mac_address": "2C:B8:ED:EC:DE:64",
       "vendor": "SonicWall",
       "operating_system": null,
       "device_type": "unknown",
@@ -602,6 +635,17 @@
       "hostname": null,
       "mac_address": "D8:EB:97:73:BB:37",
       "vendor": "TRENDnet",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.149",
+      "hostname": null,
+      "mac_address": "FC:EC:DA:7A:59:04",
+      "vendor": "Ubiquiti",
       "operating_system": null,
       "device_type": "unknown",
       "discovery_sources": [
@@ -664,6 +708,72 @@
       ]
     },
     {
+      "ip_address": "172.16.100.161",
+      "hostname": null,
+      "mac_address": "94:05:B6:6B:07:D9",
+      "vendor": "Liling FullRiver Electronics & Technology",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.165",
+      "hostname": null,
+      "mac_address": "2C:B8:ED:E6:D3:66",
+      "vendor": "SonicWall",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.166",
+      "hostname": null,
+      "mac_address": "40:9B:CD:FF:84:39",
+      "vendor": "D-Link International",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.167",
+      "hostname": null,
+      "mac_address": "40:9B:CD:FF:85:62",
+      "vendor": "D-Link International",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.170",
+      "hostname": null,
+      "mac_address": "E0:46:EE:FF:8F:A8",
+      "vendor": "Netgear",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.171",
+      "hostname": null,
+      "mac_address": "2C:B8:ED:E6:D0:1D",
+      "vendor": "SonicWall",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
       "ip_address": "172.16.100.172",
       "hostname": null,
       "mac_address": "F4:E2:C6:C0:17:0F",
@@ -689,6 +799,28 @@
       "ip_address": "172.16.100.190",
       "hostname": null,
       "mac_address": "00:50:AA:48:78:B6",
+      "vendor": "Konica Minolta Holdings",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.191",
+      "hostname": null,
+      "mac_address": "00:50:AA:48:90:50",
+      "vendor": "Konica Minolta Holdings",
+      "operating_system": null,
+      "device_type": "unknown",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.192",
+      "hostname": null,
+      "mac_address": "00:50:AA:48:7B:62",
       "vendor": "Konica Minolta Holdings",
       "operating_system": null,
       "device_type": "unknown",
@@ -767,6 +899,17 @@
       "hostname": null,
       "mac_address": "B0:5C:DA:C3:20:37",
       "vendor": "HP",
+      "operating_system": null,
+      "device_type": "printer",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.207",
+      "hostname": null,
+      "mac_address": "EC:9A:74:31:B9:CA",
+      "vendor": "Hewlett Packard",
       "operating_system": null,
       "device_type": "printer",
       "discovery_sources": [

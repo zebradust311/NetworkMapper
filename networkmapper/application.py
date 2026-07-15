@@ -2,6 +2,7 @@
 Main application controller for NetworkMapper.
 """
 
+
 from networkmapper.discovery.discovery_engine import DiscoveryEngine
 from networkmapper.discovery.nmap_provider import NmapProvider
 from networkmapper.project.models import Project
@@ -24,6 +25,35 @@ class Application:
 
         graph = engine.discover()
         before_save_count = graph.device_count()
+        print("\nClassification Summary")
+        print("-" * 40)
+
+        classification_counts = {}
+
+        for device in graph.all_devices():
+            device_type = device.device_type.name
+
+            if device_type not in classification_counts:
+                classification_counts[device_type] = 0
+
+            classification_counts[device_type] += 1
+
+        for device_type in sorted(classification_counts):
+            print(f"{device_type:<15} {classification_counts[device_type]}")
+
+        print("\nSample Classifications")
+        print("-" * 80)
+        print(f"{'IP Address':<16} {'Hostname':<30} {'Vendor':<20} {'Type'}")
+
+        for device in list(graph.all_devices())[:20]:
+            print(
+                f"{device.ip_address:<16} "
+                f"{(device.hostname or 'Unknown'):<30} "
+                f"{(device.vendor or 'Unknown'):<20} "
+                f"{device.device_type.name}"
+            )
+
+        print()
 
         project = Project(
             customer_name="Test Network",
