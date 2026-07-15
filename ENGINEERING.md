@@ -6,6 +6,8 @@
 
 # Project Philosophy
 
+NetworkMapper exists to reduce the time, effort, and uncertainty required to understand an undocumented network. Every architectural and implementation decision should support that mission.
+
 NetworkMapper is being developed as a professional network discovery platform.
 
 The goal is **not** to create another network scanner.
@@ -111,6 +113,10 @@ Topology Engine
 ## 7. Everything starts with a real-world problem.
 
 We only build features that solve actual technician workflows.
+
+---
+
+## 8. The software should never get in the technician's way.
 
 ---
 
