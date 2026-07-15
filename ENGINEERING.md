@@ -22,6 +22,10 @@ It is a network relationship mapping platform.
 
 The purpose of discovery is to build an accurate graph of the relationships between devices, networks, interfaces, and services. All visualizations, reports, and exports are derived from that graph.
 
+Every new capability should be validated with a real-world workflow before it becomes permanent.
+
+The internal data model is the product. Every export is a view of that model.
+
 ---
 
 # Primary Design Goal
@@ -72,9 +76,11 @@ Application → coordinates the application.
 
 Discovery Engine → discovers devices.
 
-Inventory → stores discovered devices.
+NetworkGraph → stores discovered devices.
 
-Exporter → writes data to external formats.
+Project → owns the network graph.
+
+Exporter → writes external representations.
 
 ---
 
@@ -100,9 +106,9 @@ Examples:
 
 Discovery Engine
 
-Logger
+Project Serializer
 
-Inventory
+Device Classifier
 
 Exporter
 
@@ -128,12 +134,18 @@ main.py
     ▼
 Application
     │
-    ├── Configuration
-    ├── Logger
-    ├── Discovery Engine
-    ├── Inventory
-    ├── Topology
-    └── Exporters
+    ▼
+Project
+    │
+    ├── NetworkGraph
+    ├── Metadata
+    └── Scan History (future)
+            │
+            ▼
+DiscoveryEngine
+            │
+            ▼
+DiscoveryProviders
 ```
 
 ---
@@ -147,9 +159,11 @@ networkmapper/
 
     core/
 
-    providers/
+    discovery/
 
     exporters/
+
+    project/
 
     ui/
 
@@ -188,7 +202,9 @@ from networkmapper.core.models import Device
 
 ## Logging
 
-Do not use print() inside application logic.
+Temporary validation harnesses may use print().
+
+Production application logic should use the Logger service.
 
 Use the Logger service.
 
@@ -252,18 +268,14 @@ Stuff
 # Development Phases
 
 Phase 1 — Foundation
-
 Phase 2 — Discovery
-
-Phase 3 — Enterprise Discovery
-
-Phase 4 — Network Intelligence
-
-Phase 5 — Draw.io Export
-
-Phase 6 — Project Management
-
-Phase 7 — Production Release
+Phase 3 — Persistence
+Phase 4 — Intelligence
+Phase 5 — Enterprise Discovery
+Phase 6 — Project Intelligence
+Phase 7 — Exports
+Phase 8 — MSP Workflows
+Phase 9 — Production
 
 ---
 
@@ -284,11 +296,10 @@ A phase is complete when:
 NetworkMapper should enable a technician to:
 
 - Walk into a customer site.
-- Start with one IP address or subnet.
-- Automatically discover the network.
-- Generate an editable Draw.io topology.
-- Save the discovery as a reusable project.
-- Compare future scans against previous discoveries.
+- Discover the environment.
+- Create a reusable customer project.
+- Compare future discoveries.
+- Produce documentation for technicians and customers.
 
 ---
 
@@ -325,3 +336,21 @@ The primary purpose of NetworkMapper is to create accurate network documentation
 Discovery is not the final product.
 
 Documentation is.
+
+---
+
+## Data Philosophy
+
+The Project is the source of truth.
+
+The NetworkGraph is the canonical representation of the discovered environment.
+
+Discovery providers collect facts.
+
+Intelligence interprets those facts.
+
+Exporters present those facts.
+
+Open, portable formats should be preferred whenever practical.
+
+The Project should be complete enough that a technician can resume work without rediscovering the network.
