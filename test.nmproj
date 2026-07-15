@@ -1,7 +1,7 @@
 {
   "customer_name": "Test Network",
-  "created_date": "2026-07-15T13:22:27.167991",
-  "modified_date": "2026-07-15T13:22:27.168018",
+  "created_date": "2026-07-15T16:24:50.958461",
+  "modified_date": "2026-07-15T16:24:50.958490",
   "devices": [
     {
       "ip_address": "172.16.100.1",
@@ -9,7 +9,7 @@
       "mac_address": "C8:4C:75:73:1B:C1",
       "vendor": "Cisco Systems",
       "operating_system": null,
-      "device_type": "unknown",
+      "device_type": "switch",
       "discovery_sources": [
         "nmap"
       ]
@@ -86,7 +86,7 @@
       "mac_address": "C8:1F:66:BA:22:71",
       "vendor": "Dell",
       "operating_system": null,
-      "device_type": "unknown",
+      "device_type": "workstation",
       "discovery_sources": [
         "nmap"
       ]
@@ -97,7 +97,7 @@
       "mac_address": "C8:1F:66:BA:28:05",
       "vendor": "Dell",
       "operating_system": null,
-      "device_type": "unknown",
+      "device_type": "workstation",
       "discovery_sources": [
         "nmap"
       ]
@@ -141,7 +141,7 @@
       "mac_address": "00:22:19:6D:80:91",
       "vendor": "Dell",
       "operating_system": null,
-      "device_type": "unknown",
+      "device_type": "workstation",
       "discovery_sources": [
         "nmap"
       ]
@@ -152,7 +152,7 @@
       "mac_address": "4C:D9:8F:B6:39:6C",
       "vendor": "Dell",
       "operating_system": null,
-      "device_type": "unknown",
+      "device_type": "workstation",
       "discovery_sources": [
         "nmap"
       ]
@@ -163,7 +163,7 @@
       "mac_address": "50:9A:4C:6C:6F:0E",
       "vendor": "Dell",
       "operating_system": null,
-      "device_type": "unknown",
+      "device_type": "workstation",
       "discovery_sources": [
         "nmap"
       ]
@@ -174,7 +174,7 @@
       "mac_address": "50:9A:4C:6C:78:D6",
       "vendor": "Dell",
       "operating_system": null,
-      "device_type": "unknown",
+      "device_type": "workstation",
       "discovery_sources": [
         "nmap"
       ]
@@ -196,7 +196,7 @@
       "mac_address": "50:7C:6F:01:45:0E",
       "vendor": "Intel Corporate",
       "operating_system": null,
-      "device_type": "unknown",
+      "device_type": "hypervisor",
       "discovery_sources": [
         "nmap"
       ]
@@ -251,7 +251,7 @@
       "mac_address": "70:F3:5A:74:D5:13",
       "vendor": "Cisco Systems",
       "operating_system": null,
-      "device_type": "unknown",
+      "device_type": "switch",
       "discovery_sources": [
         "nmap"
       ]
@@ -284,7 +284,7 @@
       "mac_address": "00:14:22:B1:49:5A",
       "vendor": "Dell",
       "operating_system": null,
-      "device_type": "unknown",
+      "device_type": "workstation",
       "discovery_sources": [
         "nmap"
       ]
@@ -350,7 +350,7 @@
       "mac_address": "B4:83:51:10:B5:B0",
       "vendor": "Intel Corporate",
       "operating_system": null,
-      "device_type": "unknown",
+      "device_type": "server",
       "discovery_sources": [
         "nmap"
       ]
@@ -581,6 +581,17 @@
       "mac_address": "6C:2B:59:D8:6A:93",
       "vendor": "Dell",
       "operating_system": null,
+      "device_type": "workstation",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.145",
+      "hostname": null,
+      "mac_address": "2C:B8:ED:E9:0C:95",
+      "vendor": "SonicWall",
+      "operating_system": null,
       "device_type": "unknown",
       "discovery_sources": [
         "nmap"
@@ -603,7 +614,7 @@
       "mac_address": "B4:39:D6:04:2C:80",
       "vendor": "ProCurve Networking by HP",
       "operating_system": null,
-      "device_type": "unknown",
+      "device_type": "printer",
       "discovery_sources": [
         "nmap"
       ]
@@ -625,7 +636,7 @@
       "mac_address": "B4:39:D6:04:3C:00",
       "vendor": "ProCurve Networking by HP",
       "operating_system": null,
-      "device_type": "unknown",
+      "device_type": "printer",
       "discovery_sources": [
         "nmap"
       ]
@@ -636,7 +647,7 @@
       "mac_address": "80:C1:6E:C2:B4:60",
       "vendor": "Hewlett Packard",
       "operating_system": null,
-      "device_type": "unknown",
+      "device_type": "printer",
       "discovery_sources": [
         "nmap"
       ]
@@ -646,17 +657,6 @@
       "hostname": null,
       "mac_address": "B4:FB:E4:1A:2E:77",
       "vendor": "Ubiquiti",
-      "operating_system": null,
-      "device_type": "unknown",
-      "discovery_sources": [
-        "nmap"
-      ]
-    },
-    {
-      "ip_address": "172.16.100.166",
-      "hostname": null,
-      "mac_address": "40:9B:CD:FF:84:39",
-      "vendor": "D-Link International",
       "operating_system": null,
       "device_type": "unknown",
       "discovery_sources": [
@@ -697,28 +697,6 @@
       ]
     },
     {
-      "ip_address": "172.16.100.191",
-      "hostname": null,
-      "mac_address": "00:50:AA:48:90:50",
-      "vendor": "Konica Minolta Holdings",
-      "operating_system": null,
-      "device_type": "unknown",
-      "discovery_sources": [
-        "nmap"
-      ]
-    },
-    {
-      "ip_address": "172.16.100.192",
-      "hostname": null,
-      "mac_address": "00:50:AA:48:7B:62",
-      "vendor": "Konica Minolta Holdings",
-      "operating_system": null,
-      "device_type": "unknown",
-      "discovery_sources": [
-        "nmap"
-      ]
-    },
-    {
       "ip_address": "172.16.100.193",
       "hostname": null,
       "mac_address": "00:50:AA:51:8F:22",
@@ -735,7 +713,7 @@
       "mac_address": "84:69:93:FB:94:E3",
       "vendor": "HP",
       "operating_system": null,
-      "device_type": "unknown",
+      "device_type": "printer",
       "discovery_sources": [
         "nmap"
       ]
@@ -746,7 +724,7 @@
       "mac_address": "E8:39:35:8E:56:5F",
       "vendor": "Hewlett Packard",
       "operating_system": null,
-      "device_type": "unknown",
+      "device_type": "printer",
       "discovery_sources": [
         "nmap"
       ]
@@ -779,7 +757,7 @@
       "mac_address": "00:9C:02:84:1A:06",
       "vendor": "Hewlett Packard",
       "operating_system": null,
-      "device_type": "unknown",
+      "device_type": "printer",
       "discovery_sources": [
         "nmap"
       ]
@@ -790,18 +768,7 @@
       "mac_address": "B0:5C:DA:C3:20:37",
       "vendor": "HP",
       "operating_system": null,
-      "device_type": "unknown",
-      "discovery_sources": [
-        "nmap"
-      ]
-    },
-    {
-      "ip_address": "172.16.100.207",
-      "hostname": null,
-      "mac_address": "EC:9A:74:31:B9:CA",
-      "vendor": "Hewlett Packard",
-      "operating_system": null,
-      "device_type": "unknown",
+      "device_type": "printer",
       "discovery_sources": [
         "nmap"
       ]
@@ -811,6 +778,17 @@
       "hostname": null,
       "mac_address": "BC:0F:F3:4C:6E:FC",
       "vendor": "HP",
+      "operating_system": null,
+      "device_type": "printer",
+      "discovery_sources": [
+        "nmap"
+      ]
+    },
+    {
+      "ip_address": "172.16.100.210",
+      "hostname": null,
+      "mac_address": "00:0D:70:0E:BE:93",
+      "vendor": "Datamax",
       "operating_system": null,
       "device_type": "unknown",
       "discovery_sources": [
@@ -823,7 +801,7 @@
       "mac_address": "B4:22:00:54:6A:DE",
       "vendor": "Brother Industries",
       "operating_system": null,
-      "device_type": "unknown",
+      "device_type": "printer",
       "discovery_sources": [
         "nmap"
       ]
@@ -834,7 +812,7 @@
       "mac_address": "C0:18:03:91:DB:89",
       "vendor": "HP",
       "operating_system": null,
-      "device_type": "unknown",
+      "device_type": "printer",
       "discovery_sources": [
         "nmap"
       ]
