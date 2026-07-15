@@ -2,71 +2,137 @@
 
 ## Vision
 
-NetworkMapper is a portable Windows application that automatically discovers network infrastructure and generates professional network topology diagrams.
+NetworkMapper is a portable Windows application that discovers, documents, and maintains an MSP's understanding of a customer's network throughout its lifecycle.
 
+It produces accurate, portable, and AI-friendly documentation that supports customer onboarding, operational support, recurring inventory audits, and long-term network management.
+
+NetworkMapper exists to reduce the time, effort, and uncertainty required to understand an undocumented network. Every architectural and implementation decision should support that mission.
 ---
 
-## Version 0.1.0 - Foundation
+## Version 0.1.0 – Foundation ✅
 
 ### Goals
 
-- Build the application framework
-- Implement logging
-- Create device models
-- Create inventory manager
-- Export inventory to JSON
+- ✅ Application framework
+- ✅ Domain model
+- ✅ Network graph
+- ✅ Project model
+- ✅ Discovery framework
 
 ---
 
-## Version 0.2.0 - Discovery
+## Version 0.2.0 – Discovery 🚧
 
 ### Goals
 
-- Nmap host discovery
-- OS detection
-- MAC address discovery
-- Vendor lookup
+- ✅ Nmap host discovery
+- ✅ MAC address discovery
+- ✅ Vendor lookup
+- ⏳ OS detection
+- ⏳ Automatic subnet detection
 
 ---
 
-## Version 0.3.0 - Enterprise Discovery
+## Version 0.3.0 – Persistence 🚧
+
+### Goals
+
+- ✅ Project serialization
+- ⏳ Project loading
+- ⏳ Project saving
+- ⏳ Project comparison
+- ⏳ Scan history
+
+---
+
+## Version 0.4.0 - Intelligence
+
+### Goals
+
+- Device classification
+- Confidence scoring
+- Vendor heuristics
+- Inventory intelligence
+
+---
+
+## Version 0.5.0 - Enterprise Discovery
 
 ### Goals
 
 - SNMP
 - LLDP/CDP
 - VLAN discovery
-- Routing table discovery
-- Automatic subnet discovery
+- Routing tables
 
 ---
 
-## Version 0.4.0 - Topology
+## Version 0.6.0 – Project Intelligence
 
 ### Goals
 
-- Network graph
-- Relationship engine
-- Automatic layout
+- Inventory comparison
+- Device lifecycle tracking
+- Network change detection
+- Asset history
 
 ---
 
-## Version 0.5.0 - Export
+## Version 0.7.0 – Exports
 
 ### Goals
 
+- CSV
+- Markdown
+- PDF
 - Draw.io
-- PDF Report
-- CSV Inventory
 - GraphML
 
 ---
 
-## Version 1.0.0
+## Version 0.8.0 – MSP Workflows
+
+### Goals
+
+- Customer onboarding workflow
+- Monthly inventory audit
+- Change reporting
+- Billing support
+- Technician handoff
+  
+---
+
+## Version 1.0.0 – Production
 
 ### Goals
 
 - Windows GUI
 - Portable EXE
-- Customer Project Files
-- Production Release
+- Documentation complete
+- Stable project format
+- Production release
+
+---
+
+## Beyond Version 1.0
+
+These ideas are intentionally out of scope until Version 1.0.
+
+- AI-assisted documentation
+- PSA integrations
+- OneNote / Markdown documentation packages
+- Inventory reconciliation
+- Multi-site organizations
+- Scheduled recurring scans
+
+---
+
+## Design Principles
+
+- The Project is the source of truth.
+- The NetworkGraph is the canonical network model.
+- Discovery providers collect data.
+- Intelligence interprets data.
+- Exporters present data.
+- Workflows solve technician problems.
+- Preserve open, portable data formats whenever practical.
