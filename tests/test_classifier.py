@@ -16,6 +16,28 @@ class DeviceClassifierTest(unittest.TestCase):
 
         self.assertEqual(result.device_type, DeviceType.SERVER)
 
+    def test_unknown_device_stays_unknown(self):
+        device = Device(
+            ip_address="192.168.1.99",
+            hostname="host-01",
+            vendor="Unknown Vendor",
+        )
+
+        result = DeviceClassifier().classify(device)
+
+        self.assertEqual(result.device_type, DeviceType.UNKNOWN)
+
+    def test_first_matching_rule_wins(self):
+        device = Device(
+            ip_address="192.168.1.50",
+            hostname="CAM-01",
+            vendor="Brother",
+        )
+
+        result = DeviceClassifier().classify(device)
+
+        self.assertEqual(result.device_type, DeviceType.SERVER)
+
 
 if __name__ == "__main__":
     unittest.main()
