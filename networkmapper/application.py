@@ -8,6 +8,7 @@ from networkmapper.discovery.nmap_provider import NmapProvider
 from networkmapper.project.models import Project
 from networkmapper.project.serializer import ProjectSerializer
 from networkmapper.exporters.csv_exporter import CsvExporter
+from networkmapper.exporters.markdown_exporter import MarkdownExporter
 
 
 class Application:
@@ -66,7 +67,13 @@ class Application:
             "output/Test Network.csv",
         )
 
+        MarkdownExporter().export(
+            project,
+            "output/Test Network.md"
+        )
+
         print("✓ CSV exported to output/Test Network.csv")
+        print("✓ Markdown exported to output/Test Network.md")
 
         ProjectSerializer.save(project, "output/Test Network.nmproj")
 
