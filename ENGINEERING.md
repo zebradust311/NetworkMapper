@@ -126,6 +126,10 @@ We only build features that solve actual technician workflows.
 
 ---
 
+## 9. Every bug that reaches a validation environment should be accompanied by a regression test before it is fixed.
+
+---
+
 # Architecture
 
 ```
@@ -205,8 +209,6 @@ from networkmapper.core.models import Device
 Temporary validation harnesses may use print().
 
 Production application logic should use the Logger service.
-
-Use the Logger service.
 
 ---
 
