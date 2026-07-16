@@ -68,9 +68,11 @@ class Application:
 
         print("✓ CSV exported to output/Test Network.csv")
 
-        ProjectSerializer.save(project, "test.nmproj")
+        ProjectSerializer.save(project, "output/Test Network.nmproj")
 
-        loaded_project = ProjectSerializer.load("test.nmproj")
+        loaded_project = ProjectSerializer.load(
+            "output/Test Network.nmproj"
+        )
 
         after_save_count = loaded_project.network_graph.device_count()
 

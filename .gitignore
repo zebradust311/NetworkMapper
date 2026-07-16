@@ -1,31 +1,43 @@
-# Python cache
+# -----------------------------
+# Python
+# -----------------------------
 __pycache__/
 *.py[cod]
 *.pyo
 *.pyd
-*.pyc
 
-# Virtual Environment
+# -----------------------------
+# Virtual Environments
+# -----------------------------
+.venv/
 venv/
 
-# VS Code
+# -----------------------------
+# IDE
+# -----------------------------
 .vscode/
 
-# Output
+# -----------------------------
+# Generated Output
+# -----------------------------
 output/
 logs/
 scans/
 
-# OS Files
-Thumbs.db
-.DS_Store
-
-# Test cache
+# -----------------------------
+# Test Artifacts
+# -----------------------------
 .pytest_cache/
-
-# Coverage
 .coverage
 htmlcov/
 
-# Environment files
+# -----------------------------
+# Environment
+# -----------------------------
 .env
+
+# -----------------------------
+# Operating System
+# -----------------------------
+Thumbs.db
+.DS_Store

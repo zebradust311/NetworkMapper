@@ -130,6 +130,10 @@ We only build features that solve actual technician workflows.
 
 ---
 
+## 10. Routine inventory should remain fast, deterministic, and minimally intrusive. Deep inspection belongs in optional utilities that can enrich a project without slowing the core workflow.
+
+---
+
 # Architecture
 
 ```
@@ -356,3 +360,31 @@ Exporters present those facts.
 Open, portable formats should be preferred whenever practical.
 
 The Project should be complete enough that a technician can resume work without rediscovering the network.
+
+# Product Personas
+
+NetworkMapper serves multiple audiences.
+
+## Technician
+
+Needs:
+- Discovery
+- Troubleshooting
+- Documentation
+- Accurate inventory
+
+## Account Manager
+
+Needs:
+- Managed device counts
+- Inventory changes
+- Billing deltas
+
+## Customer
+
+Needs:
+- Documentation
+- Network diagrams
+- Asset inventory
+
+Each feature should identify its primary audience.
