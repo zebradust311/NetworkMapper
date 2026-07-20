@@ -6,6 +6,7 @@ from networkmapper.classification.rules.dell_workstation_rule import DellWorksta
 from networkmapper.classification.rules.hypervisor_hostname_rule import HypervisorHostnameRule
 from networkmapper.classification.rules.printer_vendor_rule import PrinterVendorRule
 from networkmapper.classification.rules.server_hostname_rule import ServerHostnameRule
+from networkmapper.classification.rules.sonicwall_firewall_rule import SonicWallFirewallRule
 from networkmapper.classification.rules.ubiquiti_access_point_rule import UbiquitiAccessPointRule
 from networkmapper.core.models import Device, DeviceType
 
@@ -19,6 +20,7 @@ class DeviceClassifier:
             ServerHostnameRule(),
             HypervisorHostnameRule(),
             UbiquitiAccessPointRule(),
+            SonicWallFirewallRule(),
             PrinterVendorRule(),
             CiscoSwitchRule(),
             DellWorkstationRule(),

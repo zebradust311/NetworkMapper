@@ -49,6 +49,17 @@ class DeviceClassifierTest(unittest.TestCase):
 
         self.assertEqual(result.device_type, DeviceType.ACCESS_POINT)
 
+    def test_sonicwall_firewall_rule_is_executed_in_classifier(self):
+        device = Device(
+            ip_address="192.168.1.61",
+            hostname="fw-01",
+            vendor="SonicWall",
+        )
+
+        result = DeviceClassifier().classify(device)
+
+        self.assertEqual(result.device_type, DeviceType.FIREWALL)
+
 
 if __name__ == "__main__":
     unittest.main()
