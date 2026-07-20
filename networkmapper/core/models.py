@@ -13,6 +13,7 @@ class DeviceType(StrEnum):
     SERVER = "server"
     WORKSTATION = "workstation"
     PRINTER = "printer"
+    PHONE = "phone"
     ACCESS_POINT = "access_point"
     HYPERVISOR = "hypervisor"
 

@@ -60,6 +60,17 @@ class DeviceClassifierTest(unittest.TestCase):
 
         self.assertEqual(result.device_type, DeviceType.FIREWALL)
 
+    def test_voice_vendor_rule_is_executed_in_classifier(self):
+        device = Device(
+            ip_address="192.168.1.62",
+            hostname="phone-01",
+            vendor="Yealink",
+        )
+
+        result = DeviceClassifier().classify(device)
+
+        self.assertEqual(result.device_type, DeviceType.PHONE)
+
 
 if __name__ == "__main__":
     unittest.main()

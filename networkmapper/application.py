@@ -3,6 +3,10 @@ Main application controller for NetworkMapper.
 """
 
 
+import argparse
+from pathlib import Path
+
+from networkmapper.developer.classification_workbench import ClassificationWorkbench
 from networkmapper.discovery.discovery_engine import DiscoveryEngine
 from networkmapper.discovery.nmap_provider import NmapProvider
 from networkmapper.project.models import Project
@@ -21,6 +25,10 @@ class Application:
     def run(self) -> None:
         """Run the temporary persistence validation harness."""
         print("NetworkMapper is starting...\n")
+
+        parser = argparse.ArgumentParser(add_help=False)
+        parser.add_argument("--workbench", action="store_true")
+        args, _ = parser.parse_known_args()
 
         provider = NmapProvider("172.16.100.0/24")
         engine = DiscoveryEngine([provider])
@@ -61,6 +69,15 @@ class Application:
             customer_name="Test Network",
             network_graph=graph,
         )
+
+        if args.workbench:
+            workbench_path = Path("output") / f"{project.customer_name}.workbench.txt"
+            workbench_path.parent.mkdir(parents=True, exist_ok=True)
+            workbench_path.write_text(
+                ClassificationWorkbench().generate(project),
+                encoding="utf-8",
+            )
+            print(f"✓ Classification Workbench exported to {workbench_path}")
 
         CsvExporter().export(
             project,
