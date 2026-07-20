@@ -50,3 +50,21 @@ Businesses frequently rename printers within Windows print queues, but rarely ch
 Notes
 
 Factory hostnames often contain useful identification information and should not be discarded.
+
+### Ubiquiti Access Points
+
+Factory default hostnames typically begin with:
+
+- UAP
+- U6
+- U7
+
+However, in well-managed MSP environments, access points are commonly renamed based on their physical location.
+
+Examples:
+
+- Lobby AP
+- Conference Room AP
+- Warehouse AP
+
+Hostname alone should not be relied upon for identifying deployed Ubiquiti access points.

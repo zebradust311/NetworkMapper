@@ -388,3 +388,11 @@ Needs:
 - Asset inventory
 
 Each feature should identify its primary audience.
+
+## Classification Rules
+
+Every new classification rule must include:
+
+- A focused unit test for the rule.
+- An integration test through DeviceClassifier.
+- Registration in the ordered rule list.

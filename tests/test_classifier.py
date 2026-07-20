@@ -38,6 +38,17 @@ class DeviceClassifierTest(unittest.TestCase):
 
         self.assertEqual(result.device_type, DeviceType.SERVER)
 
+    def test_ubiquiti_access_point_rule_is_executed_in_classifier(self):
+        device = Device(
+            ip_address="192.168.1.60",
+            hostname="UAP-AC-LR",
+            vendor="Ubiquiti",
+        )
+
+        result = DeviceClassifier().classify(device)
+
+        self.assertEqual(result.device_type, DeviceType.ACCESS_POINT)
+
 
 if __name__ == "__main__":
     unittest.main()
