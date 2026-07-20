@@ -9,6 +9,7 @@ from pathlib import Path
 from networkmapper.developer.classification_workbench import ClassificationWorkbench
 from networkmapper.discovery.discovery_engine import DiscoveryEngine
 from networkmapper.discovery.nmap_provider import NmapProvider
+from networkmapper.discovery.scan_profile import ScanProfile
 from networkmapper.project.models import Project
 from networkmapper.project.serializer import ProjectSerializer
 from networkmapper.exporters.csv_exporter import CsvExporter
@@ -30,7 +31,7 @@ class Application:
         parser.add_argument("--workbench", action="store_true")
         args, _ = parser.parse_known_args()
 
-        provider = NmapProvider("172.16.100.0/24")
+        provider = NmapProvider("172.16.100.0/24", scan_profile=ScanProfile.FAST)
         engine = DiscoveryEngine([provider])
 
         graph = engine.discover()

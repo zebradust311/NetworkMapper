@@ -4,14 +4,20 @@ import nmap
 
 from networkmapper.core.models import Device
 from networkmapper.discovery.provider import DiscoveryProvider
+from networkmapper.discovery.scan_profile import ScanProfile
 
 
 class NmapProvider(DiscoveryProvider):
     """Discover network hosts using an Nmap ping scan."""
 
-    def __init__(self, subnet_cidr: str) -> None:
-        """Initialize the provider for a specific subnet CIDR."""
+    def __init__(
+        self,
+        subnet_cidr: str,
+        scan_profile: ScanProfile = ScanProfile.FAST,
+    ) -> None:
+        """Initialize the provider for a specific subnet CIDR and profile."""
         self._subnet_cidr = subnet_cidr
+        self._scan_profile = scan_profile
         self._scanner = nmap.PortScanner()
 
     def discover(self) -> list[Device]:
@@ -19,7 +25,7 @@ class NmapProvider(DiscoveryProvider):
 
         scan_result = self._scanner.scan(
             hosts=self._subnet_cidr,
-            arguments="-sn",
+            arguments=self._scan_arguments(),
         )
 
         devices: list[Device] = []
@@ -36,6 +42,16 @@ class NmapProvider(DiscoveryProvider):
             devices.append(device)
 
         return devices
+
+    def _scan_arguments(self) -> str:
+        """Translate the configured scan profile to Nmap command arguments."""
+        profile_arguments = {
+            ScanProfile.FAST: "-sn",
+            ScanProfile.STANDARD: "-sn",
+            ScanProfile.DEEP: "-sn",
+        }
+
+        return profile_arguments[self._scan_profile]
 
     def _extract_hostname(self, host_data: dict) -> str | None:
         """Extract the primary hostname from Nmap host data when available."""
