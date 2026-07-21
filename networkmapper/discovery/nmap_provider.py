@@ -8,7 +8,7 @@ from networkmapper.discovery.scan_profile import ScanProfile
 
 
 class NmapProvider(DiscoveryProvider):
-    """Discover network hosts using an Nmap ping scan."""
+    """Discover network hosts using profile-driven Nmap scan settings."""
 
     def __init__(
         self,
@@ -29,6 +29,7 @@ class NmapProvider(DiscoveryProvider):
         )
 
         devices: list[Device] = []
+        collect_service_evidence = self._scan_profile == ScanProfile.STANDARD
 
         for ip_address, host_data in scan_result.get("scan", {}).items():
             device = Device(
@@ -36,8 +37,16 @@ class NmapProvider(DiscoveryProvider):
                 hostname=self._extract_hostname(host_data),
                 mac_address=self._extract_mac_address(host_data),
                 vendor=self._extract_vendor(host_data),
-                open_ports=self._extract_open_ports(host_data),
-                detected_services=self._extract_detected_services(host_data),
+                open_ports=(
+                    self._extract_open_ports(host_data)
+                    if collect_service_evidence
+                    else []
+                ),
+                detected_services=(
+                    self._extract_detected_services(host_data)
+                    if collect_service_evidence
+                    else []
+                ),
                 discovery_sources=["nmap"],
             )
 

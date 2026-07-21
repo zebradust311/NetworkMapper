@@ -102,6 +102,30 @@ class NmapProviderScanProfileTest(unittest.TestCase):
         self.assertEqual(devices[0].open_ports, [80, 161, 443])
         self.assertEqual(devices[0].detected_services, ["http", "https", "snmp"])
 
+    @patch("networkmapper.discovery.nmap_provider.nmap.PortScanner")
+    def test_fast_scan_does_not_collect_ports_or_services(self, port_scanner_mock):
+        scanner = port_scanner_mock.return_value
+        scanner.scan.return_value = {
+            "scan": {
+                "172.16.100.12": {
+                    "hostnames": [{"name": "host-02"}],
+                    "tcp": {
+                        80: {"state": "open", "name": "http"},
+                    },
+                }
+            }
+        }
+
+        provider = NmapProvider(
+            "172.16.100.0/24",
+            scan_profile=ScanProfile.FAST,
+        )
+        devices = provider.discover()
+
+        self.assertEqual(len(devices), 1)
+        self.assertEqual(devices[0].open_ports, [])
+        self.assertEqual(devices[0].detected_services, [])
+
 
 if __name__ == "__main__":
     unittest.main()
