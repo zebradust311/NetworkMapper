@@ -28,6 +28,8 @@ class Device:
         mac_address: The device MAC address, if available.
         vendor: The vendor or manufacturer, if known.
         operating_system: The operating system, if identified.
+        open_ports: The list of known open ports, if identified.
+        detected_services: The list of known detected services, if identified.
         device_type: The inferred device type, if known.
         discovery_sources: The discovery methods or providers that found the device.
     """
@@ -37,5 +39,7 @@ class Device:
     mac_address: Optional[str] = None
     vendor: Optional[str] = None
     operating_system: Optional[str] = None
+    open_ports: list[int] = field(default_factory=list)
+    detected_services: list[str] = field(default_factory=list)
     device_type: DeviceType = DeviceType.UNKNOWN
     discovery_sources: list[str] = field(default_factory=list)
