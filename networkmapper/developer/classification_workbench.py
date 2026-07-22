@@ -45,13 +45,20 @@ class ClassificationWorkbench:
             + f"MAC Address:\n{self._display_value(device.mac_address)}\n\n"
             + f"Operating System:\n{self._display_value(device.operating_system)}\n\n"
             + "Open Ports:\n"
-            + f"{self._display_value(None)}\n\n"
+            + f"{self._display_list(device.open_ports)}\n\n"
             + "Detected Services:\n"
-            + f"{self._display_value(None)}\n\n"
+            + f"{self._display_list(device.detected_services)}\n\n"
             + f"Current DeviceType:\n{self._display_value(device.device_type)}\n"
             + "\n"
             + "=" * 50
         )
+
+    def _display_list(self, values: list[object]) -> str:
+        """Return one value per line for populated lists, otherwise Unknown."""
+        if not values:
+            return "Unknown"
+
+        return "\n".join(str(value) for value in values)
 
     def _display_value(self, value: object) -> str:
         """Return a clean display string for missing values in the report."""

@@ -7,7 +7,7 @@ from networkmapper.project.models import Project
 
 
 class ClassificationWorkbenchTest(unittest.TestCase):
-    def test_generate_lists_only_unknown_devices_with_clean_values(self):
+    def test_generate_lists_only_unknown_devices_with_empty_evidence_rendered_cleanly(self):
         project = Project(
             customer_name="Acme",
             created_date=datetime(2026, 1, 1, 12, 0, 0),
@@ -21,6 +21,8 @@ class ClassificationWorkbenchTest(unittest.TestCase):
                 vendor="Ubiquiti",
                 mac_address="24:5A:4C:AA:BB:CC",
                 operating_system=None,
+                open_ports=[],
+                detected_services=[],
                 device_type=DeviceType.UNKNOWN,
                 discovery_sources=["nmap"],
             )
@@ -43,6 +45,8 @@ class ClassificationWorkbenchTest(unittest.TestCase):
                 vendor=None,
                 mac_address=None,
                 operating_system=None,
+                open_ports=[],
+                detected_services=[],
                 device_type=DeviceType.UNKNOWN,
                 discovery_sources=[],
             )
@@ -60,6 +64,50 @@ class ClassificationWorkbenchTest(unittest.TestCase):
         self.assertNotIn("Known-Host", report)
         self.assertNotIn("Linux", report)
         self.assertIn("Unknown", report)
+
+    def test_generate_renders_populated_open_ports_one_per_line(self):
+        project = Project(
+            customer_name="Acme",
+            created_date=datetime(2026, 1, 1, 12, 0, 0),
+            modified_date=datetime(2026, 1, 2, 12, 0, 0),
+        )
+        project.network_graph.add_device(
+            Device(
+                ip_address="172.16.100.7",
+                hostname="host-ports",
+                vendor="Brother",
+                open_ports=[80, 161, 9100],
+                detected_services=[],
+                device_type=DeviceType.UNKNOWN,
+            )
+        )
+
+        report = ClassificationWorkbench().generate(project)
+
+        self.assertIn("Open Ports:\n80\n161\n9100", report)
+        self.assertIn("Detected Services:\nUnknown", report)
+
+    def test_generate_renders_populated_detected_services_one_per_line(self):
+        project = Project(
+            customer_name="Acme",
+            created_date=datetime(2026, 1, 1, 12, 0, 0),
+            modified_date=datetime(2026, 1, 2, 12, 0, 0),
+        )
+        project.network_graph.add_device(
+            Device(
+                ip_address="172.16.100.8",
+                hostname="host-services",
+                vendor="Cisco",
+                open_ports=[],
+                detected_services=["http", "https", "snmp"],
+                device_type=DeviceType.UNKNOWN,
+            )
+        )
+
+        report = ClassificationWorkbench().generate(project)
+
+        self.assertIn("Open Ports:\nUnknown", report)
+        self.assertIn("Detected Services:\nhttp\nhttps\nsnmp", report)
 
 
 if __name__ == "__main__":
