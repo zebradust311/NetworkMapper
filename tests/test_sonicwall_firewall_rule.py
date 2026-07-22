@@ -1,11 +1,12 @@
 import unittest
 
+from networkmapper.classification.rule_result import RuleResult
 from networkmapper.classification.rules.sonicwall_firewall_rule import SonicWallFirewallRule
 from networkmapper.core.models import Device, DeviceType
 
 
 class SonicWallFirewallRuleTest(unittest.TestCase):
-    def test_sonicwall_vendor_classifies_as_firewall(self):
+    def test_matching_vendor_returns_rule_result_with_firewall_type(self):
         device = Device(
             ip_address="192.168.1.30",
             hostname="fw-01",
@@ -14,7 +15,10 @@ class SonicWallFirewallRuleTest(unittest.TestCase):
 
         result = SonicWallFirewallRule().classify(device)
 
-        self.assertEqual(result, DeviceType.FIREWALL)
+        self.assertIsInstance(result, RuleResult)
+        self.assertTrue(result.matched)
+        self.assertEqual(result.suggested_device_type, DeviceType.FIREWALL)
+        self.assertTrue(result.reason)
 
     def test_case_insensitive_vendor_matching(self):
         device = Device(
@@ -25,9 +29,12 @@ class SonicWallFirewallRuleTest(unittest.TestCase):
 
         result = SonicWallFirewallRule().classify(device)
 
-        self.assertEqual(result, DeviceType.FIREWALL)
+        self.assertIsInstance(result, RuleResult)
+        self.assertTrue(result.matched)
+        self.assertEqual(result.suggested_device_type, DeviceType.FIREWALL)
+        self.assertTrue(result.reason)
 
-    def test_empty_vendor_is_ignored(self):
+    def test_empty_vendor_returns_non_matching_rule_result(self):
         device = Device(
             ip_address="192.168.1.32",
             hostname="fw-03",
@@ -36,9 +43,13 @@ class SonicWallFirewallRuleTest(unittest.TestCase):
 
         result = SonicWallFirewallRule().classify(device)
 
-        self.assertIsNone(result)
+        self.assertIsInstance(result, RuleResult)
+        self.assertFalse(result.matched)
+        self.assertIsNone(result.suggested_device_type)
+        self.assertEqual(result.confidence_contribution, 0)
+        self.assertTrue(result.reason)
 
-    def test_non_sonicwall_vendor_is_ignored(self):
+    def test_non_matching_vendor_returns_non_matching_rule_result(self):
         device = Device(
             ip_address="192.168.1.33",
             hostname="fw-04",
@@ -47,7 +58,11 @@ class SonicWallFirewallRuleTest(unittest.TestCase):
 
         result = SonicWallFirewallRule().classify(device)
 
-        self.assertIsNone(result)
+        self.assertIsInstance(result, RuleResult)
+        self.assertFalse(result.matched)
+        self.assertIsNone(result.suggested_device_type)
+        self.assertEqual(result.confidence_contribution, 0)
+        self.assertTrue(result.reason)
 
 
 if __name__ == "__main__":
