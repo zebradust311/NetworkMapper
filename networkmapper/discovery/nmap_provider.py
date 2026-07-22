@@ -7,6 +7,24 @@ from networkmapper.discovery.provider import DiscoveryProvider
 from networkmapper.discovery.scan_profile import ScanProfile
 
 
+CLASSIFICATION_PORTS = [
+    22,
+    53,
+    80,
+    161,
+    443,
+    445,
+    515,
+    631,
+    9100,
+    3389,
+    5060,
+    5061,
+    8080,
+    8443,
+]
+
+
 class NmapProvider(DiscoveryProvider):
     """Discover network hosts using profile-driven Nmap scan settings."""
 
@@ -23,46 +41,87 @@ class NmapProvider(DiscoveryProvider):
     def discover(self) -> list[Device]:
         """Run an Nmap scan based on the selected profile and return devices."""
 
+        if self._scan_profile == ScanProfile.STANDARD:
+            return self._discover_with_standard_enrichment()
+
+        return self._discover_single_pass()
+
+    def _discover_single_pass(self) -> list[Device]:
+        """Run a single scan and build device objects from scan results."""
+
         scan_result = self._scanner.scan(
             hosts=self._subnet_cidr,
             arguments=self._scan_arguments(),
         )
 
         devices: list[Device] = []
-        collect_service_evidence = self._scan_profile == ScanProfile.STANDARD
 
         for ip_address, host_data in scan_result.get("scan", {}).items():
-            device = Device(
-                ip_address=ip_address,
-                hostname=self._extract_hostname(host_data),
-                mac_address=self._extract_mac_address(host_data),
-                vendor=self._extract_vendor(host_data),
-                open_ports=(
-                    self._extract_open_ports(host_data)
-                    if collect_service_evidence
-                    else []
-                ),
-                detected_services=(
-                    self._extract_detected_services(host_data)
-                    if collect_service_evidence
-                    else []
-                ),
-                discovery_sources=["nmap"],
-            )
-
-            devices.append(device)
+            devices.append(self._build_device(ip_address, host_data))
 
         return devices
+
+    def _discover_with_standard_enrichment(self) -> list[Device]:
+        """Run host discovery first, then merge enrichment evidence by IP."""
+        discovery_result = self._scanner.scan(
+            hosts=self._subnet_cidr,
+            arguments="-sn",
+        )
+
+        devices_by_ip: dict[str, Device] = {}
+
+        for ip_address, host_data in discovery_result.get("scan", {}).items():
+            devices_by_ip[ip_address] = self._build_device(ip_address, host_data)
+
+        if not devices_by_ip:
+            return []
+
+        enrichment_hosts = " ".join(devices_by_ip.keys())
+        enrichment_arguments = self._standard_enrichment_arguments()
+
+        enrichment_result = self._scanner.scan(
+            hosts=enrichment_hosts,
+            arguments=enrichment_arguments,
+        )
+
+        enriched_hosts = enrichment_result.get("scan", {})
+
+        for ip_address, host_data in enriched_hosts.items():
+            if ip_address not in devices_by_ip:
+                continue
+
+            devices_by_ip[ip_address].open_ports = self._extract_open_ports(host_data)
+            devices_by_ip[ip_address].detected_services = self._extract_detected_services(
+                host_data
+            )
+
+        return list(devices_by_ip.values())
+
+    def _build_device(self, ip_address: str, host_data: dict) -> Device:
+        """Build a device instance from host data without enrichment evidence."""
+        return Device(
+            ip_address=ip_address,
+            hostname=self._extract_hostname(host_data),
+            mac_address=self._extract_mac_address(host_data),
+            vendor=self._extract_vendor(host_data),
+            open_ports=[],
+            detected_services=[],
+            discovery_sources=["nmap"],
+        )
 
     def _scan_arguments(self) -> str:
         """Translate the configured scan profile to Nmap command arguments."""
         profile_arguments = {
             ScanProfile.FAST: "-sn",
-            ScanProfile.STANDARD: "-sV",
             ScanProfile.DEEP: "-sn",
         }
 
         return profile_arguments[self._scan_profile]
+
+    def _standard_enrichment_arguments(self) -> str:
+        """Return the curated service-detection arguments for STANDARD enrichment."""
+        classification_ports = ",".join(str(port) for port in CLASSIFICATION_PORTS)
+        return f"-Pn -sV --version-light -p {classification_ports}"
 
     def _extract_hostname(self, host_data: dict) -> str | None:
         """Extract the primary hostname from Nmap host data when available."""

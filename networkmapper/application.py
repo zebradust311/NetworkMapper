@@ -4,6 +4,7 @@ Main application controller for NetworkMapper.
 
 
 import argparse
+import sys
 from pathlib import Path
 
 from networkmapper.developer.classification_workbench import ClassificationWorkbench
@@ -29,9 +30,12 @@ class Application:
 
         parser = argparse.ArgumentParser(add_help=False)
         parser.add_argument("--workbench", action="store_true")
+        parser.add_argument("--scan-profile", default="fast")
         args, _ = parser.parse_known_args()
 
-        provider = NmapProvider("172.16.100.0/24", scan_profile=ScanProfile.FAST)
+        scan_profile = self._parse_scan_profile(args.scan_profile)
+
+        provider = NmapProvider("172.16.100.0/24", scan_profile=scan_profile)
         engine = DiscoveryEngine([provider])
 
         graph = engine.discover()
@@ -113,3 +117,22 @@ class Application:
             raise RuntimeError(
                 "Loaded project device count does not match saved project."
             )
+
+    def _parse_scan_profile(self, value: str) -> ScanProfile:
+        """Parse CLI scan profile value into a ScanProfile enum."""
+        normalized_value = (value or "").strip().lower()
+        profile_map = {
+            "fast": ScanProfile.FAST,
+            "standard": ScanProfile.STANDARD,
+            "deep": ScanProfile.DEEP,
+        }
+
+        if normalized_value not in profile_map:
+            print(
+                "Error: invalid --scan-profile value. "
+                "Use one of: fast, standard, deep.",
+                file=sys.stderr,
+            )
+            raise SystemExit(2)
+
+        return profile_map[normalized_value]
