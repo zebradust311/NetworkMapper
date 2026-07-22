@@ -53,6 +53,10 @@ class DeviceClassifier:
         device.device_type = DeviceType.UNKNOWN
         return device
 
+    def get_last_rule_results(self) -> tuple[RuleResult, ...]:
+        """Return immutable evidence from the most recent classification."""
+        return tuple(self._last_rule_results)
+
     def _to_rule_result(
         self,
         rule: ClassificationRule,
