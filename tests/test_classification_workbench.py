@@ -109,6 +109,62 @@ class ClassificationWorkbenchTest(unittest.TestCase):
         self.assertIn("Open Ports:\nUnknown", report)
         self.assertIn("Detected Services:\nhttp\nhttps\nsnmp", report)
 
+    def test_generate_renders_rule_result_evidence_for_evaluated_rules(self):
+        project = Project(
+            customer_name="Acme",
+            created_date=datetime(2026, 1, 1, 12, 0, 0),
+            modified_date=datetime(2026, 1, 2, 12, 0, 0),
+        )
+        project.network_graph.add_device(
+            Device(
+                ip_address="172.16.100.9",
+                hostname="host-unknown",
+                vendor="Brother",
+                device_type=DeviceType.UNKNOWN,
+            )
+        )
+
+        report = ClassificationWorkbench().generate(project)
+
+        self.assertIn("Rule Evidence:", report)
+        self.assertIn("----------------------------------------", report)
+        self.assertIn("Rule: ServerHostnameRule", report)
+        self.assertIn("Rule: HypervisorHostnameRule", report)
+        self.assertIn("Rule: UbiquitiAccessPointRule", report)
+        self.assertIn("Rule: SonicWallFirewallRule", report)
+        self.assertIn("Rule: PrinterVendorRule", report)
+        self.assertNotIn("Rule: VoiceVendorRule", report)
+        self.assertNotIn("Rule: CiscoSwitchRule", report)
+        self.assertNotIn("Rule: DellWorkstationRule", report)
+        self.assertIn("Matched: Yes", report)
+        self.assertIn("Suggested Type: PRINTER", report)
+        self.assertIn("Reason:\nPrinter vendor rule: vendor keyword matched", report)
+
+    def test_generate_renders_non_matching_rule_result_fields(self):
+        project = Project(
+            customer_name="Acme",
+            created_date=datetime(2026, 1, 1, 12, 0, 0),
+            modified_date=datetime(2026, 1, 2, 12, 0, 0),
+        )
+        project.network_graph.add_device(
+            Device(
+                ip_address="172.16.100.10",
+                hostname="workstation-01",
+                vendor="Unknown Vendor",
+                device_type=DeviceType.UNKNOWN,
+            )
+        )
+
+        report = ClassificationWorkbench().generate(project)
+
+        self.assertIn("Rule: ServerHostnameRule", report)
+        self.assertIn("Matched: No", report)
+        self.assertIn("Suggested Type: None", report)
+        self.assertIn(
+            "Reason:\nHostname did not match known server naming conventions.",
+            report,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
+from networkmapper.classification.device_classifier import DeviceClassifier
 from networkmapper.core.models import Device, DeviceType
 from networkmapper.project.models import Project
 
@@ -26,12 +29,14 @@ class ClassificationWorkbench:
             return "No UNKNOWN devices found."
 
         sections: list[str] = []
+        classifier = DeviceClassifier()
         for device in unknown_devices:
-            sections.append(self._render_device_section(device))
+            evidence = self._build_rule_evidence(device, classifier)
+            sections.append(self._render_device_section(device, evidence))
 
         return "\n\n".join(sections)
 
-    def _render_device_section(self, device: Device) -> str:
+    def _render_device_section(self, device: Device, evidence: str) -> str:
         """Render a single UNKNOWN-device evidence section for developer inspection."""
         return (
             "=" * 50
@@ -50,8 +55,41 @@ class ClassificationWorkbench:
             + f"{self._display_list(device.detected_services)}\n\n"
             + f"Current DeviceType:\n{self._display_value(device.device_type)}\n"
             + "\n"
+            + "Rule Evidence:\n"
+            + f"{evidence}\n"
+            + "\n"
             + "=" * 50
         )
+
+    def _build_rule_evidence(self, device: Device, classifier: DeviceClassifier) -> str:
+        """Classify a copy of the device and render rule-by-rule evidence."""
+        classifier.classify(replace(device))
+        rule_results = classifier.get_last_rule_results()
+        rule_names = [rule.__class__.__name__ for rule in classifier._rules]
+
+        sections: list[str] = []
+        for index, result in enumerate(rule_results):
+            rule_name = (
+                rule_names[index] if index < len(rule_names) else f"Rule{index + 1}"
+            )
+            matched = "Yes" if result.matched else "No"
+            suggested_type = (
+                result.suggested_device_type.name
+                if result.suggested_device_type is not None
+                else "None"
+            )
+
+            sections.append(
+                "-" * 40
+                + "\n"
+                + f"Rule: {rule_name}\n"
+                + f"Matched: {matched}\n"
+                + f"Suggested Type: {suggested_type}\n"
+                + "Reason:\n"
+                + f"{self._display_value(result.reason)}"
+            )
+
+        return "\n\n".join(sections)
 
     def _display_list(self, values: list[object]) -> str:
         """Return one value per line for populated lists, otherwise Unknown."""
