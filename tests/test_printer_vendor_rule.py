@@ -1,6 +1,7 @@
 import unittest
 
 from networkmapper.classification.rules.printer_vendor_rule import PrinterVendorRule
+from networkmapper.classification.rule_result import RuleResult
 from networkmapper.core.models import Device, DeviceType
 
 
@@ -37,7 +38,7 @@ class PrinterVendorRuleTest(unittest.TestCase):
 
                 self.assertEqual(
                     DeviceType.PRINTER,
-                    self.rule.classify(device),
+                    self.rule.classify(device).suggested_device_type,
                 )
 
     def test_vendor_matching_is_case_insensitive(self):
@@ -48,7 +49,7 @@ class PrinterVendorRuleTest(unittest.TestCase):
 
         self.assertEqual(
             DeviceType.PRINTER,
-            self.rule.classify(device),
+            self.rule.classify(device).suggested_device_type,
         )
 
     def test_empty_vendor_is_ignored(self):
@@ -57,9 +58,9 @@ class PrinterVendorRuleTest(unittest.TestCase):
             vendor="",
         )
 
-        self.assertIsNone(
-            self.rule.classify(device),
-        )
+        result = self.rule.classify(device)
+        self.assertFalse(result.matched)
+        self.assertIsNone(result.suggested_device_type)
 
     def test_none_vendor_is_ignored(self):
         device = Device(
@@ -67,9 +68,9 @@ class PrinterVendorRuleTest(unittest.TestCase):
             vendor=None,
         )
 
-        self.assertIsNone(
-            self.rule.classify(device),
-        )
+        result = self.rule.classify(device)
+        self.assertFalse(result.matched)
+        self.assertIsNone(result.suggested_device_type)
 
     def test_non_printer_vendor_is_ignored(self):
         device = Device(
@@ -77,9 +78,21 @@ class PrinterVendorRuleTest(unittest.TestCase):
             vendor="SonicWall",
         )
 
-        self.assertIsNone(
-            self.rule.classify(device),
+        result = self.rule.classify(device)
+        self.assertFalse(result.matched)
+        self.assertIsNone(result.suggested_device_type)
+
+    def test_printer_rule_emits_rule_result(self):
+        device = Device(
+            ip_address="192.168.1.15",
+            vendor="Brother",
         )
+
+        result = self.rule.classify(device)
+
+        self.assertIsInstance(result, RuleResult)
+        self.assertTrue(result.matched)
+        self.assertEqual(result.suggested_device_type, DeviceType.PRINTER)
 
 
 if __name__ == "__main__":
