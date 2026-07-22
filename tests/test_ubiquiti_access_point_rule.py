@@ -1,5 +1,6 @@
 import unittest
 
+from networkmapper.classification.rule_result import RuleResult
 from networkmapper.classification.rules.ubiquiti_access_point_rule import UbiquitiAccessPointRule
 from networkmapper.core.models import Device, DeviceType
 
@@ -14,7 +15,10 @@ class UbiquitiAccessPointRuleTest(unittest.TestCase):
 
         result = UbiquitiAccessPointRule().classify(device)
 
-        self.assertEqual(result, DeviceType.ACCESS_POINT)
+        self.assertIsInstance(result, RuleResult)
+        self.assertTrue(result.matched)
+        self.assertEqual(result.suggested_device_type, DeviceType.ACCESS_POINT)
+        self.assertTrue(result.reason)
 
     def test_u6_hostname_classifies_as_access_point(self):
         device = Device(
@@ -25,7 +29,10 @@ class UbiquitiAccessPointRuleTest(unittest.TestCase):
 
         result = UbiquitiAccessPointRule().classify(device)
 
-        self.assertEqual(result, DeviceType.ACCESS_POINT)
+        self.assertIsInstance(result, RuleResult)
+        self.assertTrue(result.matched)
+        self.assertEqual(result.suggested_device_type, DeviceType.ACCESS_POINT)
+        self.assertTrue(result.reason)
 
     def test_u7_hostname_classifies_as_access_point(self):
         device = Device(
@@ -36,7 +43,10 @@ class UbiquitiAccessPointRuleTest(unittest.TestCase):
 
         result = UbiquitiAccessPointRule().classify(device)
 
-        self.assertEqual(result, DeviceType.ACCESS_POINT)
+        self.assertIsInstance(result, RuleResult)
+        self.assertTrue(result.matched)
+        self.assertEqual(result.suggested_device_type, DeviceType.ACCESS_POINT)
+        self.assertTrue(result.reason)
 
     def test_other_ubiquiti_devices_remain_unaffected(self):
         device = Device(
@@ -47,7 +57,11 @@ class UbiquitiAccessPointRuleTest(unittest.TestCase):
 
         result = UbiquitiAccessPointRule().classify(device)
 
-        self.assertIsNone(result)
+        self.assertIsInstance(result, RuleResult)
+        self.assertFalse(result.matched)
+        self.assertIsNone(result.suggested_device_type)
+        self.assertEqual(result.confidence_contribution, 0)
+        self.assertTrue(result.reason)
 
     def test_non_ubiquiti_devices_are_ignored(self):
         device = Device(
@@ -58,7 +72,11 @@ class UbiquitiAccessPointRuleTest(unittest.TestCase):
 
         result = UbiquitiAccessPointRule().classify(device)
 
-        self.assertIsNone(result)
+        self.assertIsInstance(result, RuleResult)
+        self.assertFalse(result.matched)
+        self.assertIsNone(result.suggested_device_type)
+        self.assertEqual(result.confidence_contribution, 0)
+        self.assertTrue(result.reason)
 
 
 if __name__ == "__main__":

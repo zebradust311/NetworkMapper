@@ -9,17 +9,27 @@ from networkmapper.core.models import Device, DeviceType
 
 
 class NonMatchingRule(ClassificationRule):
-    def classify(self, device: Device) -> DeviceType | RuleResult | None:
-        return None
+    def classify(self, device: Device) -> RuleResult:
+        return RuleResult(
+            matched=False,
+            confidence_contribution=0,
+            reason="Non-matching rule did not match",
+            suggested_device_type=None,
+        )
 
 
-class LegacyMatchingRule(ClassificationRule):
-    def classify(self, device: Device) -> DeviceType | RuleResult | None:
-        return DeviceType.SWITCH
+class MatchingSwitchRule(ClassificationRule):
+    def classify(self, device: Device) -> RuleResult:
+        return RuleResult(
+            matched=True,
+            confidence_contribution=0,
+            reason="Switch rule matched",
+            suggested_device_type=DeviceType.SWITCH,
+        )
 
 
 class StructuredMatchingRule(ClassificationRule):
-    def classify(self, device: Device) -> DeviceType | RuleResult | None:
+    def classify(self, device: Device) -> RuleResult:
         return RuleResult(
             matched=True,
             confidence_contribution=7,
@@ -46,7 +56,7 @@ class RuleResultFrameworkTest(unittest.TestCase):
         classifier = DeviceClassifier()
         classifier._rules = [
             NonMatchingRule(),
-            LegacyMatchingRule(),
+            MatchingSwitchRule(),
             StructuredMatchingRule(),
         ]
 
@@ -77,7 +87,7 @@ class RuleResultFrameworkTest(unittest.TestCase):
         )
         self.assertEqual(classifier._last_rule_results[0].confidence_contribution, 7)
 
-    def test_legacy_rule_continues_working_with_adapter(self):
+    def test_migrated_rule_result_is_collected_and_used(self):
         classifier = DeviceClassifier()
         classifier._rules = [CiscoSwitchRule()]
 
@@ -92,7 +102,7 @@ class RuleResultFrameworkTest(unittest.TestCase):
             DeviceType.SWITCH,
         )
 
-    def test_mixed_rule_styles_classify_identically(self):
+    def test_multiple_migrated_rules_classify_identically(self):
         classifier = DeviceClassifier()
         classifier._rules = [PrinterVendorRule(), CiscoSwitchRule()]
 

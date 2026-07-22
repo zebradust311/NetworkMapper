@@ -7,17 +7,27 @@ from networkmapper.core.models import Device, DeviceType
 
 
 class LegacyNonMatchingRule(ClassificationRule):
-    def classify(self, device: Device) -> DeviceType | RuleResult | None:
-        return None
+    def classify(self, device: Device) -> RuleResult:
+        return RuleResult(
+            matched=False,
+            confidence_contribution=0,
+            reason="No device evidence matched",
+            suggested_device_type=None,
+        )
 
 
-class LegacyMatchingRule(ClassificationRule):
-    def classify(self, device: Device) -> DeviceType | RuleResult | None:
-        return DeviceType.SWITCH
+class MatchingSwitchRule(ClassificationRule):
+    def classify(self, device: Device) -> RuleResult:
+        return RuleResult(
+            matched=True,
+            confidence_contribution=0,
+            reason="Switch evidence matched",
+            suggested_device_type=DeviceType.SWITCH,
+        )
 
 
 class StructuredMatchingRule(ClassificationRule):
-    def classify(self, device: Device) -> DeviceType | RuleResult | None:
+    def classify(self, device: Device) -> RuleResult:
         return RuleResult(
             matched=True,
             confidence_contribution=7,
@@ -29,7 +39,7 @@ class StructuredMatchingRule(ClassificationRule):
 class DeviceClassifierEvidenceApiTest(unittest.TestCase):
     def test_rule_results_are_available_after_classification(self):
         classifier = DeviceClassifier()
-        classifier._rules = [LegacyNonMatchingRule(), LegacyMatchingRule()]
+        classifier._rules = [LegacyNonMatchingRule(), MatchingSwitchRule()]
 
         device = Device(ip_address="192.168.1.10", hostname="host-01", vendor="Cisco")
         classifier.classify(device)
@@ -44,7 +54,7 @@ class DeviceClassifierEvidenceApiTest(unittest.TestCase):
 
     def test_returned_collection_cannot_mutate_classifier_state(self):
         classifier = DeviceClassifier()
-        classifier._rules = [LegacyMatchingRule()]
+        classifier._rules = [MatchingSwitchRule()]
 
         device = Device(ip_address="192.168.1.11", hostname="host-02", vendor="Cisco")
         classifier.classify(device)
@@ -63,7 +73,7 @@ class DeviceClassifierEvidenceApiTest(unittest.TestCase):
         self.assertEqual(len(classifier.get_last_rule_results()), 1)
         self.assertTrue(classifier.get_last_rule_results()[0].matched)
 
-    def test_legacy_and_migrated_rule_results_both_appear_in_evidence(self):
+    def test_rule_results_from_multiple_rules_appear_in_evidence(self):
         classifier = DeviceClassifier()
         classifier._rules = [LegacyNonMatchingRule(), StructuredMatchingRule()]
 
@@ -73,7 +83,7 @@ class DeviceClassifierEvidenceApiTest(unittest.TestCase):
         evidence = classifier.get_last_rule_results()
 
         self.assertEqual(len(evidence), 2)
-        self.assertEqual(evidence[0].reason, "LegacyNonMatchingRule did not match")
+        self.assertEqual(evidence[0].reason, "No device evidence matched")
         self.assertFalse(evidence[0].matched)
         self.assertEqual(evidence[0].confidence_contribution, 0)
 

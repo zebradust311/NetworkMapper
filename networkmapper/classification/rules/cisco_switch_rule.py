@@ -1,15 +1,28 @@
 from __future__ import annotations
 
 from networkmapper.classification.classification_rule import ClassificationRule
+from networkmapper.classification.rule_result import RuleResult
 from networkmapper.core.models import Device, DeviceType
 
 
 class CiscoSwitchRule(ClassificationRule):
     """Match Cisco vendors as switch devices."""
 
-    def classify(self, device: Device) -> DeviceType | None:
-        """Return SWITCH when the device vendor contains Cisco."""
+    def classify(self, device: Device) -> RuleResult:
+        """Return a rule result for Cisco switch vendor matching evidence."""
+        raw_vendor = device.vendor or ""
         vendor = (device.vendor or "").lower()
         if "cisco" in vendor:
-            return DeviceType.SWITCH
-        return None
+            return RuleResult(
+                matched=True,
+                confidence_contribution=0,
+                reason=f"Vendor '{raw_vendor}' matched known switch vendor.",
+                suggested_device_type=DeviceType.SWITCH,
+            )
+
+        return RuleResult(
+            matched=False,
+            confidence_contribution=0,
+            reason="Vendor did not match known switch vendor.",
+            suggested_device_type=None,
+        )

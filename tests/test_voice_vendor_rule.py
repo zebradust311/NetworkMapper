@@ -1,5 +1,6 @@
 import unittest
 
+from networkmapper.classification.rule_result import RuleResult
 from networkmapper.classification.rules.voice_vendor_rule import VoiceVendorRule
 from networkmapper.core.models import Device, DeviceType
 
@@ -20,35 +21,54 @@ class VoiceVendorRuleTest(unittest.TestCase):
         for vendor in supported_vendors:
             with self.subTest(vendor=vendor):
                 device = Device(ip_address="192.168.1.20", vendor=vendor)
-                self.assertEqual(rule.classify(device), DeviceType.PHONE)
+                result = rule.classify(device)
+                self.assertIsInstance(result, RuleResult)
+                self.assertTrue(result.matched)
+                self.assertEqual(result.suggested_device_type, DeviceType.PHONE)
+                self.assertTrue(result.reason)
 
     def test_case_insensitive_matching(self):
         device = Device(ip_address="192.168.1.21", vendor="yEaLiNk")
 
         result = VoiceVendorRule().classify(device)
 
-        self.assertEqual(result, DeviceType.PHONE)
+        self.assertIsInstance(result, RuleResult)
+        self.assertTrue(result.matched)
+        self.assertEqual(result.suggested_device_type, DeviceType.PHONE)
+        self.assertTrue(result.reason)
 
-    def test_empty_vendor_returns_none(self):
+    def test_empty_vendor_returns_non_matching_rule_result(self):
         device = Device(ip_address="192.168.1.22", vendor="")
 
         result = VoiceVendorRule().classify(device)
 
-        self.assertIsNone(result)
+        self.assertIsInstance(result, RuleResult)
+        self.assertFalse(result.matched)
+        self.assertIsNone(result.suggested_device_type)
+        self.assertEqual(result.confidence_contribution, 0)
+        self.assertTrue(result.reason)
 
-    def test_none_vendor_returns_none(self):
+    def test_none_vendor_returns_non_matching_rule_result(self):
         device = Device(ip_address="192.168.1.23", vendor=None)
 
         result = VoiceVendorRule().classify(device)
 
-        self.assertIsNone(result)
+        self.assertIsInstance(result, RuleResult)
+        self.assertFalse(result.matched)
+        self.assertIsNone(result.suggested_device_type)
+        self.assertEqual(result.confidence_contribution, 0)
+        self.assertTrue(result.reason)
 
-    def test_unsupported_vendor_returns_none(self):
+    def test_unsupported_vendor_returns_non_matching_rule_result(self):
         device = Device(ip_address="192.168.1.24", vendor="SonicWall")
 
         result = VoiceVendorRule().classify(device)
 
-        self.assertIsNone(result)
+        self.assertIsInstance(result, RuleResult)
+        self.assertFalse(result.matched)
+        self.assertIsNone(result.suggested_device_type)
+        self.assertEqual(result.confidence_contribution, 0)
+        self.assertTrue(result.reason)
 
 
 if __name__ == "__main__":
