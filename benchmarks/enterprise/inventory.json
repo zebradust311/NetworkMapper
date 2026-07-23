@@ -1,0 +1,29 @@
+{
+  "name": "enterprise",
+  "devices": [
+    {
+      "ip_address": "10.20.0.10",
+      "hostname": "SCTVSH01",
+      "vendor": "Dell"
+    },
+    {
+      "ip_address": "10.20.0.20",
+      "hostname": "tz-370",
+      "vendor": "Unknown",
+      "open_ports": [443],
+      "detected_services": ["https"]
+    },
+    {
+      "ip_address": "10.20.0.30",
+      "hostname": "switch-core-01",
+      "vendor": "Unknown",
+      "open_ports": [161],
+      "detected_services": ["snmp"]
+    },
+    {
+      "ip_address": "10.20.0.40",
+      "hostname": "SRV-APP01",
+      "vendor": "Unknown"
+    }
+  ]
+}

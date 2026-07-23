@@ -41,3 +41,9 @@ htmlcov/
 # -----------------------------
 Thumbs.db
 .DS_Store
+
+ -----------------------------
+# Temporary test output
+# -----------------------------
+test_results.log
+test_results.txt

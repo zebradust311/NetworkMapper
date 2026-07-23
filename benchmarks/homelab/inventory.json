@@ -1,0 +1,27 @@
+{
+  "name": "homelab",
+  "devices": [
+    {
+      "ip_address": "172.30.0.10",
+      "hostname": "ESXI-01",
+      "vendor": "Unknown"
+    },
+    {
+      "ip_address": "172.30.0.20",
+      "hostname": "office-nanohd-01",
+      "vendor": "Ubiquiti"
+    },
+    {
+      "ip_address": "172.30.0.30",
+      "hostname": "desk-phone-01",
+      "vendor": null,
+      "open_ports": [5060],
+      "detected_services": ["sip"]
+    },
+    {
+      "ip_address": "172.30.0.40",
+      "hostname": "media-center",
+      "vendor": "Lenovo"
+    }
+  ]
+}

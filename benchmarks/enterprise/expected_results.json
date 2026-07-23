@@ -1,0 +1,20 @@
+{
+  "expected_results": [
+    {
+      "ip_address": "10.20.0.10",
+      "device_type": "HYPERVISOR"
+    },
+    {
+      "ip_address": "10.20.0.20",
+      "device_type": "FIREWALL"
+    },
+    {
+      "ip_address": "10.20.0.30",
+      "device_type": "SWITCH"
+    },
+    {
+      "ip_address": "10.20.0.40",
+      "device_type": "SERVER"
+    }
+  ]
+}

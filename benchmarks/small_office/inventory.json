@@ -1,0 +1,25 @@
+{
+  "name": "small_office",
+  "devices": [
+    {
+      "ip_address": "192.168.10.10",
+      "hostname": "DC-01",
+      "vendor": "Cisco"
+    },
+    {
+      "ip_address": "192.168.10.20",
+      "hostname": "UAP-AC-LR",
+      "vendor": "Ubiquiti"
+    },
+    {
+      "ip_address": "192.168.10.30",
+      "hostname": "print-01",
+      "vendor": "Brother"
+    },
+    {
+      "ip_address": "192.168.10.40",
+      "hostname": "phone-01",
+      "vendor": "Yealink"
+    }
+  ]
+}

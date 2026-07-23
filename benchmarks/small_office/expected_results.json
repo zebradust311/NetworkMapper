@@ -1,0 +1,20 @@
+{
+  "expected_results": [
+    {
+      "ip_address": "192.168.10.10",
+      "device_type": "SERVER"
+    },
+    {
+      "ip_address": "192.168.10.20",
+      "device_type": "ACCESS_POINT"
+    },
+    {
+      "ip_address": "192.168.10.30",
+      "device_type": "PRINTER"
+    },
+    {
+      "ip_address": "192.168.10.40",
+      "device_type": "PHONE"
+    }
+  ]
+}
