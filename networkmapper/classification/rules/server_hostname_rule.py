@@ -10,21 +10,19 @@ class ServerHostnameRule(ClassificationRule):
 
     def classify(self, device: Device) -> RuleResult:
         """Return a rule result for server hostname matching evidence."""
-        raw_hostname = device.hostname or ""
+        raw_hostname = device.hostname
         hostname = (device.hostname or "").lower()
         if "dc" in hostname or "cam" in hostname:
             return RuleResult(
                 matched=True,
                 confidence_contribution=0,
-                reason=(
-                    f"Hostname '{raw_hostname}' matched known server naming convention."
-                ),
+                reason=f"Hostname {raw_hostname!r} matched known server naming convention.",
                 suggested_device_type=DeviceType.SERVER,
             )
 
         return RuleResult(
             matched=False,
             confidence_contribution=0,
-            reason="Hostname did not match known server naming conventions.",
+            reason=f"Hostname {raw_hostname!r} did not match known server naming patterns.",
             suggested_device_type=None,
         )

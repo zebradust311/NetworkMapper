@@ -36,10 +36,13 @@ class PrinterVendorRuleTest(unittest.TestCase):
                     vendor=vendor,
                 )
 
+                result = self.rule.classify(device)
+
                 self.assertEqual(
                     DeviceType.PRINTER,
-                    self.rule.classify(device).suggested_device_type,
+                    result.suggested_device_type,
                 )
+                self.assertEqual(result.reason, f"Vendor '{vendor}' matched known printer vendor.")
 
     def test_vendor_matching_is_case_insensitive(self):
         device = Device(
@@ -61,6 +64,7 @@ class PrinterVendorRuleTest(unittest.TestCase):
         result = self.rule.classify(device)
         self.assertFalse(result.matched)
         self.assertIsNone(result.suggested_device_type)
+        self.assertEqual(result.reason, "Vendor '' is not a known printer vendor.")
 
     def test_none_vendor_is_ignored(self):
         device = Device(
@@ -71,6 +75,7 @@ class PrinterVendorRuleTest(unittest.TestCase):
         result = self.rule.classify(device)
         self.assertFalse(result.matched)
         self.assertIsNone(result.suggested_device_type)
+        self.assertEqual(result.reason, "Vendor None is not a known printer vendor.")
 
     def test_non_printer_vendor_is_ignored(self):
         device = Device(
@@ -81,6 +86,7 @@ class PrinterVendorRuleTest(unittest.TestCase):
         result = self.rule.classify(device)
         self.assertFalse(result.matched)
         self.assertIsNone(result.suggested_device_type)
+        self.assertEqual(result.reason, "Vendor 'SonicWall' is not a known printer vendor.")
 
     def test_printer_rule_emits_rule_result(self):
         device = Device(
@@ -93,6 +99,7 @@ class PrinterVendorRuleTest(unittest.TestCase):
         self.assertIsInstance(result, RuleResult)
         self.assertTrue(result.matched)
         self.assertEqual(result.suggested_device_type, DeviceType.PRINTER)
+        self.assertEqual(result.reason, "Vendor 'Brother' matched known printer vendor.")
 
 
 if __name__ == "__main__":

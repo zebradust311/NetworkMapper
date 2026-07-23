@@ -21,13 +21,13 @@ class VoiceVendorRule(ClassificationRule):
 
     def classify(self, device: Device) -> RuleResult:
         """Return a rule result for voice vendor matching evidence."""
-        raw_vendor = device.vendor or ""
+        raw_vendor = device.vendor
         vendor = (device.vendor or "").strip().lower()
         if not vendor:
             return RuleResult(
                 matched=False,
                 confidence_contribution=0,
-                reason="Vendor did not match known voice device vendors.",
+                reason=f"Vendor {raw_vendor!r} is not a known voice device vendor.",
                 suggested_device_type=None,
             )
 
@@ -35,13 +35,13 @@ class VoiceVendorRule(ClassificationRule):
             return RuleResult(
                 matched=True,
                 confidence_contribution=0,
-                reason=f"Vendor '{raw_vendor}' matched known voice device vendor.",
+                reason=f"Vendor {raw_vendor!r} matched known voice device vendor.",
                 suggested_device_type=DeviceType.PHONE,
             )
 
         return RuleResult(
             matched=False,
             confidence_contribution=0,
-            reason="Vendor did not match known voice device vendors.",
+            reason=f"Vendor {raw_vendor!r} is not a known voice device vendor.",
             suggested_device_type=None,
         )

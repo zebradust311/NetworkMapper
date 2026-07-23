@@ -18,7 +18,10 @@ class ServerHostnameRuleTest(unittest.TestCase):
         self.assertIsInstance(result, RuleResult)
         self.assertTrue(result.matched)
         self.assertEqual(result.suggested_device_type, DeviceType.SERVER)
-        self.assertTrue(result.reason)
+        self.assertEqual(
+            result.reason,
+            "Hostname 'DC01' matched known server naming convention.",
+        )
 
     def test_cam_hostname_returns_matching_rule_result(self):
         device = Device(
@@ -32,7 +35,10 @@ class ServerHostnameRuleTest(unittest.TestCase):
         self.assertIsInstance(result, RuleResult)
         self.assertTrue(result.matched)
         self.assertEqual(result.suggested_device_type, DeviceType.SERVER)
-        self.assertTrue(result.reason)
+        self.assertEqual(
+            result.reason,
+            "Hostname 'CAM-01' matched known server naming convention.",
+        )
 
     def test_non_matching_hostname_returns_non_matching_rule_result(self):
         device = Device(
@@ -47,7 +53,10 @@ class ServerHostnameRuleTest(unittest.TestCase):
         self.assertFalse(result.matched)
         self.assertIsNone(result.suggested_device_type)
         self.assertEqual(result.confidence_contribution, 0)
-        self.assertTrue(result.reason)
+        self.assertEqual(
+            result.reason,
+            "Hostname 'host-01' did not match known server naming patterns.",
+        )
 
 
 if __name__ == "__main__":

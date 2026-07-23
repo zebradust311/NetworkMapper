@@ -18,7 +18,7 @@ class DellWorkstationRuleTest(unittest.TestCase):
         self.assertIsInstance(result, RuleResult)
         self.assertTrue(result.matched)
         self.assertEqual(result.suggested_device_type, DeviceType.WORKSTATION)
-        self.assertTrue(result.reason)
+        self.assertEqual(result.reason, "Vendor 'Dell Inc.' matched known workstation vendor.")
 
     def test_case_insensitive_vendor_matching(self):
         device = Device(
@@ -32,7 +32,7 @@ class DellWorkstationRuleTest(unittest.TestCase):
         self.assertIsInstance(result, RuleResult)
         self.assertTrue(result.matched)
         self.assertEqual(result.suggested_device_type, DeviceType.WORKSTATION)
-        self.assertTrue(result.reason)
+        self.assertEqual(result.reason, "Vendor 'dElL' matched known workstation vendor.")
 
     def test_non_matching_vendor_returns_non_matching_rule_result(self):
         device = Device(
@@ -47,7 +47,7 @@ class DellWorkstationRuleTest(unittest.TestCase):
         self.assertFalse(result.matched)
         self.assertIsNone(result.suggested_device_type)
         self.assertEqual(result.confidence_contribution, 0)
-        self.assertTrue(result.reason)
+        self.assertEqual(result.reason, "Vendor 'Lenovo' is not a known workstation vendor.")
 
 
 if __name__ == "__main__":

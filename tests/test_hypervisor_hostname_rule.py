@@ -18,7 +18,10 @@ class HypervisorHostnameRuleTest(unittest.TestCase):
         self.assertIsInstance(result, RuleResult)
         self.assertTrue(result.matched)
         self.assertEqual(result.suggested_device_type, DeviceType.HYPERVISOR)
-        self.assertTrue(result.reason)
+        self.assertEqual(
+            result.reason,
+            "Hostname 'SCTVSH01' matched known hypervisor naming convention.",
+        )
 
     def test_case_insensitive_hostname_matching(self):
         device = Device(
@@ -32,7 +35,10 @@ class HypervisorHostnameRuleTest(unittest.TestCase):
         self.assertIsInstance(result, RuleResult)
         self.assertTrue(result.matched)
         self.assertEqual(result.suggested_device_type, DeviceType.HYPERVISOR)
-        self.assertTrue(result.reason)
+        self.assertEqual(
+            result.reason,
+            "Hostname 'node-VsH-01' matched known hypervisor naming convention.",
+        )
 
     def test_non_matching_hostname_returns_non_matching_rule_result(self):
         device = Device(
@@ -47,7 +53,10 @@ class HypervisorHostnameRuleTest(unittest.TestCase):
         self.assertFalse(result.matched)
         self.assertIsNone(result.suggested_device_type)
         self.assertEqual(result.confidence_contribution, 0)
-        self.assertTrue(result.reason)
+        self.assertEqual(
+            result.reason,
+            "Hostname 'host-01' did not match known hypervisor naming conventions.",
+        )
 
 
 if __name__ == "__main__":

@@ -18,7 +18,10 @@ class UbiquitiAccessPointRuleTest(unittest.TestCase):
         self.assertIsInstance(result, RuleResult)
         self.assertTrue(result.matched)
         self.assertEqual(result.suggested_device_type, DeviceType.ACCESS_POINT)
-        self.assertTrue(result.reason)
+        self.assertEqual(
+            result.reason,
+            "Vendor 'Ubiquiti' and hostname 'UAP-AC-LR' matched known wireless infrastructure vendor.",
+        )
 
     def test_u6_hostname_classifies_as_access_point(self):
         device = Device(
@@ -32,7 +35,10 @@ class UbiquitiAccessPointRuleTest(unittest.TestCase):
         self.assertIsInstance(result, RuleResult)
         self.assertTrue(result.matched)
         self.assertEqual(result.suggested_device_type, DeviceType.ACCESS_POINT)
-        self.assertTrue(result.reason)
+        self.assertEqual(
+            result.reason,
+            "Vendor 'Ubiquiti' and hostname 'U6-Pro' matched known wireless infrastructure vendor.",
+        )
 
     def test_u7_hostname_classifies_as_access_point(self):
         device = Device(
@@ -46,7 +52,10 @@ class UbiquitiAccessPointRuleTest(unittest.TestCase):
         self.assertIsInstance(result, RuleResult)
         self.assertTrue(result.matched)
         self.assertEqual(result.suggested_device_type, DeviceType.ACCESS_POINT)
-        self.assertTrue(result.reason)
+        self.assertEqual(
+            result.reason,
+            "Vendor 'Ubiquiti' and hostname 'U7-Pro' matched known wireless infrastructure vendor.",
+        )
 
     def test_other_ubiquiti_devices_remain_unaffected(self):
         device = Device(
@@ -61,7 +70,10 @@ class UbiquitiAccessPointRuleTest(unittest.TestCase):
         self.assertFalse(result.matched)
         self.assertIsNone(result.suggested_device_type)
         self.assertEqual(result.confidence_contribution, 0)
-        self.assertTrue(result.reason)
+        self.assertEqual(
+            result.reason,
+            "Vendor 'Ubiquiti' and hostname 'Switch-01' did not match known wireless infrastructure vendor patterns.",
+        )
 
     def test_non_ubiquiti_devices_are_ignored(self):
         device = Device(
@@ -76,7 +88,10 @@ class UbiquitiAccessPointRuleTest(unittest.TestCase):
         self.assertFalse(result.matched)
         self.assertIsNone(result.suggested_device_type)
         self.assertEqual(result.confidence_contribution, 0)
-        self.assertTrue(result.reason)
+        self.assertEqual(
+            result.reason,
+            "Vendor 'Cisco' and hostname 'UAP-AC-LR' did not match known wireless infrastructure vendor patterns.",
+        )
 
 
 if __name__ == "__main__":

@@ -30,12 +30,13 @@ class PrinterVendorRule(ClassificationRule):
 
     def classify(self, device: Device) -> RuleResult:
         """Return a rule result for printer vendor matching evidence."""
+        raw_vendor = device.vendor
         vendor = (device.vendor or "").strip().lower()
         if not vendor:
             return RuleResult(
                 matched=False,
                 confidence_contribution=0,
-                reason="Printer vendor rule: vendor is empty",
+                reason=f"Vendor {raw_vendor!r} is not a known printer vendor.",
                 suggested_device_type=None,
             )
 
@@ -43,13 +44,13 @@ class PrinterVendorRule(ClassificationRule):
             return RuleResult(
                 matched=True,
                 confidence_contribution=0,
-                reason="Printer vendor rule: vendor keyword matched",
+                reason=f"Vendor {raw_vendor!r} matched known printer vendor.",
                 suggested_device_type=DeviceType.PRINTER,
             )
 
         return RuleResult(
             matched=False,
             confidence_contribution=0,
-            reason="Printer vendor rule: no keyword match",
+            reason=f"Vendor {raw_vendor!r} is not a known printer vendor.",
             suggested_device_type=None,
         )

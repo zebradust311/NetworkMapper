@@ -25,7 +25,10 @@ class VoiceVendorRuleTest(unittest.TestCase):
                 self.assertIsInstance(result, RuleResult)
                 self.assertTrue(result.matched)
                 self.assertEqual(result.suggested_device_type, DeviceType.PHONE)
-                self.assertTrue(result.reason)
+                self.assertEqual(
+                    result.reason,
+                    f"Vendor '{vendor}' matched known voice device vendor.",
+                )
 
     def test_case_insensitive_matching(self):
         device = Device(ip_address="192.168.1.21", vendor="yEaLiNk")
@@ -35,7 +38,7 @@ class VoiceVendorRuleTest(unittest.TestCase):
         self.assertIsInstance(result, RuleResult)
         self.assertTrue(result.matched)
         self.assertEqual(result.suggested_device_type, DeviceType.PHONE)
-        self.assertTrue(result.reason)
+        self.assertEqual(result.reason, "Vendor 'yEaLiNk' matched known voice device vendor.")
 
     def test_empty_vendor_returns_non_matching_rule_result(self):
         device = Device(ip_address="192.168.1.22", vendor="")
@@ -46,7 +49,7 @@ class VoiceVendorRuleTest(unittest.TestCase):
         self.assertFalse(result.matched)
         self.assertIsNone(result.suggested_device_type)
         self.assertEqual(result.confidence_contribution, 0)
-        self.assertTrue(result.reason)
+        self.assertEqual(result.reason, "Vendor '' is not a known voice device vendor.")
 
     def test_none_vendor_returns_non_matching_rule_result(self):
         device = Device(ip_address="192.168.1.23", vendor=None)
@@ -57,7 +60,7 @@ class VoiceVendorRuleTest(unittest.TestCase):
         self.assertFalse(result.matched)
         self.assertIsNone(result.suggested_device_type)
         self.assertEqual(result.confidence_contribution, 0)
-        self.assertTrue(result.reason)
+        self.assertEqual(result.reason, "Vendor None is not a known voice device vendor.")
 
     def test_unsupported_vendor_returns_non_matching_rule_result(self):
         device = Device(ip_address="192.168.1.24", vendor="SonicWall")
@@ -68,7 +71,7 @@ class VoiceVendorRuleTest(unittest.TestCase):
         self.assertFalse(result.matched)
         self.assertIsNone(result.suggested_device_type)
         self.assertEqual(result.confidence_contribution, 0)
-        self.assertTrue(result.reason)
+        self.assertEqual(result.reason, "Vendor 'SonicWall' is not a known voice device vendor.")
 
 
 if __name__ == "__main__":

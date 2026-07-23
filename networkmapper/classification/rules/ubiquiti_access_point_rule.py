@@ -10,8 +10,8 @@ class UbiquitiAccessPointRule(ClassificationRule):
 
     def classify(self, device: Device) -> RuleResult:
         """Return a rule result for Ubiquiti wireless infrastructure evidence."""
-        raw_vendor = device.vendor or ""
-        raw_hostname = device.hostname or ""
+        raw_vendor = device.vendor
+        raw_hostname = device.hostname
         vendor = (device.vendor or "").lower()
         hostname = (device.hostname or "").strip()
 
@@ -19,7 +19,10 @@ class UbiquitiAccessPointRule(ClassificationRule):
             return RuleResult(
                 matched=False,
                 confidence_contribution=0,
-                reason="Device did not present Ubiquiti wireless infrastructure evidence.",
+                reason=(
+                    f"Vendor {raw_vendor!r} and hostname {raw_hostname!r} did not match "
+                    "known wireless infrastructure vendor patterns."
+                ),
                 suggested_device_type=None,
             )
 
@@ -29,7 +32,7 @@ class UbiquitiAccessPointRule(ClassificationRule):
                 matched=True,
                 confidence_contribution=0,
                 reason=(
-                    f"Vendor '{raw_vendor}' and hostname '{raw_hostname}' matched "
+                    f"Vendor {raw_vendor!r} and hostname {raw_hostname!r} matched "
                     "known wireless infrastructure vendor."
                 ),
                 suggested_device_type=DeviceType.ACCESS_POINT,
@@ -38,6 +41,9 @@ class UbiquitiAccessPointRule(ClassificationRule):
         return RuleResult(
             matched=False,
             confidence_contribution=0,
-            reason="Device did not present Ubiquiti wireless infrastructure evidence.",
+            reason=(
+                f"Vendor {raw_vendor!r} and hostname {raw_hostname!r} did not match "
+                "known wireless infrastructure vendor patterns."
+            ),
             suggested_device_type=None,
         )
