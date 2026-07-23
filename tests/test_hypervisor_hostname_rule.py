@@ -58,6 +58,23 @@ class HypervisorHostnameRuleTest(unittest.TestCase):
             "Hostname 'host-01' did not match known hypervisor naming conventions.",
         )
 
+    def test_esxi_hostname_matches_hypervisor_pattern(self):
+        device = Device(
+            ip_address="192.168.1.63",
+            hostname="ESXI-01",
+            vendor="Unknown",
+        )
+
+        result = HypervisorHostnameRule().classify(device)
+
+        self.assertIsInstance(result, RuleResult)
+        self.assertTrue(result.matched)
+        self.assertEqual(result.suggested_device_type, DeviceType.HYPERVISOR)
+        self.assertEqual(
+            result.reason,
+            "Hostname 'ESXI-01' matched known hypervisor naming convention.",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

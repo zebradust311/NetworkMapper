@@ -99,7 +99,28 @@ class PrinterVendorRuleTest(unittest.TestCase):
         self.assertIsInstance(result, RuleResult)
         self.assertTrue(result.matched)
         self.assertEqual(result.suggested_device_type, DeviceType.PRINTER)
-        self.assertEqual(result.reason, "Vendor 'Brother' matched known printer vendor.")
+        self.assertEqual(
+            result.reason,
+            "Printer vendor rule: vendor keyword matched for vendor 'Brother'.",
+        )
+
+    def test_printer_ports_and_services_classify_without_vendor_match(self):
+        device = Device(
+            ip_address="192.168.1.16",
+            vendor=None,
+            open_ports=[631],
+            detected_services=["ipp"],
+        )
+
+        result = self.rule.classify(device)
+
+        self.assertIsInstance(result, RuleResult)
+        self.assertTrue(result.matched)
+        self.assertEqual(result.suggested_device_type, DeviceType.PRINTER)
+        self.assertEqual(
+            result.reason,
+            "Open port 631 and service 'ipp' matched known printer networking.",
+        )
 
 
 if __name__ == "__main__":

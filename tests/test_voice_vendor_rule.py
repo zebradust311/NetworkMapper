@@ -73,6 +73,25 @@ class VoiceVendorRuleTest(unittest.TestCase):
         self.assertEqual(result.confidence_contribution, 0)
         self.assertEqual(result.reason, "Vendor 'SonicWall' is not a known voice device vendor.")
 
+    def test_phone_hostname_with_sip_port_classifies_as_phone(self):
+        device = Device(
+            ip_address="192.168.1.25",
+            hostname="desk-phone-01",
+            vendor=None,
+            open_ports=[5060],
+            detected_services=["sip"],
+        )
+
+        result = VoiceVendorRule().classify(device)
+
+        self.assertIsInstance(result, RuleResult)
+        self.assertTrue(result.matched)
+        self.assertEqual(result.suggested_device_type, DeviceType.PHONE)
+        self.assertEqual(
+            result.reason,
+            "Hostname 'desk-phone-01' with open port 5060 and service 'sip' matched known voice device evidence.",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

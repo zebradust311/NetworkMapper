@@ -24,6 +24,17 @@ SUPPORTED_PRINTER_VENDOR_KEYWORDS = (
     "fujifilm business innovation",
 )
 
+PRINTER_PROTOCOL_PORTS = {515, 631, 9100}
+PRINTER_SERVICE_KEYWORDS = (
+    "ipp",
+    "ipps",
+    "jetdirect",
+    "lpd",
+    "printer",
+    "raw",
+    "pdl-datastream",
+)
+
 
 class PrinterVendorRule(ClassificationRule):
     """Match vendors that indicate a printer device."""
@@ -33,6 +44,15 @@ class PrinterVendorRule(ClassificationRule):
         raw_vendor = device.vendor
         vendor = (device.vendor or "").strip().lower()
         if not vendor:
+            matched_port, matched_service = self._find_printer_networking(device)
+            if matched_port is not None or matched_service is not None:
+                return RuleResult(
+                    matched=True,
+                    confidence_contribution=0,
+                    reason=self._format_networking_reason(matched_port, matched_service),
+                    suggested_device_type=DeviceType.PRINTER,
+                )
+
             return RuleResult(
                 matched=False,
                 confidence_contribution=0,
@@ -44,7 +64,18 @@ class PrinterVendorRule(ClassificationRule):
             return RuleResult(
                 matched=True,
                 confidence_contribution=0,
-                reason=f"Vendor {raw_vendor!r} matched known printer vendor.",
+                reason=(
+                    f"Printer vendor rule: vendor keyword matched for vendor {raw_vendor!r}."
+                ),
+                suggested_device_type=DeviceType.PRINTER,
+            )
+
+        matched_port, matched_service = self._find_printer_networking(device)
+        if matched_port is not None or matched_service is not None:
+            return RuleResult(
+                matched=True,
+                confidence_contribution=0,
+                reason=self._format_networking_reason(matched_port, matched_service),
                 suggested_device_type=DeviceType.PRINTER,
             )
 
@@ -54,3 +85,36 @@ class PrinterVendorRule(ClassificationRule):
             reason=f"Vendor {raw_vendor!r} is not a known printer vendor.",
             suggested_device_type=None,
         )
+
+    def _find_printer_networking(self, device: Device) -> tuple[int | None, str | None]:
+        matched_port = next(
+            (port for port in device.open_ports if port in PRINTER_PROTOCOL_PORTS),
+            None,
+        )
+
+        matched_service = next(
+            (
+                service.strip()
+                for service in device.detected_services
+                if service.strip().lower() in PRINTER_SERVICE_KEYWORDS
+            ),
+            None,
+        )
+
+        return matched_port, matched_service
+
+    def _format_networking_reason(
+        self,
+        matched_port: int | None,
+        matched_service: str | None,
+    ) -> str:
+        if matched_port is not None and matched_service is not None:
+            return (
+                f"Open port {matched_port} and service {matched_service!r} matched "
+                "known printer networking."
+            )
+
+        if matched_port is not None:
+            return f"Open port {matched_port} matched known printer networking."
+
+        return f"Service {matched_service!r} matched known printer networking."

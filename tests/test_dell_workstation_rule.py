@@ -47,7 +47,27 @@ class DellWorkstationRuleTest(unittest.TestCase):
         self.assertFalse(result.matched)
         self.assertIsNone(result.suggested_device_type)
         self.assertEqual(result.confidence_contribution, 0)
-        self.assertEqual(result.reason, "Vendor 'Lenovo' is not a known workstation vendor.")
+        self.assertEqual(
+            result.reason,
+            "Vendor 'Lenovo' and hostname 'ws-03' did not match known workstation indicators.",
+        )
+
+    def test_dell_workstation_hostname_pattern_matches_without_vendor(self):
+        device = Device(
+            ip_address="192.168.1.73",
+            hostname="OPTIPLEX-7090",
+            vendor="Unknown",
+        )
+
+        result = DellWorkstationRule().classify(device)
+
+        self.assertIsInstance(result, RuleResult)
+        self.assertTrue(result.matched)
+        self.assertEqual(result.suggested_device_type, DeviceType.WORKSTATION)
+        self.assertEqual(
+            result.reason,
+            "Hostname 'OPTIPLEX-7090' matched known Dell workstation naming pattern.",
+        )
 
 
 if __name__ == "__main__":

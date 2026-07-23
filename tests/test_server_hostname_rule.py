@@ -58,6 +58,23 @@ class ServerHostnameRuleTest(unittest.TestCase):
             "Hostname 'host-01' did not match known server naming patterns.",
         )
 
+    def test_srv_hostname_returns_matching_rule_result(self):
+        device = Device(
+            ip_address="192.168.1.53",
+            hostname="SRV-APP01",
+            vendor="Unknown",
+        )
+
+        result = ServerHostnameRule().classify(device)
+
+        self.assertIsInstance(result, RuleResult)
+        self.assertTrue(result.matched)
+        self.assertEqual(result.suggested_device_type, DeviceType.SERVER)
+        self.assertEqual(
+            result.reason,
+            "Hostname 'SRV-APP01' matched known server naming pattern.",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
