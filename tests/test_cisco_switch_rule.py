@@ -49,6 +49,25 @@ class CiscoSwitchRuleTest(unittest.TestCase):
         self.assertEqual(result.confidence_contribution, 0)
         self.assertEqual(result.reason, "Vendor 'Juniper' is not a known switch vendor.")
 
+    def test_switch_hostname_with_management_signals_matches_without_vendor(self):
+        device = Device(
+            ip_address="192.168.1.43",
+            hostname="switch-core-01",
+            vendor="Unknown",
+            open_ports=[161],
+            detected_services=["snmp"],
+        )
+
+        result = CiscoSwitchRule().classify(device)
+
+        self.assertIsInstance(result, RuleResult)
+        self.assertTrue(result.matched)
+        self.assertEqual(result.suggested_device_type, DeviceType.SWITCH)
+        self.assertEqual(
+            result.reason,
+            "Hostname 'switch-core-01' with open port 161 and service 'snmp' matched known switch management evidence.",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

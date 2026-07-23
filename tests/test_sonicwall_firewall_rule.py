@@ -64,6 +64,25 @@ class SonicWallFirewallRuleTest(unittest.TestCase):
         self.assertEqual(result.confidence_contribution, 0)
         self.assertEqual(result.reason, "Vendor 'Cisco' is not a known firewall vendor.")
 
+    def test_sonicwall_hostname_with_management_signals_matches_without_vendor(self):
+        device = Device(
+            ip_address="192.168.1.34",
+            hostname="tz-370",
+            vendor="Unknown",
+            open_ports=[443],
+            detected_services=["https"],
+        )
+
+        result = SonicWallFirewallRule().classify(device)
+
+        self.assertIsInstance(result, RuleResult)
+        self.assertTrue(result.matched)
+        self.assertEqual(result.suggested_device_type, DeviceType.FIREWALL)
+        self.assertEqual(
+            result.reason,
+            "Hostname 'tz-370' with open port 443 and service 'https' matched known firewall management evidence.",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

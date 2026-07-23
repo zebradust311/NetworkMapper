@@ -93,6 +93,23 @@ class UbiquitiAccessPointRuleTest(unittest.TestCase):
             "Vendor 'Cisco' and hostname 'UAP-AC-LR' did not match known wireless infrastructure vendor patterns.",
         )
 
+    def test_nanohd_hostname_classifies_as_access_point(self):
+        device = Device(
+            ip_address="192.168.1.25",
+            hostname="office-nanohd-01",
+            vendor="Ubiquiti",
+        )
+
+        result = UbiquitiAccessPointRule().classify(device)
+
+        self.assertIsInstance(result, RuleResult)
+        self.assertTrue(result.matched)
+        self.assertEqual(result.suggested_device_type, DeviceType.ACCESS_POINT)
+        self.assertEqual(
+            result.reason,
+            "Vendor 'Ubiquiti' and hostname 'office-nanohd-01' matched known wireless access point naming patterns.",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -138,7 +138,7 @@ class ClassificationWorkbenchTest(unittest.TestCase):
         self.assertNotIn("Rule: DellWorkstationRule", report)
         self.assertIn("Matched: Yes", report)
         self.assertIn("Suggested Type: PRINTER", report)
-        self.assertIn("Reason:\nPrinter vendor rule: vendor keyword matched", report)
+        self.assertIn("Reason:\nVendor 'Brother' matched known printer vendor.", report)
 
     def test_generate_renders_non_matching_rule_result_fields(self):
         project = Project(
@@ -161,7 +161,7 @@ class ClassificationWorkbenchTest(unittest.TestCase):
         self.assertIn("Matched: No", report)
         self.assertIn("Suggested Type: None", report)
         self.assertIn(
-            "Reason:\nHostname did not match known server naming conventions.",
+            "Reason:\nHostname 'workstation-01' did not match known server naming patterns.",
             report,
         )
 
