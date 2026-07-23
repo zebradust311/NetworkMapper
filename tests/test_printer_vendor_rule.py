@@ -64,7 +64,10 @@ class PrinterVendorRuleTest(unittest.TestCase):
         result = self.rule.classify(device)
         self.assertFalse(result.matched)
         self.assertIsNone(result.suggested_device_type)
-        self.assertEqual(result.reason, "Vendor '' is not a known printer vendor.")
+        self.assertEqual(
+            result.reason,
+            "Vendor '' is not a known printer vendor and no printer networking protocols were detected.",
+        )
 
     def test_none_vendor_is_ignored(self):
         device = Device(
@@ -75,7 +78,10 @@ class PrinterVendorRuleTest(unittest.TestCase):
         result = self.rule.classify(device)
         self.assertFalse(result.matched)
         self.assertIsNone(result.suggested_device_type)
-        self.assertEqual(result.reason, "Vendor None is not a known printer vendor.")
+        self.assertEqual(
+            result.reason,
+            "Vendor None is not a known printer vendor and no printer networking protocols were detected.",
+        )
 
     def test_non_printer_vendor_is_ignored(self):
         device = Device(
@@ -86,12 +92,15 @@ class PrinterVendorRuleTest(unittest.TestCase):
         result = self.rule.classify(device)
         self.assertFalse(result.matched)
         self.assertIsNone(result.suggested_device_type)
-        self.assertEqual(result.reason, "Vendor 'SonicWall' is not a known printer vendor.")
+        self.assertEqual(
+            result.reason,
+            "Vendor 'SonicWall' is not a known printer vendor and no printer networking protocols were detected.",
+        )
 
     def test_printer_rule_emits_rule_result(self):
         device = Device(
             ip_address="192.168.1.15",
-            vendor="Brother",
+            vendor="Brother Industries",
         )
 
         result = self.rule.classify(device)
@@ -101,14 +110,32 @@ class PrinterVendorRuleTest(unittest.TestCase):
         self.assertEqual(result.suggested_device_type, DeviceType.PRINTER)
         self.assertEqual(
             result.reason,
-            "Printer vendor rule: vendor keyword matched for vendor 'Brother'.",
+            "Vendor 'Brother Industries' matched known printer vendor.",
         )
 
-    def test_printer_ports_and_services_classify_without_vendor_match(self):
+    def test_printer_port_9100_classifies_without_vendor_match(self):
         device = Device(
             ip_address="192.168.1.16",
             vendor=None,
-            open_ports=[631],
+            open_ports=[9100],
+            detected_services=[],
+        )
+
+        result = self.rule.classify(device)
+
+        self.assertIsInstance(result, RuleResult)
+        self.assertTrue(result.matched)
+        self.assertEqual(result.suggested_device_type, DeviceType.PRINTER)
+        self.assertEqual(
+            result.reason,
+            "Open TCP port 9100 (JetDirect) indicates printer networking.",
+        )
+
+    def test_printer_ipp_service_classifies_without_vendor_match(self):
+        device = Device(
+            ip_address="192.168.1.17",
+            vendor=None,
+            open_ports=[],
             detected_services=["ipp"],
         )
 
@@ -119,7 +146,7 @@ class PrinterVendorRuleTest(unittest.TestCase):
         self.assertEqual(result.suggested_device_type, DeviceType.PRINTER)
         self.assertEqual(
             result.reason,
-            "Open port 631 and service 'ipp' matched known printer networking.",
+            "Detected IPP service indicates printer networking.",
         )
 
 

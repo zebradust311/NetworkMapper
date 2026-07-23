@@ -56,7 +56,10 @@ class PrinterVendorRule(ClassificationRule):
             return RuleResult(
                 matched=False,
                 confidence_contribution=0,
-                reason=f"Vendor {raw_vendor!r} is not a known printer vendor.",
+                reason=(
+                    f"Vendor {raw_vendor!r} is not a known printer vendor and "
+                    "no printer networking protocols were detected."
+                ),
                 suggested_device_type=None,
             )
 
@@ -64,9 +67,7 @@ class PrinterVendorRule(ClassificationRule):
             return RuleResult(
                 matched=True,
                 confidence_contribution=0,
-                reason=(
-                    f"Printer vendor rule: vendor keyword matched for vendor {raw_vendor!r}."
-                ),
+                reason=f"Vendor {raw_vendor!r} matched known printer vendor.",
                 suggested_device_type=DeviceType.PRINTER,
             )
 
@@ -82,7 +83,10 @@ class PrinterVendorRule(ClassificationRule):
         return RuleResult(
             matched=False,
             confidence_contribution=0,
-            reason=f"Vendor {raw_vendor!r} is not a known printer vendor.",
+            reason=(
+                f"Vendor {raw_vendor!r} is not a known printer vendor and "
+                "no printer networking protocols were detected."
+            ),
             suggested_device_type=None,
         )
 
@@ -110,11 +114,33 @@ class PrinterVendorRule(ClassificationRule):
     ) -> str:
         if matched_port is not None and matched_service is not None:
             return (
-                f"Open port {matched_port} and service {matched_service!r} matched "
-                "known printer networking."
+                f"Open TCP port {matched_port}{self._port_label(matched_port)} indicates "
+                "printer networking. "
+                f"Detected {self._service_label(matched_service)} service indicates "
+                "printer networking."
             )
 
         if matched_port is not None:
-            return f"Open port {matched_port} matched known printer networking."
+            return (
+                f"Open TCP port {matched_port}{self._port_label(matched_port)} indicates "
+                "printer networking."
+            )
 
-        return f"Service {matched_service!r} matched known printer networking."
+        return (
+            f"Detected {self._service_label(matched_service)} service indicates printer "
+            "networking."
+        )
+
+    def _port_label(self, port: int) -> str:
+        if port == 9100:
+            return " (JetDirect)"
+        if port == 631:
+            return " (IPP)"
+        if port == 515:
+            return " (LPD)"
+        return ""
+
+    def _service_label(self, service: str | None) -> str:
+        if service is None:
+            return "Unknown"
+        return service.upper()
