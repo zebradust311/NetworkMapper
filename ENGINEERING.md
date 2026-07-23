@@ -1,6 +1,6 @@
 # NetworkMapper Engineering Guide
 
-**Version:** 0.1.0
+**Version:** 0.2.0
 
 ---
 
@@ -90,13 +90,10 @@ Models should not perform discovery.
 
 Examples:
 
-Device
-
-Interface
-
-Link
-
-Network
+- Device
+- Interface
+- Link
+- Network
 
 ---
 
@@ -104,15 +101,11 @@ Network
 
 Examples:
 
-Discovery Engine
-
-Project Serializer
-
-Device Classifier
-
-Exporter
-
-Topology Engine
+- Discovery Engine
+- Project Serializer
+- Device Classifier
+- Exporter
+- Topology Engine
 
 ---
 
@@ -130,7 +123,9 @@ We only build features that solve actual technician workflows.
 
 ---
 
-## 10. Routine inventory should remain fast, deterministic, and minimally intrusive. Deep inspection belongs in optional utilities that can enrich a project without slowing the core workflow.
+## 10. Routine inventory should remain fast, deterministic, and minimally intrusive.
+
+Deep inspection belongs in optional utilities that can enrich a project without slowing the core workflow.
 
 ---
 
@@ -175,11 +170,15 @@ networkmapper/
 
     ui/
 
+    developer/
+
     config/
 
 tests/
 
 docs/
+
+examples/
 ```
 
 ---
@@ -210,7 +209,7 @@ from networkmapper.core.models import Device
 
 ## Logging
 
-Temporary validation harnesses may use print().
+Temporary validation harnesses may use `print()`.
 
 Production application logic should use the Logger service.
 
@@ -239,7 +238,81 @@ Good:
 ```python
 # Retry after transient network failures.
 ```
-Providers contribute facts and the Discovery Engine merges them into a unified view of the network
+
+---
+
+## Discovery
+
+Providers contribute facts.
+
+The Discovery Engine merges those facts into a unified representation of the network.
+
+Discovery providers should never overwrite unrelated provider data.
+
+---
+
+# AI-Assisted Development
+
+AI assistants are used to accelerate implementation, testing, and documentation.
+
+Architectural decisions remain intentional and human-reviewed.
+
+## Scope
+
+Each implementation sprint should have a single objective.
+
+Changes should remain narrowly scoped.
+
+Avoid unrelated cleanup or opportunistic refactoring.
+
+---
+
+## Validation
+
+When validating work:
+
+- Run only the regression tests appropriate to the current sprint unless a full regression suite is explicitly requested.
+- Execute the requested test suite once.
+- If tests pass, summarize the results and stop.
+- If tests fail, explain the failure before proposing additional changes.
+
+---
+
+## Tooling
+
+AI assistants should never inspect editor or IDE implementation files.
+
+Do **not** execute commands that read:
+
+- VS Code workspaceStorage
+- Copilot chat-session-resources
+- content.txt
+- other editor-generated temporary files
+
+These files are not part of the project and should never be used to validate software behavior.
+
+---
+
+## Architecture
+
+Do not change project architecture unless the current sprint explicitly requires it.
+
+Do not modify unrelated subsystems.
+
+Do not introduce compatibility layers unless they are part of the planned migration.
+
+---
+
+## Documentation
+
+Architectural changes must update:
+
+- ROADMAP.md
+- docs/ARCHITECTURE.md
+- docs/ADR.md
+
+Implementation changes should update documentation when appropriate.
+
 ---
 
 # Git Workflow
@@ -248,6 +321,8 @@ Each completed task receives:
 
 - One commit.
 - One meaningful commit message.
+- Regression tests appropriate to the scope of the change.
+- Updated documentation when required.
 
 Examples:
 
@@ -274,13 +349,21 @@ Stuff
 # Development Phases
 
 Phase 1 — Foundation
+
 Phase 2 — Discovery
+
 Phase 3 — Persistence
+
 Phase 4 — Intelligence
+
 Phase 5 — Enterprise Discovery
+
 Phase 6 — Project Intelligence
+
 Phase 7 — Exports
+
 Phase 8 — MSP Workflows
+
 Phase 9 — Production
 
 ---
@@ -292,6 +375,7 @@ A phase is complete when:
 - The application runs.
 - The new capability works.
 - Existing functionality still works.
+- Regression tests appropriate to the change pass.
 - Documentation has been updated.
 - Changes have been committed to Git.
 
@@ -309,7 +393,7 @@ NetworkMapper should enable a technician to:
 
 ---
 
-## Information Model
+# Information Model
 
 NetworkMapper is built around relationships.
 
@@ -325,7 +409,7 @@ Everything discovered should strengthen the network graph.
 
 ---
 
-## Deployment Philosophy
+# Deployment Philosophy
 
 NetworkMapper should require no development tools on the technician's laptop.
 
@@ -335,7 +419,7 @@ The application should function completely offline and require minimal configura
 
 ---
 
-## Documentation First
+# Documentation First
 
 The primary purpose of NetworkMapper is to create accurate network documentation where none exists.
 
@@ -345,7 +429,7 @@ Documentation is.
 
 ---
 
-## Data Philosophy
+# Data Philosophy
 
 The Project is the source of truth.
 
@@ -361,6 +445,8 @@ Open, portable formats should be preferred whenever practical.
 
 The Project should be complete enough that a technician can resume work without rediscovering the network.
 
+---
+
 # Product Personas
 
 NetworkMapper serves multiple audiences.
@@ -368,31 +454,50 @@ NetworkMapper serves multiple audiences.
 ## Technician
 
 Needs:
+
 - Discovery
 - Troubleshooting
 - Documentation
 - Accurate inventory
 
+---
+
 ## Account Manager
 
 Needs:
+
 - Managed device counts
 - Inventory changes
 - Billing deltas
 
+---
+
 ## Customer
 
 Needs:
+
 - Documentation
 - Network diagrams
 - Asset inventory
 
 Each feature should identify its primary audience.
 
-## Classification Rules
+---
+
+# Classification Rules
 
 Every new classification rule must include:
 
 - A focused unit test for the rule.
 - An integration test through DeviceClassifier.
 - Registration in the ordered rule list.
+- Clear RuleResult evidence explaining why the rule matched or did not match.
+
+Classification rules should remain:
+
+- Deterministic.
+- Explainable.
+- Narrowly focused.
+- Ordered intentionally.
+
+When possible, classification should leverage multiple independent pieces of observed evidence while remaining fully explainable through RuleResult.
