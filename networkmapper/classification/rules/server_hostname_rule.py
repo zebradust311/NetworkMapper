@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from networkmapper.classification.classification_rule import ClassificationRule
+from networkmapper.classification.evidence_helpers import normalize_hostname
 from networkmapper.classification.rule_result import RuleResult
 from networkmapper.core.models import Device, DeviceType
 
@@ -17,7 +18,7 @@ class ServerHostnameRule(ClassificationRule):
     def classify(self, device: Device) -> RuleResult:
         """Return a rule result for server hostname matching evidence."""
         raw_hostname = device.hostname
-        hostname = (device.hostname or "").lower()
+        hostname = normalize_hostname(raw_hostname, strip=False)
         if "dc" in hostname or "cam" in hostname:
             return RuleResult(
                 matched=True,

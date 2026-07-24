@@ -180,6 +180,7 @@ Commit.
 
 Always validate using:
 
+- python -m devtools validate
 - unittest
 - pytest
 - compiler output
@@ -199,7 +200,7 @@ Do not inspect cached output.
 Normally approve:
 
 ```
-python -m unittest ...
+python -m devtools validate
 
 pytest ...
 
@@ -394,11 +395,11 @@ Solution:
 
 Skip.
 
-• Loses unittest stdout
+• Loses validation stdout
 
 Solution:
 
-Rerun tests.
+Rerun python -m devtools validate.
 
 Never recover cached output.
 

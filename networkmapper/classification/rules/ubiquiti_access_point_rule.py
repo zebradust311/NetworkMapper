@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from networkmapper.classification.classification_rule import ClassificationRule
+from networkmapper.classification.evidence_helpers import normalize_hostname, normalize_vendor
 from networkmapper.classification.rule_result import RuleResult
 from networkmapper.core.models import Device, DeviceType
 
@@ -20,8 +21,9 @@ class UbiquitiAccessPointRule(ClassificationRule):
         """Return a rule result for Ubiquiti wireless infrastructure evidence."""
         raw_vendor = device.vendor
         raw_hostname = device.hostname
-        vendor = (device.vendor or "").lower()
-        hostname = (device.hostname or "").strip()
+        vendor = normalize_vendor(raw_vendor, strip=False)
+        hostname = (raw_hostname or "").strip()
+        hostname_normalized = normalize_hostname(raw_hostname, strip=True)
 
         if vendor != "ubiquiti" or not hostname:
             return RuleResult(
@@ -34,7 +36,7 @@ class UbiquitiAccessPointRule(ClassificationRule):
                 suggested_device_type=None,
             )
 
-        hostname_prefix = hostname.lower().split("-", 1)[0]
+        hostname_prefix = hostname_normalized.split("-", 1)[0]
         if hostname_prefix in {"uap", "u6", "u7"}:
             return RuleResult(
                 matched=True,
@@ -46,7 +48,7 @@ class UbiquitiAccessPointRule(ClassificationRule):
                 suggested_device_type=DeviceType.ACCESS_POINT,
             )
 
-        if any(keyword in hostname.lower() for keyword in UBIQUITI_AP_HOSTNAME_KEYWORDS):
+        if any(keyword in hostname_normalized for keyword in UBIQUITI_AP_HOSTNAME_KEYWORDS):
             return RuleResult(
                 matched=True,
                 confidence_contribution=0,

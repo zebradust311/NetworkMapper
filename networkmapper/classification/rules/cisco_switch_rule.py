@@ -1,6 +1,13 @@
 from __future__ import annotations
 
 from networkmapper.classification.classification_rule import ClassificationRule
+from networkmapper.classification.evidence_helpers import (
+    first_matching_port,
+    first_matching_service,
+    format_hostname_evidence_reason,
+    normalize_hostname,
+    normalize_vendor,
+)
 from networkmapper.classification.rule_result import RuleResult
 from networkmapper.core.models import Device, DeviceType
 
@@ -23,7 +30,7 @@ class CiscoSwitchRule(ClassificationRule):
         """Return a rule result for Cisco switch vendor matching evidence."""
         raw_vendor = device.vendor
         raw_hostname = device.hostname
-        vendor = (device.vendor or "").lower()
+        vendor = normalize_vendor(raw_vendor, strip=False)
         if "cisco" in vendor:
             return RuleResult(
                 matched=True,
@@ -32,43 +39,29 @@ class CiscoSwitchRule(ClassificationRule):
                 suggested_device_type=DeviceType.SWITCH,
             )
 
-        hostname = (device.hostname or "").lower()
-        matched_port = next(
-            (port for port in device.open_ports if port in SWITCH_MANAGEMENT_PORTS),
-            None,
+        hostname = normalize_hostname(raw_hostname, strip=False)
+        matched_port = first_matching_port(
+            device.open_ports,
+            SWITCH_MANAGEMENT_PORTS,
         )
-        matched_service = next(
-            (
-                service.strip().lower()
-                for service in device.detected_services
-                if service.strip().lower() in SWITCH_MANAGEMENT_SERVICES
-            ),
-            None,
+        matched_service = first_matching_service(
+            device.detected_services,
+            SWITCH_MANAGEMENT_SERVICES,
+            return_lower=True,
         )
         hostname_looks_like_switch = any(hint in hostname for hint in SWITCH_HOSTNAME_HINTS)
         has_management_signal = matched_port is not None or matched_service is not None
 
         if hostname_looks_like_switch and has_management_signal:
-            if matched_port is not None and matched_service is not None:
-                reason = (
-                    f"Hostname {raw_hostname!r} with open port {matched_port} and "
-                    f"service {matched_service!r} matched known switch management evidence."
-                )
-            elif matched_port is not None:
-                reason = (
-                    f"Hostname {raw_hostname!r} with open port {matched_port} matched "
-                    "known switch management evidence."
-                )
-            else:
-                reason = (
-                    f"Hostname {raw_hostname!r} with service {matched_service!r} matched "
-                    "known switch management evidence."
-                )
-
             return RuleResult(
                 matched=True,
                 confidence_contribution=0,
-                reason=reason,
+                reason=format_hostname_evidence_reason(
+                    raw_hostname,
+                    matched_port,
+                    matched_service,
+                    "switch management",
+                ),
                 suggested_device_type=DeviceType.SWITCH,
             )
 

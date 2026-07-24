@@ -1,536 +1,318 @@
 # NetworkMapper Roadmap
 
-> **Current Version:** 2.x  
-> **Current Phase:** Explainable Classification  
-> **Development Model:** Incremental, deterministic, regression-driven
+> Last Updated: July 2026
 
 ---
 
-# ============================================================================
-# PROJECT PHILOSOPHY
-# ============================================================================
+# Vision
 
-NetworkMapper is designed around a few core principles:
+NetworkMapper is a professional network relationship mapping platform.
 
-- Deterministic discovery
+The goal is to enable technicians to:
+
+- Discover unfamiliar networks
+- Understand device relationships
+- Produce professional documentation
+- Compare environments over time
+- Generate reusable project files
+
+NetworkMapper is not simply a network scanner.
+
+The Project and NetworkGraph are the product.
+
+Everything else is derived from them.
+
+---
+
+# Project Status
+
+## Completed
+
+- Foundation architecture
+- Project model
+- Discovery framework
+- Persistence
 - Explainable classification
-- Incremental architecture
-- Comprehensive regression testing
-- Provider-agnostic discovery
-- Human-readable diagnostics
-
-New infrastructure should exist only when it enables future user-visible
-features.
+- Benchmark framework
+- Benchmark analytics
+- Engineering documentation
 
 ---
 
-# ============================================================================
-# COMPLETED MILESTONES
-# ============================================================================
+# Phase 1 — Foundation ✅
+
+## Core Architecture
+
+- ✅ Application framework
+- ✅ Project model
+- ✅ NetworkGraph
+- ✅ Device model
+- ✅ Interface model
+- ✅ Link model
+- ✅ Metadata model
+
+## Persistence
+
+- ✅ Project serialization
+- ✅ Project loading
+- ✅ JSON persistence
 
 ## Discovery
-- ✅ DISC-001: Scan Profiles
-- ✅ DISC-002: Two-Phase STANDARD Discovery
 
-## Classification Framework
-- ✅ CLASS-001: RuleResult Framework
-- ✅ CLASS-002: Printer Rule Migration
-- ✅ CLASS-003: Evidence API
-- ✅ CLASS-004: SonicWall Rule Migration
-- ✅ CLASS-005: Vendor Rule Migration
-- ✅ CLASS-006: Hostname Rule Migration
-- ✅ CLASS-007: Remove RuleResult Compatibility Adapter
-
-## Evidence
-- ✅ EVID-001: Classification Workbench Rule Evidence
+- ✅ Discovery engine
+- ✅ Discovery provider framework
+- ✅ Provider abstraction
 
 ---
 
-# ============================================================================
-# CURRENT DEVELOPMENT
-# ============================================================================
+# Phase 2 — Classification ✅
 
-## INTEL-001: Improve RuleResult Evidence Messages
-**Status:** 🚧 In Progress
+## Rule Framework
 
-### Objective
+- ✅ CLASS-001 Rule framework
+- ✅ CLASS-002 Rule ordering
+- ✅ CLASS-003 Rule registration
+- ✅ CLASS-004 Rule contracts
+- ✅ CLASS-005 Rule testing
+- ✅ CLASS-006 Rule cleanup
+- ✅ CLASS-007 RuleResult migration
 
-Improve the diagnostic quality of RuleResult.reason across all
-classification rules.
+## Explainable Classification
 
-### Goals
-
-- Include actual values evaluated.
-- Produce human-readable explanations.
-- Improve workbench usefulness.
-- Preserve all existing classification behavior.
-
-### Examples
-
-Instead of:
-
-```
-Vendor did not match.
-```
-
-Prefer:
-
-```
-Vendor 'Ubiquiti' is not a known Cisco switch vendor.
-```
-
-Instead of:
-
-```
-Hostname did not match.
-```
-
-Prefer:
-
-```
-Hostname 'planning.wrf.scterm.com' did not match
-known server naming patterns.
-```
-
-### Constraints
-
-- No behavioral changes.
-- No classifier changes.
-- No discovery changes.
-- No serialization changes.
-- Update only rule implementations and dedicated rule tests.
+- ✅ EVID-001 Evidence API
+- ✅ RuleResult
+- ✅ Per-rule evidence
+- ✅ Classification workbench
 
 ---
 
-# ============================================================================
-# PHASE 1 - DISCOVERY
-# ============================================================================
+# Phase 3 — Intelligence (Phase 1) ✅
 
-## DISC-001: Scan Profiles
-**Status:** ✅ Complete
+## Heuristic Improvements
 
-### Completed
+- ✅ INTEL-001 RuleResult migration
+- ✅ INTEL-002 Expanded heuristics
+- ✅ INTEL-003 Multi-evidence classification
 
-- ScanProfile enum
-- FAST profile
-- STANDARD profile
-- CLI integration
-- Regression coverage
+Current classifier characteristics:
 
----
-
-## DISC-002: Two-Phase STANDARD Discovery
-**Status:** ✅ Complete
-
-### Completed
-
-- Host-authoritative discovery
-- Curated enrichment scan
-- IP-based evidence merge
-- Host retention when enrichment returns no data
-- Provider regression coverage
-
----
-
-# ============================================================================
-# PHASE 2 - CLASSIFICATION FRAMEWORK
-# ============================================================================
-
-## CLASS-001: RuleResult Framework
-**Status:** ✅ Complete
-
-### Completed
-
-- RuleResult dataclass
-- Structured rule output
-- Framework regression tests
-
----
-
-## CLASS-002: Printer Rule Migration
-**Status:** ✅ Complete
-
-### Completed
-
-- PrinterVendorRule migrated
-- Dedicated rule tests
-
----
-
-## CLASS-003: Evidence API
-**Status:** ✅ Complete
-
-### Completed
-
-- DeviceClassifier.get_last_rule_results()
-- Immutable public API
-- Evidence regression tests
-
----
-
-## CLASS-004: SonicWall Rule Migration
-**Status:** ✅ Complete
-
-### Completed
-
-- SonicWallFirewallRule migrated
-- Dedicated regression tests
-
----
-
-## CLASS-005: Vendor Rule Migration
-**Status:** ✅ Complete
-
-### Completed
-
-- CiscoSwitchRule
-- UbiquitiAccessPointRule
-- VoiceVendorRule
-- Dedicated regression tests
-
----
-
-## CLASS-006: Hostname Rule Migration
-**Status:** ✅ Complete
-
-### Completed
-
-- ServerHostnameRule
-- HypervisorHostnameRule
-- DellWorkstationRule
-- Dedicated regression tests
-
----
-
-## CLASS-007: Remove Compatibility Adapter
-**Status:** ✅ Complete
-
-### Completed
-
-- Removed RuleResult compatibility layer
-- Simplified DeviceClassifier
-- Unified rule contract
-- Full classifier regression suite
-
----
-
-# ============================================================================
-# PHASE 3 - EVIDENCE
-# ============================================================================
-
-## EVID-001: Classification Workbench Evidence
-**Status:** ✅ Complete
-
-### Completed
-
-- Rule Evidence section
-- Rule name
-- Match status
-- Suggested device type
-- Reason rendering
-- Developer-focused diagnostics
-- Workbench regression tests
-
----
-
-# ============================================================================
-# PHASE 4 - EXPLAINABLE CLASSIFICATION
-# ============================================================================
-
-## INTEL-001: Improve RuleResult Evidence Messages
-**Status:** 🚧 In Progress
-
-Improve every RuleResult reason so that it explains the actual evidence
-examined by the rule.
-
----
-
-## INTEL-002: RuleResult Metadata
-**Status:** Planned
-
-### Objective
-
-Include metadata describing which rule produced each RuleResult.
-
-### Goals
-
-- Add rule_name (or source_rule)
-- Remove workbench dependency on classifier internals
-- Improve portability of RuleResult consumers
-
-### Constraints
-
-- No behavioral changes
-- Preserve public API where practical
-
----
-
-## INTEL-003: Improve Classification Rules
-**Status:** Planned
-
-### Objective
-
-Use evidence gathered from the workbench to improve weak heuristics.
-
-### Initial Targets
-
-- Ubiquiti devices
-- Microsoft infrastructure hosts
-- Dell workstation/server differentiation
-- Additional vendor heuristics
-- Improved hostname patterns
-
-### Constraints
-
-- Small focused improvements
+- Deterministic
+- Explainable
+- First-match-wins
+- Evidence driven
 - Fully regression tested
-- No architectural changes
 
 ---
 
-## INTEL-004: Confidence Scoring
-**Status:** Planned
+# Phase 4 — Developer Tooling
 
-### Objective
+## Benchmark System ✅
 
-Assign meaningful confidence values to RuleResults.
+- ✅ ACC-001 Benchmark framework
+- ✅ ACC-002 Benchmark reports
+- ✅ ACC-003 Accuracy analytics
+- ✅ ACC-004 Misclassification analytics
+- ✅ ACC-005 Confusion matrix
 
-### Example
+Current benchmark capabilities:
 
-Hostname match
+- Overall accuracy
+- Device type accuracy
+- Misclassification reporting
+- Confusion matrix
+- Markdown reports
+- JSON reports
+- Console reports
 
-+40
+## Developer Utilities
 
-Vendor match
+- ✅ DEV-001 Benchmark CLI
 
-+20
+### Planned
 
-Known service
-
-+15
-
-Known port
-
-+10
-
-### Constraints
-
-- First-match-wins remains unchanged.
-- Confidence is informational only.
-
----
-
-## INTEL-005: Evidence Aggregation
-**Status:** Planned
-
-### Objective
-
-Evaluate every rule instead of stopping after the first successful match.
-
-### Goals
-
-- Collect every RuleResult
-- Preserve all supporting evidence
-- Enable richer diagnostics
-
-### Notes
-
-Decision logic remains unchanged.
+- ⬜ DEV-002 Shared evidence helper library
+- ⬜ DEV-003 Benchmark comparison utility
+- ⬜ DEV-004 Benchmark trend reports
+- ⬜ DEV-005 Benchmark dataset validator
 
 ---
 
-## INTEL-006: Confidence-Based Decision Engine
-**Status:** Planned
+# Phase 5 — Intelligence (Phase 2)
 
-### Objective
+Focus shifts from building heuristics to improving them using benchmark data.
 
-Replace first-match-wins with confidence-based classification.
+## Planned
 
-### Goals
-
-- Aggregate evidence
-- Score candidate device types
-- Select highest-confidence result
-- Resolve conflicting evidence deterministically
-
----
-
-## INTEL-007: Enhanced Classification Workbench
-**Status:** Planned
-
-### Planned Features
-
-- Confidence display
-- Closest candidate classifications
-- Rule evaluation statistics
-- Evidence summaries
-- Improved formatting
-- Optional verbose mode
+- ⬜ INTEL-004 Targeted heuristic improvements
+- ⬜ INTEL-005 Shared hostname matching
+- ⬜ INTEL-006 Shared vendor matching
+- ⬜ INTEL-007 Shared service matching
+- ⬜ INTEL-008 Shared port matching
+- ⬜ INTEL-009 Confidence diagnostics (reporting only)
 
 ---
 
-# ============================================================================
-# PHASE 5 - DISCOVERY INTELLIGENCE
-# ============================================================================
+# Phase 6 — Discovery Expansion
 
-## DISC-003: Additional Discovery Providers
-**Status:** Planned
+## Planned
 
-### Candidate Providers
+### Discovery Providers
 
-- SNMP
-- WMI
-- SSH
-- WinRM
-- LLDP
-- CDP
-- mDNS
-- NetBIOS
-- ARP cache import
+- ⬜ SNMP enrichment
+- ⬜ LLDP discovery
+- ⬜ CDP discovery
+- ⬜ ARP enrichment
+- ⬜ mDNS discovery
+- ⬜ DNS enrichment
+- ⬜ NetBIOS enrichment
 
----
+### Device Enrichment
 
-## DISC-004: Provider Fusion
-**Status:** Planned
-
-### Objectives
-
-- Merge evidence across providers
-- Attribute evidence to discovery sources
-- Confidence-weight provider results
-- Produce unified device profiles
+- ⬜ Operating system fingerprinting
+- ⬜ MAC vendor enrichment
+- ⬜ Service fingerprinting
+- ⬜ Interface enrichment
 
 ---
 
-## DISC-005: Discovery Confidence
-**Status:** Future
+# Phase 7 — Visualization
 
-### Objective
+## Planned
 
-Measure confidence in discovered device attributes based on multiple
-independent discovery providers.
-
----
-
-# ============================================================================
-# EXPORTS
-# ============================================================================
-
-## EXPORT-001: Rich Evidence Export
-**Status:** Planned
-
-### Objectives
-
-Export:
-
-- RuleResult evidence
-- Confidence
-- Classification reasoning
-
-Supported formats:
-
-- CSV
-- Markdown
-- JSON
+- ⬜ Interactive topology viewer
+- ⬜ Automatic layout
+- ⬜ Draw.io export improvements
+- ⬜ Visio export
+- ⬜ SVG export
+- ⬜ PDF topology export
 
 ---
 
-## EXPORT-002: Diagnostic Reports
-**Status:** Future
+# Phase 8 — Documentation
 
-### Objectives
+## Planned
 
-Generate developer-oriented reports containing:
-
-- Unknown-device summaries
-- Rule evaluation statistics
-- Confidence distributions
-- Evidence reports
-
----
-
-# ============================================================================
-# ANALYTICS
-# ============================================================================
-
-## ANALYTICS-001: Classification Metrics
-**Status:** Future
-
-Potential metrics:
-
-- Rule hit rates
-- Unknown-device trends
-- Vendor distribution
-- Classification confidence distribution
-- Discovery-source effectiveness
+- ⬜ Asset inventory reports
+- ⬜ Executive reports
+- ⬜ Site documentation package
+- ⬜ VLAN documentation
+- ⬜ Interface documentation
+- ⬜ Device summaries
 
 ---
 
-# ============================================================================
-# LONG-TERM IDEAS
-# ============================================================================
+# Phase 9 — Project Intelligence
 
-## Rule Configuration
+## Planned
 
-Investigate making classification rules data-driven through external
-configuration files.
-
----
-
-## Plugin Architecture
-
-Investigate optional plugin-based discovery and classification providers.
+- ⬜ Historical comparison
+- ⬜ Project diff
+- ⬜ Change tracking
+- ⬜ Device lifecycle
+- ⬜ Configuration drift detection
 
 ---
 
-## Classification Analytics Dashboard
+# Phase 10 — Enterprise Features
 
-Potential future features:
+## Planned
 
-- Rule performance
-- Classification trends
-- Unknown-device heatmaps
-- Discovery confidence visualization
-
----
-
-# ============================================================================
-# OUT OF SCOPE
-# ============================================================================
-
-The following are **not** current project goals:
-
-- Machine-learning classification
-- Cloud-hosted processing
-- Closed-source components
-- Vendor lock-in
-- Non-deterministic classification
-- AI-generated device classifications
-
-NetworkMapper prioritizes deterministic, explainable decisions over
-black-box inference.
+- ⬜ Multi-site projects
+- ⬜ Customer management
+- ⬜ Site grouping
+- ⬜ Enterprise reporting
+- ⬜ Role-based workflows
 
 ---
 
-# ============================================================================
-# PROJECT STATUS
-# ============================================================================
+# Phase 11 — Production
 
-## Architecture Status
+## Planned
 
-✅ Discovery Framework Complete
+### Packaging
 
-✅ Classification Framework Complete
+- ⬜ Standalone Windows executable
+- ⬜ Installer
+- ⬜ Automatic updates
 
-✅ Evidence Framework Complete
+### Performance
 
-## Current Focus
+- ⬜ Discovery optimization
+- ⬜ Large network optimization
+- ⬜ Memory optimization
 
-Improve classification quality through better evidence, stronger rules,
-and richer diagnostics.
+### Quality
 
-## Long-Term Vision
+- ⬜ Full regression suite
+- ⬜ Continuous benchmarking
+- ⬜ Release validation
 
-NetworkMapper should evolve into an explainable network discovery and
-classification engine where every device classification is transparent,
-reproducible, and supported by deterministic evidence.
+---
+
+# Engineering Goals
+
+Every sprint should improve one of:
+
+- Capability
+- Maintainability
+- Performance
+- Accuracy
+- Documentation
+
+---
+
+# Development Workflow
+
+Every sprint follows:
+
+1. Planning
+2. Implementation
+3. Focused tests
+4. Focused regression
+5. Human review
+6. Commit
+7. Push
+
+---
+
+# Current Priority
+
+## Next Sprint
+
+**DEV-002 — Shared Evidence Helper Library**
+
+Goals:
+
+- Eliminate duplicated rule helper logic
+- Preserve all classifier behavior
+- Preserve RuleResult evidence
+- Reduce maintenance cost
+- Improve consistency
+
+---
+
+# Long-Term Vision
+
+NetworkMapper should become the easiest professional tool for:
+
+- Discovering networks
+- Understanding infrastructure
+- Producing documentation
+- Tracking change
+- Managing customer environments
+
+using a single reusable Project model.
+
+---
+
+# Definition of Success
+
+NetworkMapper should allow a technician to:
+
+1. Walk into an undocumented network.
+2. Discover the environment.
+3. Understand relationships.
+4. Produce professional documentation.
+5. Return months later and compare changes.
+
+Everything in the project should support that workflow.

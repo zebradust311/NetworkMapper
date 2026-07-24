@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from networkmapper.classification.classification_rule import ClassificationRule
+from networkmapper.classification.evidence_helpers import normalize_hostname, normalize_vendor
 from networkmapper.classification.rule_result import RuleResult
 from networkmapper.core.models import Device, DeviceType
 
@@ -22,8 +23,8 @@ class DellWorkstationRule(ClassificationRule):
         """Return a rule result for workstation vendor matching evidence."""
         raw_vendor = device.vendor
         raw_hostname = device.hostname
-        vendor = (device.vendor or "").lower()
-        hostname = (device.hostname or "").lower()
+        vendor = normalize_vendor(raw_vendor, strip=False)
+        hostname = normalize_hostname(raw_hostname, strip=False)
         if "dell" in vendor:
             return RuleResult(
                 matched=True,

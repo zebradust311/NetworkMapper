@@ -1,6 +1,11 @@
 from __future__ import annotations
 
 from networkmapper.classification.classification_rule import ClassificationRule
+from networkmapper.classification.evidence_helpers import (
+    first_matching_port,
+    first_matching_service,
+    normalize_vendor,
+)
 from networkmapper.classification.rule_result import RuleResult
 from networkmapper.core.models import Device, DeviceType
 
@@ -42,7 +47,7 @@ class PrinterVendorRule(ClassificationRule):
     def classify(self, device: Device) -> RuleResult:
         """Return a rule result for printer vendor matching evidence."""
         raw_vendor = device.vendor
-        vendor = (device.vendor or "").strip().lower()
+        vendor = normalize_vendor(raw_vendor, strip=True)
         if not vendor:
             matched_port, matched_service = self._find_printer_networking(device)
             if matched_port is not None or matched_service is not None:
@@ -91,18 +96,15 @@ class PrinterVendorRule(ClassificationRule):
         )
 
     def _find_printer_networking(self, device: Device) -> tuple[int | None, str | None]:
-        matched_port = next(
-            (port for port in device.open_ports if port in PRINTER_PROTOCOL_PORTS),
-            None,
+        matched_port = first_matching_port(
+            device.open_ports,
+            PRINTER_PROTOCOL_PORTS,
         )
 
-        matched_service = next(
-            (
-                service.strip()
-                for service in device.detected_services
-                if service.strip().lower() in PRINTER_SERVICE_KEYWORDS
-            ),
-            None,
+        matched_service = first_matching_service(
+            device.detected_services,
+            PRINTER_SERVICE_KEYWORDS,
+            return_lower=False,
         )
 
         return matched_port, matched_service

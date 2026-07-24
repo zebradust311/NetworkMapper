@@ -1,6 +1,13 @@
 from __future__ import annotations
 
 from networkmapper.classification.classification_rule import ClassificationRule
+from networkmapper.classification.evidence_helpers import (
+    first_matching_port,
+    first_matching_service,
+    format_hostname_evidence_reason,
+    normalize_hostname,
+    normalize_vendor,
+)
 from networkmapper.classification.rule_result import RuleResult
 from networkmapper.core.models import Device, DeviceType
 
@@ -35,8 +42,8 @@ class VoiceVendorRule(ClassificationRule):
         """Return a rule result for voice vendor matching evidence."""
         raw_vendor = device.vendor
         raw_hostname = device.hostname
-        vendor = (device.vendor or "").strip().lower()
-        hostname = (device.hostname or "").strip().lower()
+        vendor = normalize_vendor(raw_vendor, strip=True)
+        hostname = normalize_hostname(raw_hostname, strip=True)
         if not vendor:
             return self._match_by_hostname_and_signals(raw_hostname, hostname, device)
 
@@ -64,17 +71,14 @@ class VoiceVendorRule(ClassificationRule):
                 suggested_device_type=None,
             )
 
-        matched_port = next(
-            (port for port in device.open_ports if port in VOICE_SIGNAL_PORTS),
-            None,
+        matched_port = first_matching_port(
+            device.open_ports,
+            VOICE_SIGNAL_PORTS,
         )
-        matched_service = next(
-            (
-                service.strip()
-                for service in device.detected_services
-                if service.strip().lower() in VOICE_SIGNAL_SERVICES
-            ),
-            None,
+        matched_service = first_matching_service(
+            device.detected_services,
+            VOICE_SIGNAL_SERVICES,
+            return_lower=False,
         )
 
         if matched_port is None and matched_service is None:
@@ -85,25 +89,14 @@ class VoiceVendorRule(ClassificationRule):
                 suggested_device_type=None,
             )
 
-        if matched_port is not None and matched_service is not None:
-            reason = (
-                f"Hostname {raw_hostname!r} with open port {matched_port} and service "
-                f"{matched_service!r} matched known voice device evidence."
-            )
-        elif matched_port is not None:
-            reason = (
-                f"Hostname {raw_hostname!r} with open port {matched_port} matched known "
-                "voice device evidence."
-            )
-        else:
-            reason = (
-                f"Hostname {raw_hostname!r} with service {matched_service!r} matched known "
-                "voice device evidence."
-            )
-
         return RuleResult(
             matched=True,
             confidence_contribution=0,
-            reason=reason,
+            reason=format_hostname_evidence_reason(
+                raw_hostname,
+                matched_port,
+                matched_service,
+                "voice device",
+            ),
             suggested_device_type=DeviceType.PHONE,
         )
