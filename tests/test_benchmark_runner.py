@@ -104,6 +104,7 @@ class BenchmarkRunnerTest(unittest.TestCase):
             self.assertEqual(report.device_type_summary["UNKNOWN"]["correct"], 1)
             self.assertEqual(report.device_type_summary["UNKNOWN"]["incorrect"], 0)
             self.assertEqual(report.device_type_summary["UNKNOWN"]["accuracy"], 100.0)
+            self.assertEqual(report.misclassification_summary, {})
             self.assertEqual(report.mismatches, ())
 
     def test_expected_vs_actual_comparison_captures_mismatches(self):
@@ -148,6 +149,7 @@ class BenchmarkRunnerTest(unittest.TestCase):
             self.assertEqual(report.accuracy_percentage, 50.0)
             self.assertEqual(report.device_type_summary["SWITCH"]["accuracy"], 100.0)
             self.assertEqual(report.device_type_summary["FIREWALL"]["accuracy"], 0.0)
+            self.assertEqual(report.misclassification_summary, {"FIREWALL": {"UNKNOWN": 1}})
             self.assertEqual(len(report.mismatches), 1)
             self.assertEqual(report.mismatches[0].ip_address, "192.168.70.20")
             self.assertEqual(report.mismatches[0].hostname, "unknown-01")
@@ -181,6 +183,7 @@ class BenchmarkRunnerTest(unittest.TestCase):
             self.assertEqual(report.correct_classifications, 0)
             self.assertEqual(report.incorrect_classifications, 1)
             self.assertEqual(report.device_type_summary, {})
+            self.assertEqual(report.misclassification_summary, {"MISSING": {"UNKNOWN": 1}})
             self.assertEqual(len(report.mismatches), 1)
             self.assertEqual(report.mismatches[0].hostname, "host-01")
             self.assertEqual(report.mismatches[0].expected_device_type, "MISSING")
@@ -250,6 +253,8 @@ class BenchmarkRunnerTest(unittest.TestCase):
             self.assertIn("Accuracy: 100.00%", console_output)
             self.assertIn("Device Type Summary", console_output)
             self.assertIn("UNKNOWN       100.0%", console_output)
+            self.assertIn("Misclassification Summary", console_output)
+            self.assertIn("- None", console_output)
             self.assertIn("Mismatch summary:", console_output)
             self.assertIn("Total mismatches: 0", console_output)
             self.assertIn("Mismatch list:", console_output)
@@ -308,6 +313,7 @@ class BenchmarkRunnerTest(unittest.TestCase):
             self.assertEqual(report_payload["device_type_summary"]["SERVER"]["correct"], 0)
             self.assertEqual(report_payload["device_type_summary"]["SERVER"]["incorrect"], 1)
             self.assertEqual(report_payload["device_type_summary"]["SERVER"]["accuracy"], 0.0)
+            self.assertEqual(report_payload["misclassification_summary"], {"SERVER": {"UNKNOWN": 1}})
             self.assertEqual(report_payload["mismatch_summary"]["total_mismatches"], 1)
             self.assertEqual(len(report_payload["mismatches"]), 1)
             self.assertEqual(report_payload["mismatches"][0]["ip_address"], "10.20.0.10")
@@ -371,6 +377,9 @@ class BenchmarkRunnerTest(unittest.TestCase):
             self.assertIn("## Device Type Summary", markdown_content)
             self.assertIn("| Device Type | Total | Correct | Incorrect | Accuracy |", markdown_content)
             self.assertIn("| SERVER | 1 | 0 | 1 | 0.0% |", markdown_content)
+            self.assertIn("## Misclassification Summary", markdown_content)
+            self.assertIn("| Expected | Actual | Count |", markdown_content)
+            self.assertIn("| SERVER | UNKNOWN | 1 |", markdown_content)
             self.assertIn("## Mismatch summary", markdown_content)
             self.assertIn("- Total mismatches: 1", markdown_content)
             self.assertIn("| IP address | Hostname | Expected DeviceType | Actual DeviceType |", markdown_content)
@@ -387,6 +396,7 @@ class BenchmarkRunnerTest(unittest.TestCase):
                 incorrect_classifications=0,
                 accuracy_percentage=100.0,
                 device_type_summary={"SERVER": {"total": 2, "correct": 2, "incorrect": 0, "accuracy": 100.0}},
+                misclassification_summary={},
                 mismatches=(),
             )
 
@@ -401,6 +411,8 @@ class BenchmarkRunnerTest(unittest.TestCase):
             self.assertIn("Generated at: 2026-07-24T10:00:00Z", markdown_content)
             self.assertIn("## Device Type Summary", markdown_content)
             self.assertIn("| SERVER | 2 | 2 | 0 | 100.0% |", markdown_content)
+            self.assertIn("## Misclassification Summary", markdown_content)
+            self.assertIn("No misclassifications.", markdown_content)
             self.assertIn("## Mismatch summary", markdown_content)
             self.assertIn("- Total mismatches: 0", markdown_content)
             self.assertIn("| None | N/A | N/A | N/A |", markdown_content)
@@ -417,6 +429,10 @@ class BenchmarkRunnerTest(unittest.TestCase):
                 device_type_summary={
                     "SERVER": {"total": 1, "correct": 0, "incorrect": 1, "accuracy": 0.0},
                     "SWITCH": {"total": 2, "correct": 1, "incorrect": 1, "accuracy": 50.0},
+                },
+                misclassification_summary={
+                    "SERVER": {"UNKNOWN": 1},
+                    "SWITCH": {"UNKNOWN": 1},
                 },
                 mismatches=(
                     BenchmarkMismatch(
@@ -447,6 +463,8 @@ class BenchmarkRunnerTest(unittest.TestCase):
             self.assertEqual(report_payload["generated_at"], "2026-07-24T11:00:00Z")
             self.assertEqual(report_payload["device_type_summary"]["SERVER"]["accuracy"], 0.0)
             self.assertEqual(report_payload["device_type_summary"]["SWITCH"]["accuracy"], 50.0)
+            self.assertEqual(report_payload["misclassification_summary"]["SERVER"]["UNKNOWN"], 1)
+            self.assertEqual(report_payload["misclassification_summary"]["SWITCH"]["UNKNOWN"], 1)
             self.assertEqual(report_payload["mismatch_summary"]["total_mismatches"], 2)
             self.assertEqual(len(report_payload["mismatches"]), 2)
             self.assertEqual(report_payload["mismatches"][0]["ip_address"], "192.168.1.10")
@@ -533,6 +551,7 @@ class BenchmarkRunnerTest(unittest.TestCase):
             self.assertEqual(report.device_type_summary, {
                 "UNKNOWN": {"total": 2, "correct": 2, "incorrect": 0, "accuracy": 100.0}
             })
+            self.assertEqual(report.misclassification_summary, {})
 
     def test_device_type_summary_multiple_device_types(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -646,6 +665,187 @@ class BenchmarkRunnerTest(unittest.TestCase):
             self.assertEqual(report.device_type_summary["SWITCH"]["incorrect"], 1)
             self.assertEqual(report.device_type_summary["SWITCH"]["accuracy"], 50.0)
             self.assertEqual(report.device_type_summary["PHONE"]["accuracy"], 0.0)
+            self.assertEqual(
+                report.misclassification_summary,
+                {
+                    "PHONE": {"UNKNOWN": 1},
+                    "SWITCH": {"UNKNOWN": 1},
+                },
+            )
+
+    def test_misclassification_summary_no_mismatches(self):
+        report = BenchmarkReport(
+            dataset_name="no_mismatch",
+            total_devices=1,
+            correct_classifications=1,
+            incorrect_classifications=0,
+            accuracy_percentage=100.0,
+            device_type_summary={"UNKNOWN": {"total": 1, "correct": 1, "incorrect": 0, "accuracy": 100.0}},
+            misclassification_summary={},
+            mismatches=(),
+        )
+
+        markdown = write_markdown_report(
+            report=report,
+            output_directory=Path(tempfile.gettempdir()) / "nm_acc004",
+            generated_at="2026-07-24T12:00:00Z",
+        ).read_text(encoding="utf-8")
+        self.assertIn("No misclassifications.", markdown)
+
+    def test_misclassification_summary_one_mismatch(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            inventory_path = temp_path / "inventory.json"
+            expected_path = temp_path / "expected_results.json"
+
+            self._write_json(
+                inventory_path,
+                {"devices": [{"ip_address": "10.5.0.1", "hostname": "host-1", "vendor": "Unknown"}]},
+            )
+            self._write_json(
+                expected_path,
+                {"expected_results": [{"ip_address": "10.5.0.1", "device_type": "SERVER"}]},
+            )
+
+            report = self.runner.run_benchmark(inventory_path, expected_path)
+            self.assertEqual(report.misclassification_summary, {"SERVER": {"UNKNOWN": 1}})
+
+    def test_misclassification_summary_multiple_categories(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            inventory_path = temp_path / "inventory.json"
+            expected_path = temp_path / "expected_results.json"
+
+            self._write_json(
+                inventory_path,
+                {
+                    "devices": [
+                        {"ip_address": "10.6.0.1", "hostname": "host-1", "vendor": "Unknown"},
+                        {"ip_address": "10.6.0.2", "hostname": "host-2", "vendor": "Unknown"},
+                    ]
+                },
+            )
+            self._write_json(
+                expected_path,
+                {
+                    "expected_results": [
+                        {"ip_address": "10.6.0.1", "device_type": "SERVER"},
+                        {"ip_address": "10.6.0.2", "device_type": "PHONE"},
+                    ]
+                },
+            )
+
+            report = self.runner.run_benchmark(inventory_path, expected_path)
+            self.assertEqual(
+                report.misclassification_summary,
+                {
+                    "PHONE": {"UNKNOWN": 1},
+                    "SERVER": {"UNKNOWN": 1},
+                },
+            )
+
+    def test_misclassification_summary_repeated_aggregation(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            inventory_path = temp_path / "inventory.json"
+            expected_path = temp_path / "expected_results.json"
+
+            self._write_json(
+                inventory_path,
+                {
+                    "devices": [
+                        {"ip_address": "10.7.0.1", "hostname": "host-1", "vendor": "Unknown"},
+                        {"ip_address": "10.7.0.2", "hostname": "host-2", "vendor": "Unknown"},
+                    ]
+                },
+            )
+            self._write_json(
+                expected_path,
+                {
+                    "expected_results": [
+                        {"ip_address": "10.7.0.1", "device_type": "PHONE"},
+                        {"ip_address": "10.7.0.2", "device_type": "PHONE"},
+                    ]
+                },
+            )
+
+            report = self.runner.run_benchmark(inventory_path, expected_path)
+            self.assertEqual(report.misclassification_summary, {"PHONE": {"UNKNOWN": 2}})
+
+    def test_misclassification_summary_json_serialization(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir)
+            report = BenchmarkReport(
+                dataset_name="json_misclass",
+                total_devices=2,
+                correct_classifications=0,
+                incorrect_classifications=2,
+                accuracy_percentage=0.0,
+                device_type_summary={"PHONE": {"total": 2, "correct": 0, "incorrect": 2, "accuracy": 0.0}},
+                misclassification_summary={"PHONE": {"UNKNOWN": 2}},
+                mismatches=(
+                    BenchmarkMismatch("10.8.0.1", "host-a", "PHONE", "UNKNOWN"),
+                    BenchmarkMismatch("10.8.0.2", "host-b", "PHONE", "UNKNOWN"),
+                ),
+            )
+            report_path = write_json_report(report, output_dir, "2026-07-24T12:10:00Z")
+            payload = json.loads(report_path.read_text(encoding="utf-8"))
+            self.assertEqual(payload["misclassification_summary"], {"PHONE": {"UNKNOWN": 2}})
+
+    def test_misclassification_summary_markdown_rendering(self):
+        report = BenchmarkReport(
+            dataset_name="md_misclass",
+            total_devices=1,
+            correct_classifications=0,
+            incorrect_classifications=1,
+            accuracy_percentage=0.0,
+            device_type_summary={"SERVER": {"total": 1, "correct": 0, "incorrect": 1, "accuracy": 0.0}},
+            misclassification_summary={"SERVER": {"UNKNOWN": 1}},
+            mismatches=(BenchmarkMismatch("10.9.0.1", None, "SERVER", "UNKNOWN"),),
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir)
+            path = write_markdown_report(report, output_dir, "2026-07-24T12:20:00Z")
+            content = path.read_text(encoding="utf-8")
+            self.assertIn("## Misclassification Summary", content)
+            self.assertIn("| Expected | Actual | Count |", content)
+            self.assertIn("| SERVER | UNKNOWN | 1 |", content)
+
+    def test_misclassification_summary_console_rendering(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            benchmark_dir = Path(temp_dir) / "dataset_console_misclass"
+            benchmark_dir.mkdir(parents=True, exist_ok=True)
+
+            self._write_json(
+                benchmark_dir / "inventory.json",
+                {
+                    "devices": [
+                        {"ip_address": "10.10.10.1", "hostname": "host-1", "vendor": "Unknown"},
+                        {"ip_address": "10.10.10.2", "hostname": "host-2", "vendor": "Unknown"},
+                    ]
+                },
+            )
+            self._write_json(
+                benchmark_dir / "expected_results.json",
+                {
+                    "expected_results": [
+                        {"ip_address": "10.10.10.1", "device_type": "SERVER"},
+                        {"ip_address": "10.10.10.2", "device_type": "PHONE"},
+                    ]
+                },
+            )
+
+            stdout_capture = io.StringIO()
+            stderr_capture = io.StringIO()
+            with redirect_stdout(stdout_capture), redirect_stderr(stderr_capture):
+                exit_code = main([str(benchmark_dir), "--console"])
+
+            self.assertEqual(exit_code, 0)
+            self.assertEqual(stderr_capture.getvalue(), "")
+            output = stdout_capture.getvalue()
+            self.assertIn("Misclassification Summary", output)
+            self.assertIn("PHONE -> UNKNOWN : 1", output)
+            self.assertIn("SERVER -> UNKNOWN : 1", output)
 
 
 if __name__ == "__main__":

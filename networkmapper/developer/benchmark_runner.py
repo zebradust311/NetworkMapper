@@ -32,6 +32,7 @@ class BenchmarkReport:
     incorrect_classifications: int
     accuracy_percentage: float
     device_type_summary: dict[str, dict[str, float | int]]
+    misclassification_summary: dict[str, dict[str, int]]
     mismatches: tuple[BenchmarkMismatch, ...]
 
 
@@ -103,6 +104,7 @@ class BenchmarkRunner:
         total_devices = len(devices)
         correct_classifications = 0
         device_type_summary_counts: dict[str, dict[str, int]] = {}
+        misclassification_summary: dict[str, dict[str, int]] = {}
         mismatches: list[BenchmarkMismatch] = []
 
         for device in devices:
@@ -125,12 +127,17 @@ class BenchmarkRunner:
             if expected_type is not None:
                 device_type_summary_counts[expected_type.name]["incorrect"] += 1
 
+            expected_name = expected_type.name if expected_type else "MISSING"
+            actual_name = predicted_type.name
+            expected_bucket = misclassification_summary.setdefault(expected_name, {})
+            expected_bucket[actual_name] = expected_bucket.get(actual_name, 0) + 1
+
             mismatches.append(
                 BenchmarkMismatch(
                     ip_address=device.ip_address,
                     hostname=device.hostname,
-                    expected_device_type=expected_type.name if expected_type else "MISSING",
-                    actual_device_type=predicted_type.name,
+                    expected_device_type=expected_name,
+                    actual_device_type=actual_name,
                 )
             )
 
@@ -157,6 +164,10 @@ class BenchmarkRunner:
             incorrect_classifications=incorrect_classifications,
             accuracy_percentage=accuracy_percentage,
             device_type_summary=device_type_summary,
+            misclassification_summary={
+                expected: dict(sorted(actual_counts.items()))
+                for expected, actual_counts in sorted(misclassification_summary.items())
+            },
             mismatches=tuple(mismatches),
         )
 
@@ -253,6 +264,7 @@ def benchmark_report_to_dict(
         "incorrect_classifications": report.incorrect_classifications,
         "accuracy_percentage": report.accuracy_percentage,
         "device_type_summary": report.device_type_summary,
+        "misclassification_summary": report.misclassification_summary,
         "mismatch_summary": {
             "total_mismatches": len(mismatch_rows),
         },
@@ -282,9 +294,23 @@ def render_console_report(report: BenchmarkReport, generated_at: str) -> str:
     lines.extend(
         [
             "",
-        "Mismatch summary:",
-        f"Total mismatches: {len(report.mismatches)}",
-        "Mismatch list:",
+            "Misclassification Summary",
+        ]
+    )
+
+    if not report.misclassification_summary:
+        lines.append("- None")
+    else:
+        for expected_type, actual_counts in sorted(report.misclassification_summary.items()):
+            for actual_type, count in sorted(actual_counts.items()):
+                lines.append(f"{expected_type} -> {actual_type} : {count}")
+
+    lines.extend(
+        [
+            "",
+            "Mismatch summary:",
+            f"Total mismatches: {len(report.mismatches)}",
+            "Mismatch list:",
         ]
     )
 
@@ -334,14 +360,35 @@ def render_markdown_report(report: BenchmarkReport, generated_at: str) -> str:
     lines.extend(
         [
             "",
-        "## Mismatch summary",
-        "",
-        f"- Total mismatches: {len(report.mismatches)}",
-        "",
-        "## Mismatch list",
-        "",
-        "| IP address | Hostname | Expected DeviceType | Actual DeviceType |",
-        "| --- | --- | --- | --- |",
+            "## Misclassification Summary",
+            "",
+        ]
+    )
+
+    if not report.misclassification_summary:
+        lines.append("No misclassifications.")
+    else:
+        lines.extend(
+            [
+                "| Expected | Actual | Count |",
+                "| --- | --- | ---: |",
+            ]
+        )
+        for expected_type, actual_counts in sorted(report.misclassification_summary.items()):
+            for actual_type, count in sorted(actual_counts.items()):
+                lines.append(f"| {expected_type} | {actual_type} | {count} |")
+
+    lines.extend(
+        [
+            "",
+            "## Mismatch summary",
+            "",
+            f"- Total mismatches: {len(report.mismatches)}",
+            "",
+            "## Mismatch list",
+            "",
+            "| IP address | Hostname | Expected DeviceType | Actual DeviceType |",
+            "| --- | --- | --- | --- |",
         ]
     )
 
