@@ -1,12 +1,14 @@
 # NetworkMapper Engineering Guide
 
-**Version:** 0.2.0
+**Version:** 0.3.0
 
 ---
 
 # Project Philosophy
 
-NetworkMapper exists to reduce the time, effort, and uncertainty required to understand an undocumented network. Every architectural and implementation decision should support that mission.
+NetworkMapper exists to reduce the time, effort, and uncertainty required to understand an undocumented network.
+
+Every architectural and implementation decision should support that mission.
 
 NetworkMapper is being developed as a professional network discovery platform.
 
@@ -20,11 +22,15 @@ NetworkMapper is not a network scanner.
 
 It is a network relationship mapping platform.
 
-The purpose of discovery is to build an accurate graph of the relationships between devices, networks, interfaces, and services. All visualizations, reports, and exports are derived from that graph.
+The purpose of discovery is to build an accurate graph of the relationships between devices, networks, interfaces, and services.
+
+All visualizations, reports, exports, and analytics are derived from that graph.
 
 Every new capability should be validated with a real-world workflow before it becomes permanent.
 
-The internal data model is the product. Every export is a view of that model.
+The internal data model is the product.
+
+Every export is a view of that model.
 
 ---
 
@@ -50,11 +56,12 @@ Avoid writing one-off scripts.
 
 ## 2. Keep the application usable.
 
-At the end of every phase:
+At the end of every sprint:
 
-- The application must run.
-- Existing functionality must continue to work.
-- New functionality must be tested.
+- The application runs.
+- Existing functionality continues to work.
+- New functionality is tested.
+- Documentation is updated when appropriate.
 
 ---
 
@@ -62,7 +69,7 @@ At the end of every phase:
 
 If two solutions solve the same problem:
 
-Choose the one that is easier to understand and maintain.
+Choose the solution that is easier to understand and maintain.
 
 Readable code is more valuable than clever code.
 
@@ -117,15 +124,19 @@ We only build features that solve actual technician workflows.
 
 ## 8. The software should never get in the technician's way.
 
----
-
-## 9. Every bug that reaches a validation environment should be accompanied by a regression test before it is fixed.
+Automation should reduce manual effort without reducing transparency.
 
 ---
 
-## 10. Routine inventory should remain fast, deterministic, and minimally intrusive.
+## 9. Every bug that reaches validation must receive a regression test.
 
-Deep inspection belongs in optional utilities that can enrich a project without slowing the core workflow.
+Fixes without tests are incomplete.
+
+---
+
+## 10. Routine inventory should remain fast.
+
+Deep inspection belongs in optional enrichment tools.
 
 ---
 
@@ -164,6 +175,8 @@ networkmapper/
 
     discovery/
 
+    classification/
+
     exporters/
 
     project/
@@ -179,6 +192,10 @@ tests/
 docs/
 
 examples/
+
+benchmarks/
+
+output/
 ```
 
 ---
@@ -188,16 +205,16 @@ examples/
 ## Python
 
 - Use type hints.
-- Use dataclasses for models.
-- Use descriptive variable names.
+- Prefer dataclasses for models.
+- Prefer explicit names.
 - Avoid global variables.
-- Use dependency injection where practical.
+- Prefer dependency injection.
 
 ---
 
 ## Imports
 
-Use absolute imports whenever possible.
+Use absolute imports whenever practical.
 
 Example:
 
@@ -209,23 +226,23 @@ from networkmapper.core.models import Device
 
 ## Logging
 
-Temporary validation harnesses may use `print()`.
+Temporary validation utilities may use `print()`.
 
-Production application logic should use the Logger service.
+Production code should use the Logger service.
 
 ---
 
 ## Error Handling
 
-Catch expected errors.
+Catch expected exceptions.
 
-Allow unexpected errors to surface during development.
+Allow unexpected exceptions to surface during development.
 
 ---
 
 ## Comments
 
-Write comments explaining **why**, not **what**.
+Explain **why**, not **what**.
 
 Bad:
 
@@ -241,100 +258,195 @@ Good:
 
 ---
 
-## Discovery
+# Discovery
 
 Providers contribute facts.
 
-The Discovery Engine merges those facts into a unified representation of the network.
+Discovery Engine merges those facts.
 
-Discovery providers should never overwrite unrelated provider data.
+Discovery providers must never overwrite unrelated provider data.
+
+---
+
+# Classification
+
+Classification must be:
+
+- Deterministic
+- Explainable
+- Testable
+- Ordered intentionally
+
+Every classification rule must:
+
+- Produce a RuleResult
+- Include clear evidence
+- Include focused unit tests
+- Be registered intentionally
+- Preserve first-match-wins behavior
+
+Whenever practical, combine multiple independent observations while remaining fully explainable.
+
+---
+
+# Benchmarking
+
+Benchmarking measures classifier quality.
+
+Benchmark tooling must never change production classification behavior.
+
+Benchmarks exist to measure:
+
+- Accuracy
+- Regression
+- Coverage
+
+Benchmark reports are developer tooling.
+
+They are not part of production classification.
 
 ---
 
 # AI-Assisted Development
 
-AI assistants are used to accelerate implementation, testing, and documentation.
+AI accelerates implementation.
 
-Architectural decisions remain intentional and human-reviewed.
+Humans remain responsible for architecture.
 
-## Scope
+Every implementation sprint should have one objective.
 
-Each implementation sprint should have a single objective.
+Avoid unrelated cleanup.
 
-Changes should remain narrowly scoped.
+Avoid opportunistic refactoring.
 
-Avoid unrelated cleanup or opportunistic refactoring.
-
----
-
-## Validation
-
-When validating work:
-
-- Run only the regression tests appropriate to the current sprint unless a full regression suite is explicitly requested.
-- Execute the requested test suite once.
-- If tests pass, summarize the results and stop.
-- If tests fail, explain the failure before proposing additional changes.
+If additional work is discovered, report it separately.
 
 ---
 
-## Tooling
+# Sprint Workflow
 
-AI assistants should never inspect editor or IDE implementation files.
+Every sprint follows this sequence:
 
-Do **not** execute commands that read:
+1. Planning
+2. Implementation
+3. Focused tests
+4. Focused regression
+5. Human review
+6. Commit
+7. Push
+
+Never combine multiple unrelated objectives into one sprint.
+
+---
+
+# Validation Workflow
+
+After implementing a sprint:
+
+1. Execute the requested regression target.
+
+2. Use only the stdout/stderr produced by that execution.
+
+3. Summarize the results.
+
+4. Stop.
+
+If additional validation is required:
+
+- rerun the requested tests
+- do not inspect cached output
+
+Never inspect:
 
 - VS Code workspaceStorage
-- Copilot chat-session-resources
+- GitHub Copilot chat-session-resources
 - content.txt
-- other editor-generated temporary files
+- editor cache
+- temporary AI transcripts
+- IDE-generated files
 
-These files are not part of the project and should never be used to validate software behavior.
+Never execute PowerShell commands that reference those locations.
 
----
+If test output is unavailable:
 
-## Architecture
+Rerun the tests.
 
-Do not change project architecture unless the current sprint explicitly requires it.
-
-Do not modify unrelated subsystems.
-
-Do not introduce compatibility layers unless they are part of the planned migration.
+Never recover cached output.
 
 ---
 
-## Documentation
+# AI Execution Policy
 
-Architectural changes must update:
+AI assistants must:
+
+- Read only required project files.
+- Modify only sprint-scoped files.
+- Update only directly affected tests.
+- Run only the smallest appropriate regression target.
+- Summarize results.
+- Stop.
+
+Never inspect IDE implementation files.
+
+Never inspect:
+
+- workspaceStorage
+- chat-session-resources
+- content.txt
+- editor cache
+- temporary transcript files
+
+Never validate software behavior using IDE artifacts.
+
+Project source files and current test execution are the authoritative sources.
+
+---
+
+# Architecture Policy
+
+Do not modify architecture unless the sprint explicitly requires it.
+
+Do not introduce compatibility layers unless they are part of an approved migration.
+
+Do not refactor unrelated systems.
+
+---
+
+# Documentation
+
+Architectural changes update:
 
 - ROADMAP.md
-- docs/ARCHITECTURE.md
+- docs/architecture/
 - docs/ADR.md
 
-Implementation changes should update documentation when appropriate.
+Implementation changes update documentation when appropriate.
 
 ---
 
 # Git Workflow
 
-Each completed task receives:
+Every completed sprint receives:
 
-- One commit.
+- One focused commit.
 - One meaningful commit message.
-- Regression tests appropriate to the scope of the change.
-- Updated documentation when required.
+- Appropriate regression tests.
+- Updated documentation when necessary.
+- A narrow implementation scope.
 
-Examples:
+Avoid mixing unrelated work.
+
+Good:
 
 ```
-Implement logger service
+DEV-001: Add benchmark CLI
 
-Add inventory manager
+ACC-001: Add benchmark framework
 
-Implement Draw.io exporter
+INTEL-003: Expand Cisco heuristics
 ```
 
-Avoid generic messages like:
+Bad:
 
 ```
 Update
@@ -342,6 +454,8 @@ Update
 Fix
 
 Stuff
+
+Misc changes
 ```
 
 ---
@@ -370,58 +484,57 @@ Phase 9 — Production
 
 # Definition of Done
 
-A phase is complete when:
+A sprint is complete when:
 
 - The application runs.
-- The new capability works.
+- The requested capability works.
 - Existing functionality still works.
-- Regression tests appropriate to the change pass.
+- Appropriate regression tests pass.
 - Documentation has been updated.
-- Changes have been committed to Git.
+- Changes have been reviewed.
+- Changes have been committed.
+- Changes have been pushed.
 
 ---
 
 # Product Vision
 
-NetworkMapper should enable a technician to:
+NetworkMapper enables a technician to:
 
 - Walk into a customer site.
 - Discover the environment.
-- Create a reusable customer project.
+- Build a reusable project.
 - Compare future discoveries.
-- Produce documentation for technicians and customers.
+- Produce professional documentation.
 
 ---
 
 # Information Model
 
-NetworkMapper is built around relationships.
+The NetworkGraph is the canonical representation of discovered information.
 
-Devices are important.
+Discovery gathers facts.
 
-Networks are important.
+Intelligence interprets facts.
 
-Interfaces are important.
+Exporters present facts.
 
-The relationships between them are the primary source of value.
-
-Everything discovered should strengthen the network graph.
+The Project is the source of truth.
 
 ---
 
 # Deployment Philosophy
 
-NetworkMapper should require no development tools on the technician's laptop.
+The final application should:
 
-The final product will be distributed as a self-contained Windows executable.
-
-The application should function completely offline and require minimal configuration.
+- Require no development tools.
+- Run completely offline.
+- Be distributed as a self-contained Windows executable.
+- Require minimal configuration.
 
 ---
 
 # Documentation First
-
-The primary purpose of NetworkMapper is to create accurate network documentation where none exists.
 
 Discovery is not the final product.
 
@@ -431,25 +544,17 @@ Documentation is.
 
 # Data Philosophy
 
-The Project is the source of truth.
+Projects are portable.
 
-The NetworkGraph is the canonical representation of the discovered environment.
+Projects are complete.
 
-Discovery providers collect facts.
+Projects should allow work to resume without rediscovery.
 
-Intelligence interprets those facts.
-
-Exporters present those facts.
-
-Open, portable formats should be preferred whenever practical.
-
-The Project should be complete enough that a technician can resume work without rediscovering the network.
+Open formats are preferred whenever practical.
 
 ---
 
 # Product Personas
-
-NetworkMapper serves multiple audiences.
 
 ## Technician
 
@@ -480,24 +585,27 @@ Needs:
 - Network diagrams
 - Asset inventory
 
-Each feature should identify its primary audience.
+Every feature should identify its primary audience.
 
 ---
 
-# Classification Rules
+# Engineering Philosophy
 
-Every new classification rule must include:
+Every sprint should leave NetworkMapper:
 
-- A focused unit test for the rule.
-- An integration test through DeviceClassifier.
-- Registration in the ordered rule list.
-- Clear RuleResult evidence explaining why the rule matched or did not match.
+- More capable
+- Better tested
+- Better documented
+- Easier to maintain
 
-Classification rules should remain:
+Engineering quality is a feature.
 
-- Deterministic.
-- Explainable.
-- Narrowly focused.
-- Ordered intentionally.
+Long-term maintainability is as important as new functionality.
 
-When possible, classification should leverage multiple independent pieces of observed evidence while remaining fully explainable through RuleResult.
+Measure improvements whenever practical.
+
+Benchmark before optimizing.
+
+Prefer deterministic behavior over cleverness.
+
+Prefer explainability over complexity.

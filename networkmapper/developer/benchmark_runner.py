@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import argparse
 import json
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -14,14 +16,16 @@ class BenchmarkMismatch:
     """Represent one classification mismatch in a benchmark run."""
 
     ip_address: str
+    hostname: str | None
     expected_device_type: str
-    predicted_device_type: str
+    actual_device_type: str
 
 
 @dataclass(frozen=True)
 class BenchmarkReport:
     """Represent aggregate classification accuracy for one benchmark run."""
 
+    dataset_name: str
     total_devices: int
     correct_classifications: int
     incorrect_classifications: int
@@ -88,6 +92,7 @@ class BenchmarkRunner:
         self,
         inventory_path: str | Path,
         expected_results_path: str | Path,
+        dataset_name: str = "benchmark",
     ) -> BenchmarkReport:
         """Run classification against one inventory and compute accuracy metrics."""
         devices = self.load_inventory(inventory_path)
@@ -108,8 +113,9 @@ class BenchmarkRunner:
             mismatches.append(
                 BenchmarkMismatch(
                     ip_address=device.ip_address,
+                    hostname=device.hostname,
                     expected_device_type=expected_type.name if expected_type else "MISSING",
-                    predicted_device_type=predicted_type.name,
+                    actual_device_type=predicted_type.name,
                 )
             )
 
@@ -119,6 +125,7 @@ class BenchmarkRunner:
         )
 
         return BenchmarkReport(
+            dataset_name=dataset_name,
             total_devices=total_devices,
             correct_classifications=correct_classifications,
             incorrect_classifications=incorrect_classifications,
@@ -132,6 +139,7 @@ class BenchmarkRunner:
         return self.run_benchmark(
             inventory_path=benchmark_path / "inventory.json",
             expected_results_path=benchmark_path / "expected_results.json",
+            dataset_name=benchmark_path.name,
         )
 
     def _load_json_file(self, path: str | Path) -> dict[str, Any]:
@@ -153,3 +161,182 @@ class BenchmarkRunner:
                 raise ValueError(
                     f"Unsupported device type value: {raw_device_type!r}"
                 ) from error
+
+
+def build_argument_parser() -> argparse.ArgumentParser:
+    """Build and return the benchmark CLI argument parser."""
+    parser = argparse.ArgumentParser(
+        prog="python -m networkmapper.developer.benchmark_runner",
+        description="Run benchmark datasets and generate reports.",
+    )
+    parser.add_argument(
+        "benchmark_directory",
+        help="Path to a benchmark dataset directory containing inventory.json and expected_results.json.",
+    )
+    parser.add_argument(
+        "--console",
+        action="store_true",
+        help="Print results to the terminal (default when no output flags are specified).",
+    )
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        dest="write_json",
+        help="Write a JSON report.",
+    )
+    parser.add_argument(
+        "--markdown",
+        action="store_true",
+        dest="write_markdown",
+        help="Write a Markdown report.",
+    )
+    parser.add_argument(
+        "--output",
+        default="output/benchmarks",
+        help="Output directory for generated reports (default: output/benchmarks/).",
+    )
+    return parser
+
+
+def parse_cli_args(argv: list[str] | None = None) -> argparse.Namespace:
+    """Parse benchmark CLI arguments."""
+    return build_argument_parser().parse_args(argv)
+
+
+def benchmark_report_to_dict(report: BenchmarkReport) -> dict[str, Any]:
+    """Convert a benchmark report into a serializable dictionary."""
+    return {
+        "dataset_name": report.dataset_name,
+        "total_devices": report.total_devices,
+        "correct_classifications": report.correct_classifications,
+        "incorrect_classifications": report.incorrect_classifications,
+        "accuracy_percentage": report.accuracy_percentage,
+        "mismatches": [
+            {
+                "ip_address": mismatch.ip_address,
+                "hostname": mismatch.hostname,
+                "expected_device_type": mismatch.expected_device_type,
+                "actual_device_type": mismatch.actual_device_type,
+            }
+            for mismatch in report.mismatches
+        ],
+    }
+
+
+def render_console_report(report: BenchmarkReport) -> str:
+    """Render benchmark results as human-readable console text."""
+    lines = [
+        f"Dataset: {report.dataset_name}",
+        f"Total devices: {report.total_devices}",
+        f"Correct classifications: {report.correct_classifications}",
+        f"Incorrect classifications: {report.incorrect_classifications}",
+        f"Accuracy: {report.accuracy_percentage:.2f}%",
+        "Mismatch list:",
+    ]
+
+    if not report.mismatches:
+        lines.append("- None")
+    else:
+        for mismatch in report.mismatches:
+            hostname = mismatch.hostname if mismatch.hostname else "N/A"
+            lines.append(
+                "- "
+                f"IP: {mismatch.ip_address}, "
+                f"Hostname: {hostname}, "
+                f"Expected: {mismatch.expected_device_type}, "
+                f"Actual: {mismatch.actual_device_type}"
+            )
+
+    return "\n".join(lines)
+
+
+def render_markdown_report(report: BenchmarkReport) -> str:
+    """Render benchmark results in Markdown format."""
+    lines = [
+        f"# Benchmark Report: {report.dataset_name}",
+        "",
+        f"- Total devices: {report.total_devices}",
+        f"- Correct classifications: {report.correct_classifications}",
+        f"- Incorrect classifications: {report.incorrect_classifications}",
+        f"- Accuracy: {report.accuracy_percentage:.2f}%",
+        "",
+        "## Mismatch list",
+        "",
+        "| IP address | Hostname | Expected DeviceType | Actual DeviceType |",
+        "| --- | --- | --- | --- |",
+    ]
+
+    if not report.mismatches:
+        lines.append("| None | N/A | N/A | N/A |")
+    else:
+        for mismatch in report.mismatches:
+            hostname = mismatch.hostname if mismatch.hostname else "N/A"
+            lines.append(
+                "| "
+                f"{mismatch.ip_address} | "
+                f"{hostname} | "
+                f"{mismatch.expected_device_type} | "
+                f"{mismatch.actual_device_type} "
+                "|"
+            )
+
+    return "\n".join(lines) + "\n"
+
+
+def write_json_report(report: BenchmarkReport, output_directory: str | Path) -> Path:
+    """Write benchmark report as JSON and return the report path."""
+    output_path = Path(output_directory)
+    output_path.mkdir(parents=True, exist_ok=True)
+    report_path = output_path / f"{report.dataset_name}.json"
+    with report_path.open("w", encoding="utf-8") as file_handle:
+        json.dump(benchmark_report_to_dict(report), file_handle, indent=2)
+    return report_path
+
+
+def write_markdown_report(report: BenchmarkReport, output_directory: str | Path) -> Path:
+    """Write benchmark report as Markdown and return the report path."""
+    output_path = Path(output_directory)
+    output_path.mkdir(parents=True, exist_ok=True)
+    report_path = output_path / f"{report.dataset_name}.md"
+    with report_path.open("w", encoding="utf-8") as file_handle:
+        file_handle.write(render_markdown_report(report))
+    return report_path
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Run the benchmark CLI command."""
+    args = parse_cli_args(argv)
+
+    benchmark_path = Path(args.benchmark_directory)
+    if not benchmark_path.is_dir():
+        print(
+            f"Error: benchmark directory not found: {benchmark_path}",
+            file=sys.stderr,
+        )
+        return 1
+
+    runner = BenchmarkRunner()
+
+    try:
+        report = runner.run_benchmark_directory(benchmark_path)
+    except (FileNotFoundError, ValueError, json.JSONDecodeError) as error:
+        print(f"Error: unable to run benchmark: {error}", file=sys.stderr)
+        return 1
+
+    emit_console = args.console or (not args.write_json and not args.write_markdown)
+    if emit_console:
+        print(render_console_report(report))
+
+    if args.write_json:
+        json_report_path = write_json_report(report, args.output)
+        print(f"JSON report: {json_report_path}")
+
+    if args.write_markdown:
+        markdown_report_path = write_markdown_report(report, args.output)
+        print(f"Markdown report: {markdown_report_path}")
+
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

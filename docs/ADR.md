@@ -125,3 +125,25 @@ Reports should remain deterministic and side-effect free.
 - Diagnostic tooling is safe to execute repeatedly.
 - Exporters remain read-only consumers of project data.
 
+---
+
+## ADR-006 - Benchmark Framework
+
+**Status:** Accepted
+
+### Decision
+
+Benchmarking is implemented as
+developer tooling separate from
+production classification.
+
+### Rationale
+
+Accuracy measurement should never
+modify production behavior.
+
+### Consequences
+
+- Benchmark datasets become regression assets.
+- Classification quality becomes measurable.
+- Future reporting can build on the same framework.

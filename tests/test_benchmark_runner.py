@@ -1,10 +1,16 @@
 import json
+import io
 import tempfile
 import unittest
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
 from networkmapper.core.models import DeviceType
-from networkmapper.developer.benchmark_runner import BenchmarkRunner
+from networkmapper.developer.benchmark_runner import (
+    BenchmarkRunner,
+    parse_cli_args,
+    main,
+)
 
 
 class BenchmarkRunnerTest(unittest.TestCase):
@@ -81,6 +87,7 @@ class BenchmarkRunnerTest(unittest.TestCase):
             report = self.runner.run_benchmark(inventory_path, expected_path)
 
             self.assertEqual(report.total_devices, 2)
+            self.assertEqual(report.dataset_name, "benchmark")
             self.assertEqual(report.correct_classifications, 2)
             self.assertEqual(report.incorrect_classifications, 0)
             self.assertEqual(report.accuracy_percentage, 100.0)
@@ -128,8 +135,9 @@ class BenchmarkRunnerTest(unittest.TestCase):
             self.assertEqual(report.accuracy_percentage, 50.0)
             self.assertEqual(len(report.mismatches), 1)
             self.assertEqual(report.mismatches[0].ip_address, "192.168.70.20")
+            self.assertEqual(report.mismatches[0].hostname, "unknown-01")
             self.assertEqual(report.mismatches[0].expected_device_type, "FIREWALL")
-            self.assertEqual(report.mismatches[0].predicted_device_type, "UNKNOWN")
+            self.assertEqual(report.mismatches[0].actual_device_type, "UNKNOWN")
 
     def test_mismatch_reporting_marks_missing_expected_results(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -158,8 +166,219 @@ class BenchmarkRunnerTest(unittest.TestCase):
             self.assertEqual(report.correct_classifications, 0)
             self.assertEqual(report.incorrect_classifications, 1)
             self.assertEqual(len(report.mismatches), 1)
+            self.assertEqual(report.mismatches[0].hostname, "host-01")
             self.assertEqual(report.mismatches[0].expected_device_type, "MISSING")
-            self.assertEqual(report.mismatches[0].predicted_device_type, "UNKNOWN")
+            self.assertEqual(report.mismatches[0].actual_device_type, "UNKNOWN")
+
+    def test_cli_argument_parsing(self):
+        args = parse_cli_args(
+            [
+                "benchmarks/small_office",
+                "--json",
+                "--markdown",
+                "--output",
+                "custom-output",
+                "--console",
+            ]
+        )
+
+        self.assertEqual(args.benchmark_directory, "benchmarks/small_office")
+        self.assertTrue(args.write_json)
+        self.assertTrue(args.write_markdown)
+        self.assertTrue(args.console)
+        self.assertEqual(args.output, "custom-output")
+
+    def test_cli_console_output_by_default(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            benchmark_dir = Path(temp_dir) / "dataset_console"
+            benchmark_dir.mkdir(parents=True, exist_ok=True)
+
+            self._write_json(
+                benchmark_dir / "inventory.json",
+                {
+                    "devices": [
+                        {
+                            "ip_address": "10.10.0.10",
+                            "hostname": "host-01",
+                            "vendor": "Unknown",
+                        }
+                    ]
+                },
+            )
+            self._write_json(
+                benchmark_dir / "expected_results.json",
+                {
+                    "expected_results": [
+                        {"ip_address": "10.10.0.10", "device_type": "UNKNOWN"}
+                    ]
+                },
+            )
+
+            stdout_capture = io.StringIO()
+            stderr_capture = io.StringIO()
+            with redirect_stdout(stdout_capture), redirect_stderr(stderr_capture):
+                exit_code = main([str(benchmark_dir)])
+
+            self.assertEqual(exit_code, 0)
+            self.assertEqual(stderr_capture.getvalue(), "")
+
+            console_output = stdout_capture.getvalue()
+            self.assertIn("Dataset: dataset_console", console_output)
+            self.assertIn("Total devices: 1", console_output)
+            self.assertIn("Correct classifications: 1", console_output)
+            self.assertIn("Incorrect classifications: 0", console_output)
+            self.assertIn("Accuracy: 100.00%", console_output)
+            self.assertIn("Mismatch list:", console_output)
+
+    def test_cli_json_report_generation(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            benchmark_dir = temp_path / "dataset_json"
+            output_dir = temp_path / "reports"
+            benchmark_dir.mkdir(parents=True, exist_ok=True)
+
+            self._write_json(
+                benchmark_dir / "inventory.json",
+                {
+                    "devices": [
+                        {
+                            "ip_address": "10.20.0.10",
+                            "hostname": "host-a",
+                            "vendor": "Unknown",
+                        }
+                    ]
+                },
+            )
+            self._write_json(
+                benchmark_dir / "expected_results.json",
+                {
+                    "expected_results": [
+                        {"ip_address": "10.20.0.10", "device_type": "SERVER"}
+                    ]
+                },
+            )
+
+            stdout_capture = io.StringIO()
+            with redirect_stdout(stdout_capture):
+                exit_code = main(
+                    [str(benchmark_dir), "--json", "--output", str(output_dir)]
+                )
+
+            self.assertEqual(exit_code, 0)
+            json_report_path = output_dir / "dataset_json.json"
+            self.assertTrue(json_report_path.exists())
+
+            with json_report_path.open("r", encoding="utf-8") as file_handle:
+                report_payload = json.load(file_handle)
+
+            self.assertEqual(report_payload["dataset_name"], "dataset_json")
+            self.assertEqual(report_payload["total_devices"], 1)
+            self.assertEqual(report_payload["correct_classifications"], 0)
+            self.assertEqual(report_payload["incorrect_classifications"], 1)
+            self.assertEqual(report_payload["accuracy_percentage"], 0.0)
+            self.assertEqual(len(report_payload["mismatches"]), 1)
+            self.assertEqual(report_payload["mismatches"][0]["ip_address"], "10.20.0.10")
+            self.assertEqual(report_payload["mismatches"][0]["hostname"], "host-a")
+            self.assertEqual(
+                report_payload["mismatches"][0]["expected_device_type"], "SERVER"
+            )
+            self.assertEqual(
+                report_payload["mismatches"][0]["actual_device_type"], "UNKNOWN"
+            )
+            self.assertIn("JSON report:", stdout_capture.getvalue())
+
+    def test_cli_markdown_report_generation(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            benchmark_dir = temp_path / "dataset_markdown"
+            output_dir = temp_path / "reports"
+            benchmark_dir.mkdir(parents=True, exist_ok=True)
+
+            self._write_json(
+                benchmark_dir / "inventory.json",
+                {
+                    "devices": [
+                        {
+                            "ip_address": "10.30.0.10",
+                            "hostname": "host-b",
+                            "vendor": "Unknown",
+                        }
+                    ]
+                },
+            )
+            self._write_json(
+                benchmark_dir / "expected_results.json",
+                {
+                    "expected_results": [
+                        {"ip_address": "10.30.0.10", "device_type": "SERVER"}
+                    ]
+                },
+            )
+
+            stdout_capture = io.StringIO()
+            with redirect_stdout(stdout_capture):
+                exit_code = main(
+                    [str(benchmark_dir), "--markdown", "--output", str(output_dir)]
+                )
+
+            self.assertEqual(exit_code, 0)
+            markdown_report_path = output_dir / "dataset_markdown.md"
+            self.assertTrue(markdown_report_path.exists())
+
+            markdown_content = markdown_report_path.read_text(encoding="utf-8")
+            self.assertIn("# Benchmark Report: dataset_markdown", markdown_content)
+            self.assertIn("- Total devices: 1", markdown_content)
+            self.assertIn("- Correct classifications: 0", markdown_content)
+            self.assertIn("- Incorrect classifications: 1", markdown_content)
+            self.assertIn("- Accuracy: 0.00%", markdown_content)
+            self.assertIn("| IP address | Hostname | Expected DeviceType | Actual DeviceType |", markdown_content)
+            self.assertIn("| 10.30.0.10 | host-b | SERVER | UNKNOWN |", markdown_content)
+            self.assertIn("Markdown report:", stdout_capture.getvalue())
+
+    def test_invalid_dataset_path_returns_error(self):
+        stdout_capture = io.StringIO()
+        stderr_capture = io.StringIO()
+        with redirect_stdout(stdout_capture), redirect_stderr(stderr_capture):
+            exit_code = main(["benchmarks/does-not-exist"])
+
+        self.assertEqual(exit_code, 1)
+        self.assertEqual(stdout_capture.getvalue(), "")
+        self.assertIn("Error: benchmark directory not found:", stderr_capture.getvalue())
+
+    def test_output_directory_is_created_for_report_generation(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            benchmark_dir = temp_path / "dataset_output_dir"
+            output_dir = temp_path / "nested" / "reports" / "benchmarks"
+            benchmark_dir.mkdir(parents=True, exist_ok=True)
+
+            self._write_json(
+                benchmark_dir / "inventory.json",
+                {
+                    "devices": [
+                        {
+                            "ip_address": "10.40.0.10",
+                            "hostname": "host-c",
+                            "vendor": "Unknown",
+                        }
+                    ]
+                },
+            )
+            self._write_json(
+                benchmark_dir / "expected_results.json",
+                {
+                    "expected_results": [
+                        {"ip_address": "10.40.0.10", "device_type": "UNKNOWN"}
+                    ]
+                },
+            )
+
+            self.assertFalse(output_dir.exists())
+            exit_code = main([str(benchmark_dir), "--json", "--output", str(output_dir)])
+
+            self.assertEqual(exit_code, 0)
+            self.assertTrue(output_dir.exists())
+            self.assertTrue((output_dir / "dataset_output_dir.json").exists())
 
 
 if __name__ == "__main__":
