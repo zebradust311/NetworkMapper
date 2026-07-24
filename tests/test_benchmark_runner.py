@@ -13,6 +13,7 @@ from networkmapper.developer.benchmark_runner import (
     BenchmarkRunner,
     parse_cli_args,
     main,
+    render_console_report,
     write_json_report,
     write_markdown_report,
 )
@@ -255,6 +256,9 @@ class BenchmarkRunnerTest(unittest.TestCase):
             self.assertIn("UNKNOWN       100.0%", console_output)
             self.assertIn("Misclassification Summary", console_output)
             self.assertIn("- None", console_output)
+            self.assertIn("Confusion Matrix", console_output)
+            self.assertIn("Expected \\ Actual", console_output)
+            self.assertIn("UNKNOWN", console_output)
             self.assertIn("Mismatch summary:", console_output)
             self.assertIn("Total mismatches: 0", console_output)
             self.assertIn("Mismatch list:", console_output)
@@ -313,6 +317,10 @@ class BenchmarkRunnerTest(unittest.TestCase):
             self.assertEqual(report_payload["device_type_summary"]["SERVER"]["correct"], 0)
             self.assertEqual(report_payload["device_type_summary"]["SERVER"]["incorrect"], 1)
             self.assertEqual(report_payload["device_type_summary"]["SERVER"]["accuracy"], 0.0)
+            self.assertEqual(
+                report_payload["confusion_matrix"],
+                {"SERVER": {"SERVER": 0, "UNKNOWN": 1}},
+            )
             self.assertEqual(report_payload["misclassification_summary"], {"SERVER": {"UNKNOWN": 1}})
             self.assertEqual(report_payload["mismatch_summary"]["total_mismatches"], 1)
             self.assertEqual(len(report_payload["mismatches"]), 1)
@@ -380,6 +388,9 @@ class BenchmarkRunnerTest(unittest.TestCase):
             self.assertIn("## Misclassification Summary", markdown_content)
             self.assertIn("| Expected | Actual | Count |", markdown_content)
             self.assertIn("| SERVER | UNKNOWN | 1 |", markdown_content)
+            self.assertIn("## Confusion Matrix", markdown_content)
+            self.assertIn("| Expected \\ Actual | SERVER | UNKNOWN |", markdown_content)
+            self.assertIn("| SERVER | 0 | 1 |", markdown_content)
             self.assertIn("## Mismatch summary", markdown_content)
             self.assertIn("- Total mismatches: 1", markdown_content)
             self.assertIn("| IP address | Hostname | Expected DeviceType | Actual DeviceType |", markdown_content)
@@ -396,6 +407,7 @@ class BenchmarkRunnerTest(unittest.TestCase):
                 incorrect_classifications=0,
                 accuracy_percentage=100.0,
                 device_type_summary={"SERVER": {"total": 2, "correct": 2, "incorrect": 0, "accuracy": 100.0}},
+                confusion_matrix={"SERVER": {"SERVER": 2}},
                 misclassification_summary={},
                 mismatches=(),
             )
@@ -413,6 +425,9 @@ class BenchmarkRunnerTest(unittest.TestCase):
             self.assertIn("| SERVER | 2 | 2 | 0 | 100.0% |", markdown_content)
             self.assertIn("## Misclassification Summary", markdown_content)
             self.assertIn("No misclassifications.", markdown_content)
+            self.assertIn("## Confusion Matrix", markdown_content)
+            self.assertIn("| Expected \\ Actual | SERVER |", markdown_content)
+            self.assertIn("| SERVER | 2 |", markdown_content)
             self.assertIn("## Mismatch summary", markdown_content)
             self.assertIn("- Total mismatches: 0", markdown_content)
             self.assertIn("| None | N/A | N/A | N/A |", markdown_content)
@@ -429,6 +444,10 @@ class BenchmarkRunnerTest(unittest.TestCase):
                 device_type_summary={
                     "SERVER": {"total": 1, "correct": 0, "incorrect": 1, "accuracy": 0.0},
                     "SWITCH": {"total": 2, "correct": 1, "incorrect": 1, "accuracy": 50.0},
+                },
+                confusion_matrix={
+                    "SERVER": {"SERVER": 0, "SWITCH": 0, "UNKNOWN": 1},
+                    "SWITCH": {"SERVER": 0, "SWITCH": 1, "UNKNOWN": 1},
                 },
                 misclassification_summary={
                     "SERVER": {"UNKNOWN": 1},
@@ -463,6 +482,13 @@ class BenchmarkRunnerTest(unittest.TestCase):
             self.assertEqual(report_payload["generated_at"], "2026-07-24T11:00:00Z")
             self.assertEqual(report_payload["device_type_summary"]["SERVER"]["accuracy"], 0.0)
             self.assertEqual(report_payload["device_type_summary"]["SWITCH"]["accuracy"], 50.0)
+            self.assertEqual(
+                report_payload["confusion_matrix"],
+                {
+                    "SERVER": {"SERVER": 0, "SWITCH": 0, "UNKNOWN": 1},
+                    "SWITCH": {"SERVER": 0, "SWITCH": 1, "UNKNOWN": 1},
+                },
+            )
             self.assertEqual(report_payload["misclassification_summary"]["SERVER"]["UNKNOWN"], 1)
             self.assertEqual(report_payload["misclassification_summary"]["SWITCH"]["UNKNOWN"], 1)
             self.assertEqual(report_payload["mismatch_summary"]["total_mismatches"], 2)
@@ -551,6 +577,7 @@ class BenchmarkRunnerTest(unittest.TestCase):
             self.assertEqual(report.device_type_summary, {
                 "UNKNOWN": {"total": 2, "correct": 2, "incorrect": 0, "accuracy": 100.0}
             })
+            self.assertEqual(report.confusion_matrix, {"UNKNOWN": {"UNKNOWN": 2}})
             self.assertEqual(report.misclassification_summary, {})
 
     def test_device_type_summary_multiple_device_types(self):
@@ -585,6 +612,14 @@ class BenchmarkRunnerTest(unittest.TestCase):
             self.assertEqual(report.device_type_summary["SERVER"]["total"], 1)
             self.assertEqual(report.device_type_summary["SWITCH"]["total"], 1)
             self.assertEqual(report.device_type_summary["PHONE"]["total"], 1)
+            self.assertEqual(
+                report.confusion_matrix,
+                {
+                    "PHONE": {"PHONE": 0, "SERVER": 0, "SWITCH": 0, "UNKNOWN": 1},
+                    "SERVER": {"PHONE": 0, "SERVER": 1, "SWITCH": 0, "UNKNOWN": 0},
+                    "SWITCH": {"PHONE": 0, "SERVER": 0, "SWITCH": 1, "UNKNOWN": 0},
+                },
+            )
 
     def test_device_type_summary_empty_benchmark(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -600,6 +635,7 @@ class BenchmarkRunnerTest(unittest.TestCase):
             self.assertEqual(report.total_devices, 0)
             self.assertEqual(report.accuracy_percentage, 0.0)
             self.assertEqual(report.device_type_summary, {})
+            self.assertEqual(report.confusion_matrix, {})
 
     def test_device_type_summary_perfect_accuracy(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -630,6 +666,13 @@ class BenchmarkRunnerTest(unittest.TestCase):
 
             self.assertEqual(report.device_type_summary["SERVER"]["accuracy"], 100.0)
             self.assertEqual(report.device_type_summary["UNKNOWN"]["accuracy"], 100.0)
+            self.assertEqual(
+                report.confusion_matrix,
+                {
+                    "SERVER": {"SERVER": 1, "UNKNOWN": 0},
+                    "UNKNOWN": {"SERVER": 0, "UNKNOWN": 1},
+                },
+            )
 
     def test_device_type_summary_mixed_accuracy(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -666,6 +709,13 @@ class BenchmarkRunnerTest(unittest.TestCase):
             self.assertEqual(report.device_type_summary["SWITCH"]["accuracy"], 50.0)
             self.assertEqual(report.device_type_summary["PHONE"]["accuracy"], 0.0)
             self.assertEqual(
+                report.confusion_matrix,
+                {
+                    "PHONE": {"PHONE": 0, "SWITCH": 0, "UNKNOWN": 1},
+                    "SWITCH": {"PHONE": 0, "SWITCH": 1, "UNKNOWN": 1},
+                },
+            )
+            self.assertEqual(
                 report.misclassification_summary,
                 {
                     "PHONE": {"UNKNOWN": 1},
@@ -681,6 +731,7 @@ class BenchmarkRunnerTest(unittest.TestCase):
             incorrect_classifications=0,
             accuracy_percentage=100.0,
             device_type_summary={"UNKNOWN": {"total": 1, "correct": 1, "incorrect": 0, "accuracy": 100.0}},
+            confusion_matrix={"UNKNOWN": {"UNKNOWN": 1}},
             misclassification_summary={},
             mismatches=(),
         )
@@ -782,6 +833,7 @@ class BenchmarkRunnerTest(unittest.TestCase):
                 incorrect_classifications=2,
                 accuracy_percentage=0.0,
                 device_type_summary={"PHONE": {"total": 2, "correct": 0, "incorrect": 2, "accuracy": 0.0}},
+                confusion_matrix={"PHONE": {"PHONE": 0, "UNKNOWN": 2}},
                 misclassification_summary={"PHONE": {"UNKNOWN": 2}},
                 mismatches=(
                     BenchmarkMismatch("10.8.0.1", "host-a", "PHONE", "UNKNOWN"),
@@ -790,6 +842,7 @@ class BenchmarkRunnerTest(unittest.TestCase):
             )
             report_path = write_json_report(report, output_dir, "2026-07-24T12:10:00Z")
             payload = json.loads(report_path.read_text(encoding="utf-8"))
+            self.assertEqual(payload["confusion_matrix"], {"PHONE": {"PHONE": 0, "UNKNOWN": 2}})
             self.assertEqual(payload["misclassification_summary"], {"PHONE": {"UNKNOWN": 2}})
 
     def test_misclassification_summary_markdown_rendering(self):
@@ -800,6 +853,7 @@ class BenchmarkRunnerTest(unittest.TestCase):
             incorrect_classifications=1,
             accuracy_percentage=0.0,
             device_type_summary={"SERVER": {"total": 1, "correct": 0, "incorrect": 1, "accuracy": 0.0}},
+            confusion_matrix={"SERVER": {"SERVER": 0, "UNKNOWN": 1}},
             misclassification_summary={"SERVER": {"UNKNOWN": 1}},
             mismatches=(BenchmarkMismatch("10.9.0.1", None, "SERVER", "UNKNOWN"),),
         )
@@ -810,6 +864,9 @@ class BenchmarkRunnerTest(unittest.TestCase):
             self.assertIn("## Misclassification Summary", content)
             self.assertIn("| Expected | Actual | Count |", content)
             self.assertIn("| SERVER | UNKNOWN | 1 |", content)
+            self.assertIn("## Confusion Matrix", content)
+            self.assertIn("| Expected \\ Actual | SERVER | UNKNOWN |", content)
+            self.assertIn("| SERVER | 0 | 1 |", content)
 
     def test_misclassification_summary_console_rendering(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -846,6 +903,92 @@ class BenchmarkRunnerTest(unittest.TestCase):
             self.assertIn("Misclassification Summary", output)
             self.assertIn("PHONE -> UNKNOWN : 1", output)
             self.assertIn("SERVER -> UNKNOWN : 1", output)
+            self.assertIn("Confusion Matrix", output)
+            self.assertIn("Expected \\ Actual", output)
+            self.assertIn("PHONE", output)
+            self.assertIn("SERVER", output)
+            self.assertIn("UNKNOWN", output)
+
+    def test_confusion_matrix_json_serialization(self):
+        report = BenchmarkReport(
+            dataset_name="confusion_json",
+            total_devices=2,
+            correct_classifications=1,
+            incorrect_classifications=1,
+            accuracy_percentage=50.0,
+            device_type_summary={
+                "SERVER": {"total": 1, "correct": 0, "incorrect": 1, "accuracy": 0.0},
+                "SWITCH": {"total": 1, "correct": 1, "incorrect": 0, "accuracy": 100.0},
+            },
+            confusion_matrix={
+                "SERVER": {"SERVER": 0, "SWITCH": 0, "UNKNOWN": 1},
+                "SWITCH": {"SERVER": 0, "SWITCH": 1, "UNKNOWN": 0},
+            },
+            misclassification_summary={"SERVER": {"UNKNOWN": 1}},
+            mismatches=(BenchmarkMismatch("10.11.0.1", "host-1", "SERVER", "UNKNOWN"),),
+        )
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir)
+            report_path = write_json_report(report, output_dir, "2026-07-24T12:30:00Z")
+            payload = json.loads(report_path.read_text(encoding="utf-8"))
+
+        self.assertEqual(
+            payload["confusion_matrix"],
+            {
+                "SERVER": {"SERVER": 0, "SWITCH": 0, "UNKNOWN": 1},
+                "SWITCH": {"SERVER": 0, "SWITCH": 1, "UNKNOWN": 0},
+            },
+        )
+
+    def test_confusion_matrix_markdown_rendering(self):
+        report = BenchmarkReport(
+            dataset_name="confusion_markdown",
+            total_devices=3,
+            correct_classifications=2,
+            incorrect_classifications=1,
+            accuracy_percentage=66.6666666667,
+            device_type_summary={
+                "SERVER": {"total": 1, "correct": 1, "incorrect": 0, "accuracy": 100.0},
+                "SWITCH": {"total": 2, "correct": 1, "incorrect": 1, "accuracy": 50.0},
+            },
+            confusion_matrix={
+                "SERVER": {"SERVER": 1, "SWITCH": 0, "UNKNOWN": 0},
+                "SWITCH": {"SERVER": 0, "SWITCH": 1, "UNKNOWN": 1},
+            },
+            misclassification_summary={"SWITCH": {"UNKNOWN": 1}},
+            mismatches=(BenchmarkMismatch("10.12.0.2", "host-2", "SWITCH", "UNKNOWN"),),
+        )
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir)
+            report_path = write_markdown_report(report, output_dir, "2026-07-24T12:35:00Z")
+            content = report_path.read_text(encoding="utf-8")
+
+        self.assertIn("## Confusion Matrix", content)
+        self.assertIn("| Expected \\ Actual | SERVER | SWITCH | UNKNOWN |", content)
+        self.assertIn("| SERVER | 1 | 0 | 0 |", content)
+        self.assertIn("| SWITCH | 0 | 1 | 1 |", content)
+
+    def test_confusion_matrix_console_rendering(self):
+        report = BenchmarkReport(
+            dataset_name="confusion_console",
+            total_devices=2,
+            correct_classifications=1,
+            incorrect_classifications=1,
+            accuracy_percentage=50.0,
+            device_type_summary={"SERVER": {"total": 2, "correct": 1, "incorrect": 1, "accuracy": 50.0}},
+            confusion_matrix={"SERVER": {"SERVER": 1, "UNKNOWN": 1}},
+            misclassification_summary={"SERVER": {"UNKNOWN": 1}},
+            mismatches=(BenchmarkMismatch("10.13.0.2", "host-2", "SERVER", "UNKNOWN"),),
+        )
+
+        output = render_console_report(report, "2026-07-24T12:40:00Z")
+
+        self.assertIn("Confusion Matrix", output)
+        self.assertIn("Expected \\ Actual", output)
+        self.assertIn("SERVER", output)
+        self.assertIn("UNKNOWN", output)
 
 
 if __name__ == "__main__":

@@ -32,6 +32,7 @@ class BenchmarkReport:
     incorrect_classifications: int
     accuracy_percentage: float
     device_type_summary: dict[str, dict[str, float | int]]
+    confusion_matrix: dict[str, dict[str, int]]
     misclassification_summary: dict[str, dict[str, int]]
     mismatches: tuple[BenchmarkMismatch, ...]
 
@@ -104,6 +105,9 @@ class BenchmarkRunner:
         total_devices = len(devices)
         correct_classifications = 0
         device_type_summary_counts: dict[str, dict[str, int]] = {}
+        confusion_matrix_counts: dict[str, dict[str, int]] = {}
+        expected_device_types: set[str] = set()
+        actual_device_types: set[str] = set()
         misclassification_summary: dict[str, dict[str, int]] = {}
         mismatches: list[BenchmarkMismatch] = []
 
@@ -118,6 +122,11 @@ class BenchmarkRunner:
                     {"total": 0, "correct": 0, "incorrect": 0},
                 )
                 summary_entry["total"] += 1
+                expected_device_types.add(type_name)
+                actual_name = predicted_type.name
+                actual_device_types.add(actual_name)
+                matrix_row = confusion_matrix_counts.setdefault(type_name, {})
+                matrix_row[actual_name] = matrix_row.get(actual_name, 0) + 1
 
             if expected_type is not None and predicted_type == expected_type:
                 correct_classifications += 1
@@ -157,6 +166,17 @@ class BenchmarkRunner:
                 "accuracy": (correct / total) * 100 if total else 0.0,
             }
 
+        matrix_columns = sorted(expected_device_types | actual_device_types)
+        confusion_matrix: dict[str, dict[str, int]] = {}
+        for expected_type in sorted(expected_device_types):
+            confusion_matrix[expected_type] = {
+                actual_type: confusion_matrix_counts.get(expected_type, {}).get(
+                    actual_type,
+                    0,
+                )
+                for actual_type in matrix_columns
+            }
+
         return BenchmarkReport(
             dataset_name=dataset_name,
             total_devices=total_devices,
@@ -164,6 +184,7 @@ class BenchmarkRunner:
             incorrect_classifications=incorrect_classifications,
             accuracy_percentage=accuracy_percentage,
             device_type_summary=device_type_summary,
+            confusion_matrix=confusion_matrix,
             misclassification_summary={
                 expected: dict(sorted(actual_counts.items()))
                 for expected, actual_counts in sorted(misclassification_summary.items())
@@ -264,12 +285,22 @@ def benchmark_report_to_dict(
         "incorrect_classifications": report.incorrect_classifications,
         "accuracy_percentage": report.accuracy_percentage,
         "device_type_summary": report.device_type_summary,
+        "confusion_matrix": report.confusion_matrix,
         "misclassification_summary": report.misclassification_summary,
         "mismatch_summary": {
             "total_mismatches": len(mismatch_rows),
         },
         "mismatches": mismatch_rows,
     }
+
+
+def _ordered_confusion_matrix_columns(
+    confusion_matrix: dict[str, dict[str, int]],
+) -> list[str]:
+    columns: set[str] = set()
+    for actual_counts in confusion_matrix.values():
+        columns.update(actual_counts.keys())
+    return sorted(columns)
 
 
 def render_console_report(report: BenchmarkReport, generated_at: str) -> str:
@@ -304,6 +335,53 @@ def render_console_report(report: BenchmarkReport, generated_at: str) -> str:
         for expected_type, actual_counts in sorted(report.misclassification_summary.items()):
             for actual_type, count in sorted(actual_counts.items()):
                 lines.append(f"{expected_type} -> {actual_type} : {count}")
+
+    lines.extend(["", "Confusion Matrix"])
+
+    if not report.confusion_matrix:
+        lines.append("- None")
+    else:
+        expected_header = "Expected \\ Actual"
+        expected_types = sorted(report.confusion_matrix.keys())
+        actual_types = _ordered_confusion_matrix_columns(report.confusion_matrix)
+
+        expected_width = max(
+            len(expected_header),
+            *(len(expected_type) for expected_type in expected_types),
+        )
+        actual_widths = {
+            actual_type: max(
+                len(actual_type),
+                *(
+                    len(str(report.confusion_matrix[expected_type].get(actual_type, 0)))
+                    for expected_type in expected_types
+                ),
+            )
+            for actual_type in actual_types
+        }
+
+        header = (
+            f"{expected_header:<{expected_width}}"
+            " | "
+            + " | ".join(
+                f"{actual_type:>{actual_widths[actual_type]}}"
+                for actual_type in actual_types
+            )
+        )
+        separator = "-" * len(header)
+        lines.append(header)
+        lines.append(separator)
+
+        for expected_type in expected_types:
+            row = (
+                f"{expected_type:<{expected_width}}"
+                " | "
+                + " | ".join(
+                    f"{report.confusion_matrix[expected_type].get(actual_type, 0):>{actual_widths[actual_type]}}"
+                    for actual_type in actual_types
+                )
+            )
+            lines.append(row)
 
     lines.extend(
         [
@@ -377,6 +455,22 @@ def render_markdown_report(report: BenchmarkReport, generated_at: str) -> str:
         for expected_type, actual_counts in sorted(report.misclassification_summary.items()):
             for actual_type, count in sorted(actual_counts.items()):
                 lines.append(f"| {expected_type} | {actual_type} | {count} |")
+
+    lines.extend(["", "## Confusion Matrix", ""])
+
+    if not report.confusion_matrix:
+        lines.append("No benchmark data.")
+    else:
+        actual_types = _ordered_confusion_matrix_columns(report.confusion_matrix)
+        lines.append(
+            "| Expected \\ Actual | " + " | ".join(actual_types) + " |"
+        )
+        lines.append("| --- |" + "".join(" ---: |" for _ in actual_types))
+
+        for expected_type in sorted(report.confusion_matrix.keys()):
+            counts = report.confusion_matrix[expected_type]
+            row_cells = [str(counts.get(actual_type, 0)) for actual_type in actual_types]
+            lines.append("| " + expected_type + " | " + " | ".join(row_cells) + " |")
 
     lines.extend(
         [
