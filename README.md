@@ -337,6 +337,12 @@ Benchmark reports measure:
 - Incorrect classifications
 - Regression performance
 
+Canonical benchmark command:
+
+```bash
+python -m devtools benchmark
+```
+
 ---
 
 # Contributing

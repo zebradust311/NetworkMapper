@@ -202,6 +202,8 @@ Normally approve:
 ```
 python -m devtools validate
 
+python -m devtools benchmark
+
 pytest ...
 
 python -m networkmapper...
