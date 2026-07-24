@@ -1,5 +1,6 @@
 import json
 import io
+import re
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
@@ -7,9 +8,13 @@ from pathlib import Path
 
 from networkmapper.core.models import DeviceType
 from networkmapper.developer.benchmark_runner import (
+    BenchmarkMismatch,
+    BenchmarkReport,
     BenchmarkRunner,
     parse_cli_args,
     main,
+    write_json_report,
+    write_markdown_report,
 )
 
 
@@ -224,10 +229,16 @@ class BenchmarkRunnerTest(unittest.TestCase):
 
             console_output = stdout_capture.getvalue()
             self.assertIn("Dataset: dataset_console", console_output)
+            self.assertRegex(
+                console_output,
+                r"Generated at: \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z",
+            )
             self.assertIn("Total devices: 1", console_output)
             self.assertIn("Correct classifications: 1", console_output)
             self.assertIn("Incorrect classifications: 0", console_output)
             self.assertIn("Accuracy: 100.00%", console_output)
+            self.assertIn("Mismatch summary:", console_output)
+            self.assertIn("Total mismatches: 0", console_output)
             self.assertIn("Mismatch list:", console_output)
 
     def test_cli_json_report_generation(self):
@@ -272,10 +283,15 @@ class BenchmarkRunnerTest(unittest.TestCase):
                 report_payload = json.load(file_handle)
 
             self.assertEqual(report_payload["dataset_name"], "dataset_json")
+            self.assertRegex(
+                report_payload["generated_at"],
+                r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z",
+            )
             self.assertEqual(report_payload["total_devices"], 1)
             self.assertEqual(report_payload["correct_classifications"], 0)
             self.assertEqual(report_payload["incorrect_classifications"], 1)
             self.assertEqual(report_payload["accuracy_percentage"], 0.0)
+            self.assertEqual(report_payload["mismatch_summary"]["total_mismatches"], 1)
             self.assertEqual(len(report_payload["mismatches"]), 1)
             self.assertEqual(report_payload["mismatches"][0]["ip_address"], "10.20.0.10")
             self.assertEqual(report_payload["mismatches"][0]["hostname"], "host-a")
@@ -327,13 +343,91 @@ class BenchmarkRunnerTest(unittest.TestCase):
 
             markdown_content = markdown_report_path.read_text(encoding="utf-8")
             self.assertIn("# Benchmark Report: dataset_markdown", markdown_content)
+            self.assertRegex(
+                markdown_content,
+                r"Generated at: \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z",
+            )
             self.assertIn("- Total devices: 1", markdown_content)
             self.assertIn("- Correct classifications: 0", markdown_content)
             self.assertIn("- Incorrect classifications: 1", markdown_content)
             self.assertIn("- Accuracy: 0.00%", markdown_content)
+            self.assertIn("## Mismatch summary", markdown_content)
+            self.assertIn("- Total mismatches: 1", markdown_content)
             self.assertIn("| IP address | Hostname | Expected DeviceType | Actual DeviceType |", markdown_content)
             self.assertIn("| 10.30.0.10 | host-b | SERVER | UNKNOWN |", markdown_content)
             self.assertIn("Markdown report:", stdout_capture.getvalue())
+
+    def test_markdown_report_generation_with_empty_mismatch_list(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir) / "markdown_reports"
+            report = BenchmarkReport(
+                dataset_name="empty_mismatch_dataset",
+                total_devices=2,
+                correct_classifications=2,
+                incorrect_classifications=0,
+                accuracy_percentage=100.0,
+                mismatches=(),
+            )
+
+            report_path = write_markdown_report(
+                report=report,
+                output_directory=output_dir,
+                generated_at="2026-07-24T10:00:00Z",
+            )
+
+            markdown_content = report_path.read_text(encoding="utf-8")
+            self.assertIn("# Benchmark Report: empty_mismatch_dataset", markdown_content)
+            self.assertIn("Generated at: 2026-07-24T10:00:00Z", markdown_content)
+            self.assertIn("## Mismatch summary", markdown_content)
+            self.assertIn("- Total mismatches: 0", markdown_content)
+            self.assertIn("| None | N/A | N/A | N/A |", markdown_content)
+
+    def test_json_report_generation_with_multiple_mismatches(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir) / "json_reports"
+            report = BenchmarkReport(
+                dataset_name="multiple_mismatch_dataset",
+                total_devices=3,
+                correct_classifications=1,
+                incorrect_classifications=2,
+                accuracy_percentage=33.3333333333,
+                mismatches=(
+                    BenchmarkMismatch(
+                        ip_address="192.168.1.10",
+                        hostname="host-10",
+                        expected_device_type="SERVER",
+                        actual_device_type="UNKNOWN",
+                    ),
+                    BenchmarkMismatch(
+                        ip_address="192.168.1.11",
+                        hostname=None,
+                        expected_device_type="SWITCH",
+                        actual_device_type="UNKNOWN",
+                    ),
+                ),
+            )
+
+            report_path = write_json_report(
+                report=report,
+                output_directory=output_dir,
+                generated_at="2026-07-24T11:00:00Z",
+            )
+
+            with report_path.open("r", encoding="utf-8") as file_handle:
+                report_payload = json.load(file_handle)
+
+            self.assertEqual(report_payload["dataset_name"], "multiple_mismatch_dataset")
+            self.assertEqual(report_payload["generated_at"], "2026-07-24T11:00:00Z")
+            self.assertEqual(report_payload["mismatch_summary"]["total_mismatches"], 2)
+            self.assertEqual(len(report_payload["mismatches"]), 2)
+            self.assertEqual(report_payload["mismatches"][0]["ip_address"], "192.168.1.10")
+            self.assertEqual(report_payload["mismatches"][0]["hostname"], "host-10")
+            self.assertEqual(report_payload["mismatches"][0]["expected_device_type"], "SERVER")
+            self.assertEqual(report_payload["mismatches"][0]["actual_device_type"], "UNKNOWN")
+            self.assertEqual(report_payload["mismatches"][1]["ip_address"], "192.168.1.11")
+            self.assertIsNone(report_payload["mismatches"][1]["hostname"])
+            self.assertEqual(report_payload["mismatches"][1]["expected_device_type"], "SWITCH")
+            self.assertEqual(report_payload["mismatches"][1]["actual_device_type"], "UNKNOWN")
 
     def test_invalid_dataset_path_returns_error(self):
         stdout_capture = io.StringIO()

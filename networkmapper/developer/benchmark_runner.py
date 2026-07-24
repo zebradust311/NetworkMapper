@@ -4,6 +4,7 @@ import argparse
 import json
 import sys
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -203,34 +204,46 @@ def parse_cli_args(argv: list[str] | None = None) -> argparse.Namespace:
     return build_argument_parser().parse_args(argv)
 
 
-def benchmark_report_to_dict(report: BenchmarkReport) -> dict[str, Any]:
+def benchmark_report_to_dict(
+    report: BenchmarkReport,
+    generated_at: str,
+) -> dict[str, Any]:
     """Convert a benchmark report into a serializable dictionary."""
+    mismatch_rows = [
+        {
+            "ip_address": mismatch.ip_address,
+            "hostname": mismatch.hostname,
+            "expected_device_type": mismatch.expected_device_type,
+            "actual_device_type": mismatch.actual_device_type,
+        }
+        for mismatch in report.mismatches
+    ]
+
     return {
         "dataset_name": report.dataset_name,
+        "generated_at": generated_at,
         "total_devices": report.total_devices,
         "correct_classifications": report.correct_classifications,
         "incorrect_classifications": report.incorrect_classifications,
         "accuracy_percentage": report.accuracy_percentage,
-        "mismatches": [
-            {
-                "ip_address": mismatch.ip_address,
-                "hostname": mismatch.hostname,
-                "expected_device_type": mismatch.expected_device_type,
-                "actual_device_type": mismatch.actual_device_type,
-            }
-            for mismatch in report.mismatches
-        ],
+        "mismatch_summary": {
+            "total_mismatches": len(mismatch_rows),
+        },
+        "mismatches": mismatch_rows,
     }
 
 
-def render_console_report(report: BenchmarkReport) -> str:
+def render_console_report(report: BenchmarkReport, generated_at: str) -> str:
     """Render benchmark results as human-readable console text."""
     lines = [
         f"Dataset: {report.dataset_name}",
+        f"Generated at: {generated_at}",
         f"Total devices: {report.total_devices}",
         f"Correct classifications: {report.correct_classifications}",
         f"Incorrect classifications: {report.incorrect_classifications}",
         f"Accuracy: {report.accuracy_percentage:.2f}%",
+        "Mismatch summary:",
+        f"Total mismatches: {len(report.mismatches)}",
         "Mismatch list:",
     ]
 
@@ -250,15 +263,21 @@ def render_console_report(report: BenchmarkReport) -> str:
     return "\n".join(lines)
 
 
-def render_markdown_report(report: BenchmarkReport) -> str:
+def render_markdown_report(report: BenchmarkReport, generated_at: str) -> str:
     """Render benchmark results in Markdown format."""
     lines = [
         f"# Benchmark Report: {report.dataset_name}",
+        "",
+        f"Generated at: {generated_at}",
         "",
         f"- Total devices: {report.total_devices}",
         f"- Correct classifications: {report.correct_classifications}",
         f"- Incorrect classifications: {report.incorrect_classifications}",
         f"- Accuracy: {report.accuracy_percentage:.2f}%",
+        "",
+        "## Mismatch summary",
+        "",
+        f"- Total mismatches: {len(report.mismatches)}",
         "",
         "## Mismatch list",
         "",
@@ -283,23 +302,36 @@ def render_markdown_report(report: BenchmarkReport) -> str:
     return "\n".join(lines) + "\n"
 
 
-def write_json_report(report: BenchmarkReport, output_directory: str | Path) -> Path:
+def report_timestamp() -> str:
+    """Return a UTC timestamp string for report generation."""
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def write_json_report(
+    report: BenchmarkReport,
+    output_directory: str | Path,
+    generated_at: str,
+) -> Path:
     """Write benchmark report as JSON and return the report path."""
     output_path = Path(output_directory)
     output_path.mkdir(parents=True, exist_ok=True)
     report_path = output_path / f"{report.dataset_name}.json"
     with report_path.open("w", encoding="utf-8") as file_handle:
-        json.dump(benchmark_report_to_dict(report), file_handle, indent=2)
+        json.dump(benchmark_report_to_dict(report, generated_at), file_handle, indent=2)
     return report_path
 
 
-def write_markdown_report(report: BenchmarkReport, output_directory: str | Path) -> Path:
+def write_markdown_report(
+    report: BenchmarkReport,
+    output_directory: str | Path,
+    generated_at: str,
+) -> Path:
     """Write benchmark report as Markdown and return the report path."""
     output_path = Path(output_directory)
     output_path.mkdir(parents=True, exist_ok=True)
     report_path = output_path / f"{report.dataset_name}.md"
     with report_path.open("w", encoding="utf-8") as file_handle:
-        file_handle.write(render_markdown_report(report))
+        file_handle.write(render_markdown_report(report, generated_at))
     return report_path
 
 
@@ -323,16 +355,18 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Error: unable to run benchmark: {error}", file=sys.stderr)
         return 1
 
+    generated_at = report_timestamp()
+
     emit_console = args.console or (not args.write_json and not args.write_markdown)
     if emit_console:
-        print(render_console_report(report))
+        print(render_console_report(report, generated_at))
 
     if args.write_json:
-        json_report_path = write_json_report(report, args.output)
+        json_report_path = write_json_report(report, args.output, generated_at)
         print(f"JSON report: {json_report_path}")
 
     if args.write_markdown:
-        markdown_report_path = write_markdown_report(report, args.output)
+        markdown_report_path = write_markdown_report(report, args.output, generated_at)
         print(f"Markdown report: {markdown_report_path}")
 
     return 0
