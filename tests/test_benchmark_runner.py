@@ -96,6 +96,14 @@ class BenchmarkRunnerTest(unittest.TestCase):
             self.assertEqual(report.correct_classifications, 2)
             self.assertEqual(report.incorrect_classifications, 0)
             self.assertEqual(report.accuracy_percentage, 100.0)
+            self.assertEqual(report.device_type_summary["SERVER"]["total"], 1)
+            self.assertEqual(report.device_type_summary["SERVER"]["correct"], 1)
+            self.assertEqual(report.device_type_summary["SERVER"]["incorrect"], 0)
+            self.assertEqual(report.device_type_summary["SERVER"]["accuracy"], 100.0)
+            self.assertEqual(report.device_type_summary["UNKNOWN"]["total"], 1)
+            self.assertEqual(report.device_type_summary["UNKNOWN"]["correct"], 1)
+            self.assertEqual(report.device_type_summary["UNKNOWN"]["incorrect"], 0)
+            self.assertEqual(report.device_type_summary["UNKNOWN"]["accuracy"], 100.0)
             self.assertEqual(report.mismatches, ())
 
     def test_expected_vs_actual_comparison_captures_mismatches(self):
@@ -138,6 +146,8 @@ class BenchmarkRunnerTest(unittest.TestCase):
             self.assertEqual(report.correct_classifications, 1)
             self.assertEqual(report.incorrect_classifications, 1)
             self.assertEqual(report.accuracy_percentage, 50.0)
+            self.assertEqual(report.device_type_summary["SWITCH"]["accuracy"], 100.0)
+            self.assertEqual(report.device_type_summary["FIREWALL"]["accuracy"], 0.0)
             self.assertEqual(len(report.mismatches), 1)
             self.assertEqual(report.mismatches[0].ip_address, "192.168.70.20")
             self.assertEqual(report.mismatches[0].hostname, "unknown-01")
@@ -170,6 +180,7 @@ class BenchmarkRunnerTest(unittest.TestCase):
             self.assertEqual(report.total_devices, 1)
             self.assertEqual(report.correct_classifications, 0)
             self.assertEqual(report.incorrect_classifications, 1)
+            self.assertEqual(report.device_type_summary, {})
             self.assertEqual(len(report.mismatches), 1)
             self.assertEqual(report.mismatches[0].hostname, "host-01")
             self.assertEqual(report.mismatches[0].expected_device_type, "MISSING")
@@ -237,6 +248,8 @@ class BenchmarkRunnerTest(unittest.TestCase):
             self.assertIn("Correct classifications: 1", console_output)
             self.assertIn("Incorrect classifications: 0", console_output)
             self.assertIn("Accuracy: 100.00%", console_output)
+            self.assertIn("Device Type Summary", console_output)
+            self.assertIn("UNKNOWN       100.0%", console_output)
             self.assertIn("Mismatch summary:", console_output)
             self.assertIn("Total mismatches: 0", console_output)
             self.assertIn("Mismatch list:", console_output)
@@ -291,6 +304,10 @@ class BenchmarkRunnerTest(unittest.TestCase):
             self.assertEqual(report_payload["correct_classifications"], 0)
             self.assertEqual(report_payload["incorrect_classifications"], 1)
             self.assertEqual(report_payload["accuracy_percentage"], 0.0)
+            self.assertEqual(report_payload["device_type_summary"]["SERVER"]["total"], 1)
+            self.assertEqual(report_payload["device_type_summary"]["SERVER"]["correct"], 0)
+            self.assertEqual(report_payload["device_type_summary"]["SERVER"]["incorrect"], 1)
+            self.assertEqual(report_payload["device_type_summary"]["SERVER"]["accuracy"], 0.0)
             self.assertEqual(report_payload["mismatch_summary"]["total_mismatches"], 1)
             self.assertEqual(len(report_payload["mismatches"]), 1)
             self.assertEqual(report_payload["mismatches"][0]["ip_address"], "10.20.0.10")
@@ -351,6 +368,9 @@ class BenchmarkRunnerTest(unittest.TestCase):
             self.assertIn("- Correct classifications: 0", markdown_content)
             self.assertIn("- Incorrect classifications: 1", markdown_content)
             self.assertIn("- Accuracy: 0.00%", markdown_content)
+            self.assertIn("## Device Type Summary", markdown_content)
+            self.assertIn("| Device Type | Total | Correct | Incorrect | Accuracy |", markdown_content)
+            self.assertIn("| SERVER | 1 | 0 | 1 | 0.0% |", markdown_content)
             self.assertIn("## Mismatch summary", markdown_content)
             self.assertIn("- Total mismatches: 1", markdown_content)
             self.assertIn("| IP address | Hostname | Expected DeviceType | Actual DeviceType |", markdown_content)
@@ -366,6 +386,7 @@ class BenchmarkRunnerTest(unittest.TestCase):
                 correct_classifications=2,
                 incorrect_classifications=0,
                 accuracy_percentage=100.0,
+                device_type_summary={"SERVER": {"total": 2, "correct": 2, "incorrect": 0, "accuracy": 100.0}},
                 mismatches=(),
             )
 
@@ -378,6 +399,8 @@ class BenchmarkRunnerTest(unittest.TestCase):
             markdown_content = report_path.read_text(encoding="utf-8")
             self.assertIn("# Benchmark Report: empty_mismatch_dataset", markdown_content)
             self.assertIn("Generated at: 2026-07-24T10:00:00Z", markdown_content)
+            self.assertIn("## Device Type Summary", markdown_content)
+            self.assertIn("| SERVER | 2 | 2 | 0 | 100.0% |", markdown_content)
             self.assertIn("## Mismatch summary", markdown_content)
             self.assertIn("- Total mismatches: 0", markdown_content)
             self.assertIn("| None | N/A | N/A | N/A |", markdown_content)
@@ -391,6 +414,10 @@ class BenchmarkRunnerTest(unittest.TestCase):
                 correct_classifications=1,
                 incorrect_classifications=2,
                 accuracy_percentage=33.3333333333,
+                device_type_summary={
+                    "SERVER": {"total": 1, "correct": 0, "incorrect": 1, "accuracy": 0.0},
+                    "SWITCH": {"total": 2, "correct": 1, "incorrect": 1, "accuracy": 50.0},
+                },
                 mismatches=(
                     BenchmarkMismatch(
                         ip_address="192.168.1.10",
@@ -418,6 +445,8 @@ class BenchmarkRunnerTest(unittest.TestCase):
 
             self.assertEqual(report_payload["dataset_name"], "multiple_mismatch_dataset")
             self.assertEqual(report_payload["generated_at"], "2026-07-24T11:00:00Z")
+            self.assertEqual(report_payload["device_type_summary"]["SERVER"]["accuracy"], 0.0)
+            self.assertEqual(report_payload["device_type_summary"]["SWITCH"]["accuracy"], 50.0)
             self.assertEqual(report_payload["mismatch_summary"]["total_mismatches"], 2)
             self.assertEqual(len(report_payload["mismatches"]), 2)
             self.assertEqual(report_payload["mismatches"][0]["ip_address"], "192.168.1.10")
@@ -473,6 +502,150 @@ class BenchmarkRunnerTest(unittest.TestCase):
             self.assertEqual(exit_code, 0)
             self.assertTrue(output_dir.exists())
             self.assertTrue((output_dir / "dataset_output_dir.json").exists())
+
+    def test_device_type_summary_single_device_type(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            inventory_path = temp_path / "inventory.json"
+            expected_path = temp_path / "expected_results.json"
+
+            self._write_json(
+                inventory_path,
+                {
+                    "devices": [
+                        {"ip_address": "10.1.0.1", "hostname": "host-1", "vendor": "Unknown"},
+                        {"ip_address": "10.1.0.2", "hostname": "host-2", "vendor": "Unknown"},
+                    ]
+                },
+            )
+            self._write_json(
+                expected_path,
+                {
+                    "expected_results": [
+                        {"ip_address": "10.1.0.1", "device_type": "UNKNOWN"},
+                        {"ip_address": "10.1.0.2", "device_type": "UNKNOWN"},
+                    ]
+                },
+            )
+
+            report = self.runner.run_benchmark(inventory_path, expected_path)
+
+            self.assertEqual(report.device_type_summary, {
+                "UNKNOWN": {"total": 2, "correct": 2, "incorrect": 0, "accuracy": 100.0}
+            })
+
+    def test_device_type_summary_multiple_device_types(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            inventory_path = temp_path / "inventory.json"
+            expected_path = temp_path / "expected_results.json"
+
+            self._write_json(
+                inventory_path,
+                {
+                    "devices": [
+                        {"ip_address": "10.2.0.10", "hostname": "dc-01", "vendor": "Cisco"},
+                        {"ip_address": "10.2.0.20", "hostname": "switch-01", "vendor": "Cisco"},
+                        {"ip_address": "10.2.0.30", "hostname": "voice-01", "vendor": "Unknown"},
+                    ]
+                },
+            )
+            self._write_json(
+                expected_path,
+                {
+                    "expected_results": [
+                        {"ip_address": "10.2.0.10", "device_type": "SERVER"},
+                        {"ip_address": "10.2.0.20", "device_type": "SWITCH"},
+                        {"ip_address": "10.2.0.30", "device_type": "PHONE"},
+                    ]
+                },
+            )
+
+            report = self.runner.run_benchmark(inventory_path, expected_path)
+
+            self.assertEqual(report.device_type_summary["SERVER"]["total"], 1)
+            self.assertEqual(report.device_type_summary["SWITCH"]["total"], 1)
+            self.assertEqual(report.device_type_summary["PHONE"]["total"], 1)
+
+    def test_device_type_summary_empty_benchmark(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            inventory_path = temp_path / "inventory.json"
+            expected_path = temp_path / "expected_results.json"
+
+            self._write_json(inventory_path, {"devices": []})
+            self._write_json(expected_path, {"expected_results": []})
+
+            report = self.runner.run_benchmark(inventory_path, expected_path)
+
+            self.assertEqual(report.total_devices, 0)
+            self.assertEqual(report.accuracy_percentage, 0.0)
+            self.assertEqual(report.device_type_summary, {})
+
+    def test_device_type_summary_perfect_accuracy(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            inventory_path = temp_path / "inventory.json"
+            expected_path = temp_path / "expected_results.json"
+
+            self._write_json(
+                inventory_path,
+                {
+                    "devices": [
+                        {"ip_address": "10.3.0.10", "hostname": "dc-01", "vendor": "Cisco"},
+                        {"ip_address": "10.3.0.20", "hostname": "host-01", "vendor": "Unknown"},
+                    ]
+                },
+            )
+            self._write_json(
+                expected_path,
+                {
+                    "expected_results": [
+                        {"ip_address": "10.3.0.10", "device_type": "SERVER"},
+                        {"ip_address": "10.3.0.20", "device_type": "UNKNOWN"},
+                    ]
+                },
+            )
+
+            report = self.runner.run_benchmark(inventory_path, expected_path)
+
+            self.assertEqual(report.device_type_summary["SERVER"]["accuracy"], 100.0)
+            self.assertEqual(report.device_type_summary["UNKNOWN"]["accuracy"], 100.0)
+
+    def test_device_type_summary_mixed_accuracy(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            inventory_path = temp_path / "inventory.json"
+            expected_path = temp_path / "expected_results.json"
+
+            self._write_json(
+                inventory_path,
+                {
+                    "devices": [
+                        {"ip_address": "10.4.0.10", "hostname": "switch-01", "vendor": "Cisco"},
+                        {"ip_address": "10.4.0.20", "hostname": "switch-02", "vendor": "Unknown"},
+                        {"ip_address": "10.4.0.30", "hostname": "voice-01", "vendor": "Unknown"},
+                    ]
+                },
+            )
+            self._write_json(
+                expected_path,
+                {
+                    "expected_results": [
+                        {"ip_address": "10.4.0.10", "device_type": "SWITCH"},
+                        {"ip_address": "10.4.0.20", "device_type": "SWITCH"},
+                        {"ip_address": "10.4.0.30", "device_type": "PHONE"},
+                    ]
+                },
+            )
+
+            report = self.runner.run_benchmark(inventory_path, expected_path)
+
+            self.assertEqual(report.device_type_summary["SWITCH"]["total"], 2)
+            self.assertEqual(report.device_type_summary["SWITCH"]["correct"], 1)
+            self.assertEqual(report.device_type_summary["SWITCH"]["incorrect"], 1)
+            self.assertEqual(report.device_type_summary["SWITCH"]["accuracy"], 50.0)
+            self.assertEqual(report.device_type_summary["PHONE"]["accuracy"], 0.0)
 
 
 if __name__ == "__main__":

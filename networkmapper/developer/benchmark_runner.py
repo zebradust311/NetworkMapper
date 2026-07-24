@@ -31,6 +31,7 @@ class BenchmarkReport:
     correct_classifications: int
     incorrect_classifications: int
     accuracy_percentage: float
+    device_type_summary: dict[str, dict[str, float | int]]
     mismatches: tuple[BenchmarkMismatch, ...]
 
 
@@ -101,15 +102,28 @@ class BenchmarkRunner:
 
         total_devices = len(devices)
         correct_classifications = 0
+        device_type_summary_counts: dict[str, dict[str, int]] = {}
         mismatches: list[BenchmarkMismatch] = []
 
         for device in devices:
             predicted_type = self._classifier.classify(device).device_type
             expected_type = expected_by_ip.get(device.ip_address)
 
+            if expected_type is not None:
+                type_name = expected_type.name
+                summary_entry = device_type_summary_counts.setdefault(
+                    type_name,
+                    {"total": 0, "correct": 0, "incorrect": 0},
+                )
+                summary_entry["total"] += 1
+
             if expected_type is not None and predicted_type == expected_type:
                 correct_classifications += 1
+                device_type_summary_counts[expected_type.name]["correct"] += 1
                 continue
+
+            if expected_type is not None:
+                device_type_summary_counts[expected_type.name]["incorrect"] += 1
 
             mismatches.append(
                 BenchmarkMismatch(
@@ -124,6 +138,17 @@ class BenchmarkRunner:
         accuracy_percentage = (
             (correct_classifications / total_devices) * 100 if total_devices else 0.0
         )
+        device_type_summary: dict[str, dict[str, float | int]] = {}
+        for device_type, counts in sorted(device_type_summary_counts.items()):
+            total = counts["total"]
+            correct = counts["correct"]
+            incorrect = counts["incorrect"]
+            device_type_summary[device_type] = {
+                "total": total,
+                "correct": correct,
+                "incorrect": incorrect,
+                "accuracy": (correct / total) * 100 if total else 0.0,
+            }
 
         return BenchmarkReport(
             dataset_name=dataset_name,
@@ -131,6 +156,7 @@ class BenchmarkRunner:
             correct_classifications=correct_classifications,
             incorrect_classifications=incorrect_classifications,
             accuracy_percentage=accuracy_percentage,
+            device_type_summary=device_type_summary,
             mismatches=tuple(mismatches),
         )
 
@@ -226,6 +252,7 @@ def benchmark_report_to_dict(
         "correct_classifications": report.correct_classifications,
         "incorrect_classifications": report.incorrect_classifications,
         "accuracy_percentage": report.accuracy_percentage,
+        "device_type_summary": report.device_type_summary,
         "mismatch_summary": {
             "total_mismatches": len(mismatch_rows),
         },
@@ -242,10 +269,24 @@ def render_console_report(report: BenchmarkReport, generated_at: str) -> str:
         f"Correct classifications: {report.correct_classifications}",
         f"Incorrect classifications: {report.incorrect_classifications}",
         f"Accuracy: {report.accuracy_percentage:.2f}%",
+        "",
+        "Device Type Summary",
+    ]
+
+    if not report.device_type_summary:
+        lines.append("- None")
+    else:
+        for device_type, summary in sorted(report.device_type_summary.items()):
+            lines.append(f"{device_type:<12} {summary['accuracy']:>6.1f}%")
+
+    lines.extend(
+        [
+            "",
         "Mismatch summary:",
         f"Total mismatches: {len(report.mismatches)}",
         "Mismatch list:",
-    ]
+        ]
+    )
 
     if not report.mismatches:
         lines.append("- None")
@@ -275,6 +316,24 @@ def render_markdown_report(report: BenchmarkReport, generated_at: str) -> str:
         f"- Incorrect classifications: {report.incorrect_classifications}",
         f"- Accuracy: {report.accuracy_percentage:.2f}%",
         "",
+        "## Device Type Summary",
+        "",
+        "| Device Type | Total | Correct | Incorrect | Accuracy |",
+        "| --- | ---: | ---: | ---: | ---: |",
+    ]
+
+    if not report.device_type_summary:
+        lines.append("| None | 0 | 0 | 0 | 0.0% |")
+    else:
+        for device_type, summary in sorted(report.device_type_summary.items()):
+            lines.append(
+                f"| {device_type} | {summary['total']} | {summary['correct']} | "
+                f"{summary['incorrect']} | {summary['accuracy']:.1f}% |"
+            )
+
+    lines.extend(
+        [
+            "",
         "## Mismatch summary",
         "",
         f"- Total mismatches: {len(report.mismatches)}",
@@ -283,7 +342,8 @@ def render_markdown_report(report: BenchmarkReport, generated_at: str) -> str:
         "",
         "| IP address | Hostname | Expected DeviceType | Actual DeviceType |",
         "| --- | --- | --- | --- |",
-    ]
+        ]
+    )
 
     if not report.mismatches:
         lines.append("| None | N/A | N/A | N/A |")
