@@ -4,6 +4,7 @@ import sys
 
 from devtools.benchmark import format_benchmark_report, parse_args, run_benchmark_command
 from devtools.compare import compare_reports, format_compare_report, parse_args as parse_compare_args
+from devtools.diagnostics import format_diagnostics_report, run_diagnostics
 from devtools.validate import format_validation_report, run_validation
 
 
@@ -13,6 +14,7 @@ def _print_usage() -> int:
     print("  validate   Run canonical classifier regression validation")
     print("  benchmark  Run canonical benchmark workflow")
     print("  compare    Compare two benchmark JSON reports")
+    print("  diagnostics  Run canonical developer environment diagnostics")
     return 1
 
 
@@ -43,6 +45,11 @@ def main(argv: list[str] | None = None) -> int:
 
         result = compare_reports(compare_args)
         print(format_compare_report(result))
+        return result.exit_code
+
+    if command == "diagnostics" and len(args) == 1:
+        result = run_diagnostics()
+        print(format_diagnostics_report(result))
         return result.exit_code
 
     return _print_usage()
