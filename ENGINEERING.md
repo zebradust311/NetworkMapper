@@ -1,6 +1,6 @@
 # NetworkMapper Engineering Guide
 
-**Version:** 0.3.0
+**Version:** 0.4.0
 
 ---
 
@@ -402,6 +402,37 @@ Project source files and current test execution are the authoritative sources.
 
 ---
 
+# Developer Platform
+
+The `devtools` package is the canonical interface for developer automation.
+
+Developer workflows should be implemented through `devtools` rather than
+standalone scripts or ad hoc command sequences.
+
+Current commands include:
+
+```text
+python -m devtools validate
+
+python -m devtools benchmark
+
+python -m devtools compare
+```
+
+Future developer automation should extend this interface whenever practical.
+
+Developer automation should:
+
+- Reuse existing project services.
+- Avoid duplicating production logic.
+- Produce deterministic output.
+- Be suitable for both human developers and AI assistants.
+
+The Developer Platform exists to make engineering workflows repeatable,
+measurable, and project-owned.
+
+---
+
 # Architecture Policy
 
 Do not modify architecture unless the sprint explicitly requires it.
@@ -609,3 +640,52 @@ Benchmark before optimizing.
 Prefer deterministic behavior over cleverness.
 
 Prefer explainability over complexity.
+
+---
+
+## Architecture Reviews
+
+Major milestones should conclude with an Architecture Review.
+
+An Architecture Review should include:
+
+- Executive Summary
+- Completed Objectives
+- Architecture Assessment
+- Testing Assessment
+- Documentation Assessment
+- Technical Debt
+- Risks
+- Recommendations
+- Overall Grade
+- Approval Status
+
+Architecture Reviews are intended to guide future engineering decisions,
+not merely summarize completed work.
+
+---
+
+# Architectural Decision Records
+
+Major architectural decisions should be recorded as Architecture Decision
+Records (ADRs).
+
+An ADR should capture:
+
+- The problem being solved.
+- The selected solution.
+- Alternatives considered.
+- Consequences of the decision.
+
+Architecture Reviews evaluate the current state of the project.
+
+ADRs explain why significant architectural decisions were made.
+
+When practical, architectural changes should update:
+
+- ROADMAP.md
+- docs/architecture/
+- docs/ADR.md
+
+Architecture Reviews and ADRs complement one another and together provide the
+historical context for future engineering decisions.

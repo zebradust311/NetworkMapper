@@ -15,6 +15,8 @@ Future ideas and planned features belong in `ROADMAP.md`.
 
 ADRs are recorded in chronological order and are never renumbered.
 
+---
+
 ## ADR-001 — Two-Phase STANDARD Discovery
 
 **Status:** Accepted
@@ -46,7 +48,8 @@ Every classification rule returns a `RuleResult`.
 
 ### Rationale
 
-This provides structured evidence for every evaluated rule and enables explainable classification.
+This provides structured evidence for every evaluated rule and enables
+explainable classification.
 
 ### Consequences
 
@@ -63,7 +66,7 @@ This provides structured evidence for every evaluated rule and enables explainab
 ### Decision
 
 Classification evaluates rules in deterministic order and stops after the
-first matching RuleResult.
+first matching `RuleResult`.
 
 ### Rationale
 
@@ -127,23 +130,67 @@ Reports should remain deterministic and side-effect free.
 
 ---
 
-## ADR-006 - Benchmark Framework
+## ADR-006 — Benchmark Framework
 
 **Status:** Accepted
 
 ### Decision
 
-Benchmarking is implemented as
-developer tooling separate from
-production classification.
+Benchmarking is implemented as developer tooling separate from production
+classification.
 
 ### Rationale
 
-Accuracy measurement should never
-modify production behavior.
+Accuracy measurement should never modify production behavior.
 
 ### Consequences
 
 - Benchmark datasets become regression assets.
 - Classification quality becomes measurable.
 - Future reporting can build on the same framework.
+
+---
+
+## ADR-007 — Developer Platform
+
+**Status:** Accepted
+
+### Decision
+
+Developer automation is implemented through the `devtools` package using a
+single command entry point:
+
+```text
+python -m devtools
+```
+
+Individual developer workflows are exposed as subcommands rather than
+standalone scripts.
+
+Current commands include:
+
+- validate
+- benchmark
+- compare
+
+### Rationale
+
+As NetworkMapper evolved, developer workflows became increasingly repetitive
+and difficult to maintain when implemented as individual commands or
+IDE-specific procedures.
+
+A single automation interface provides a consistent experience for both human
+developers and AI assistants while keeping engineering workflows independent
+of any specific development environment.
+
+Developer automation should orchestrate existing project services rather than
+duplicate production logic.
+
+### Consequences
+
+- Developer workflows have one canonical entry point.
+- Validation, benchmarking, and comparison share a consistent interface.
+- Future developer tooling extends the existing platform rather than creating
+  standalone scripts.
+- Engineering workflows become easier to document, automate, and maintain.
+- Development workflows are independent of IDE-specific validation mechanisms.
