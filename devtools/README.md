@@ -10,6 +10,7 @@ The package centralizes project-level development commands so contributors use a
 
 - `validate`: Runs the canonical regression suite and prints a concise PASS/FAIL summary.
 - `benchmark`: Runs the canonical benchmark workflow and writes JSON/Markdown reports.
+- `compare`: Compares two benchmark JSON reports and summarizes improvements/regressions.
 
 ## Usage
 
@@ -23,6 +24,18 @@ Run the standard benchmark workflow:
 
 ```bash
 python -m devtools benchmark
+```
+
+Compare benchmark reports:
+
+```bash
+python -m devtools compare
+```
+
+Compare explicit report files:
+
+```bash
+python -m devtools compare output/benchmarks/homelab.json output/benchmarks/enterprise.json
 ```
 
 ## Future Tools
