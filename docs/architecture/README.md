@@ -10,6 +10,7 @@ These documents complement the broader project references in the repository root
 - [ENGINEERING.md](../../ENGINEERING.md) defines engineering principles and design constraints.
 - [ROADMAP.md](../../ROADMAP.md) tracks completed milestones and planned work.
 - [docs/ARCHITECTURE.md](../ARCHITECTURE.md) provides an existing high-level architecture narrative.
+- [docs/knowledge/](../knowledge/) explains how field observations mature into knowledge, benchmarks, and classification changes.
 
 ## Current Documents
 

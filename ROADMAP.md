@@ -36,6 +36,7 @@ Everything else is derived from them.
 - Benchmark framework
 - Benchmark analytics
 - Engineering documentation
+- Knowledge framework
 
 ---
 
@@ -134,6 +135,26 @@ Current benchmark capabilities:
 - ⬜ DEV-003 Benchmark comparison utility
 - ⬜ DEV-004 Benchmark trend reports
 - ⬜ DEV-005 Benchmark dataset validator
+
+---
+
+# Knowledge Framework ✅
+
+## Foundation
+
+- ✅ KNOW-001 Knowledge Framework
+
+Establishes how operational knowledge enters, matures within, and influences
+NetworkMapper.
+
+Current knowledge documentation:
+
+- Knowledge overview and purpose
+- Canonical field observation format
+- Reusable observation template
+- Observation-to-architecture-review lifecycle
+
+See [docs/knowledge/](docs/knowledge/) for the current documents.
 
 ---
 
