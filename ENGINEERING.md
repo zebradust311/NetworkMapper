@@ -313,6 +313,16 @@ AI accelerates implementation.
 
 Humans remain responsible for architecture.
 
+Implementation engineers do not make architecture decisions.
+
+Architecture changes require explicit sprint approval.
+
+When architectural uncertainty is discovered:
+
+- stop
+- report
+- await direction
+
 Every implementation sprint should have one objective.
 
 Avoid unrelated cleanup.
@@ -400,6 +410,16 @@ Never validate software behavior using IDE artifacts.
 
 Project source files and current test execution are the authoritative sources.
 
+Before implementation:
+
+1. Read ROADMAP.md.
+2. Verify the requested sprint has not already been implemented.
+3. If a discrepancy is found:
+   - stop
+   - report the discrepancy
+   - do not modify ROADMAP.md
+   - do not implement duplicate work
+
 ---
 
 # Developer Platform
@@ -430,6 +450,19 @@ Developer automation should:
 
 The Developer Platform exists to make engineering workflows repeatable,
 measurable, and project-owned.
+
+Future developer tooling should provide a Review Package suitable for architecture review.
+
+A Review Package should include:
+
+- Changed files
+- Diagnostics summary
+- Benchmark summary
+- Compare summary
+- Git status
+- Git diff
+
+The Review Package is the primary artifact for post-implementation architecture review.
 
 ---
 
@@ -585,6 +618,42 @@ Open formats are preferred whenever practical.
 
 ---
 
+# Evidence-Driven Engineering
+
+Engineering decisions should be supported by measurable evidence whenever practical.
+
+Sources of evidence include:
+
+- Regression tests
+- Benchmarks
+- Diagnostics
+- Architecture reviews
+- Field observations
+
+Avoid speculative implementation.
+
+Benchmark before optimizing.
+
+Measure before refactoring.
+
+---
+
+# Field Observations
+
+Real-world technician observations are first-class engineering inputs.
+
+Field observations should:
+
+- identify the vendor
+- identify the product
+- describe the deployment environment
+- describe the observed operational role
+- avoid assumptions beyond observed behavior
+
+Field observations should guide future benchmark datasets and classification improvements.
+
+---
+
 # Product Personas
 
 ## Technician
@@ -689,3 +758,39 @@ When practical, architectural changes should update:
 
 Architecture Reviews and ADRs complement one another and together provide the
 historical context for future engineering decisions.
+
+---
+
+## Canonical Developer Commands
+
+Implementation engineers should prefer these commands.
+
+Validation
+
+python -m devtools validate
+
+Diagnostics
+
+python -m devtools diagnostics
+
+Benchmark
+
+python -m devtools benchmark
+
+Comparison
+
+python -m devtools compare
+
+Review
+
+python -m devtools review (planned)
+
+---
+
+## Sprint Scope
+
+Every sprint has one primary objective.
+
+Tests, documentation, and validation supporting that objective are encouraged.
+
+Unrelated features, roadmap changes, and opportunistic cleanup belong in separate sprints.
