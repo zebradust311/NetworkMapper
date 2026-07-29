@@ -201,6 +201,8 @@ Discovery providers are responsible for collecting device evidence. `DiscoveryEn
 
 This separation keeps evidence collection and evidence interpretation as distinct architectural concerns.
 
+This is formalized as a project-wide architectural principle in [docs/ADR.md](../ADR.md), ADR-008 — Discovery is Immutable, Interpretation is Adjustable. That decision does not change the classification behavior described in this document; it establishes the broader principle that discovery data and interpretation data are distinct and evolve independently.
+
 ## Relationship to Benchmarking
 
 Benchmarking is a consumer of classifier behavior rather than part of the classification subsystem itself.

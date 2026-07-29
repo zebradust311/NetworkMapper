@@ -194,3 +194,134 @@ duplicate production logic.
   standalone scripts.
 - Engineering workflows become easier to document, automate, and maintain.
 - Development workflows are independent of IDE-specific validation mechanisms.
+
+---
+
+## ADR-008 — Discovery is Immutable, Interpretation is Adjustable
+
+**Status:** Accepted
+
+### Context
+
+During FEAT-001 Phase A, we recognized that legacy classifier rules contained a mixture of product identifiers, operational conventions, and customer-specific naming patterns accumulated over the project's evolution. For example `vsh` (a single observed customer
+convention), `vmhost` (generic administrator naming), `esx` (legacy VMware
+naming), `esxi` (current VMware naming), `vcenter` (a high-confidence product
+identifier), and `vm` (vendor-agnostic virtualization terminology).
+
+These conventions are not equivalent. Some are one-time observations, some
+are generic patterns, and some are strong product identifiers. Encoding all
+of them as permanent classification rule keywords conflates what was actually
+observed with what NetworkMapper concludes that observation means.
+
+This conflation already exists structurally today. `Device`
+([networkmapper/core/models.py](../networkmapper/core/models.py)) stores raw
+discovery facts (`hostname`, `vendor`, `open_ports`, `detected_services`,
+`operating_system`) and the derived `device_type` on the same mutable object,
+and `DeviceClassifier.classify()` overwrites `device_type` in place (see
+[docs/architecture/classification.md](architecture/classification.md)).
+There is currently no structural separation between what was discovered and
+what NetworkMapper concluded from it.
+
+The project has already accepted this same kind of separation in narrower
+form: `RuleResult` separates a rule's evidence from its conclusion within a
+single classification pass (ADR-002), and presentation logic never mutates
+stored discovery or classification state (ADR-005). The Knowledge Framework
+([docs/knowledge/](knowledge/README.md)) separately distinguishes raw Field
+Observations from corroborated Knowledge. This ADR generalizes the same
+principle to the relationship between discovery and interpretation across
+the device's lifetime, including rescans and any future manual override
+capability.
+
+### Decision
+
+NetworkMapper treats discovery and interpretation as two distinct categories
+of information:
+
+- **Discovery** is the record of what was directly observed — hostnames,
+  vendors, open ports, detected services, operating system signatures, and
+  similar raw facts obtained from a `DiscoveryProvider`.
+- **Interpretation** is any engineering conclusion drawn from discovery —
+  device type classification, operational role, confidence, and similar
+  derived judgments.
+
+Interpretation may originate from automated classification or from explicit engineering judgment, but it must always remain traceable to the discovery evidence that informed it.
+
+A recorded observation is immutable. A subsequent scan creates a new observation. Interpretation is adjustable — through re-classification, through evolving classification rules, or through any
+future manual override capability — without altering the discovery record it
+was derived from.
+
+### Rationale
+
+- Naming conventions and deployment patterns observed in the field (see
+  FEAT-001 Phase A and [docs/knowledge/](knowledge/README.md)) vary by
+  customer, vendor, and era, and can never be fully enumerated as
+  classification rules. Treating every observed convention as a permanent
+  rule change conflates a single observation with a durable engineering
+  conclusion.
+- Keeping discovery immutable preserves an authoritative, replayable record
+  of what was actually seen, independent of how NetworkMapper's
+  interpretation of that evidence evolves over time.
+- Keeping interpretation adjustable allows classification to improve through
+  the Knowledge Framework's lifecycle — Observation → Knowledge → Benchmark
+  → Classification → Validation → Architecture Review (see
+  [docs/knowledge/KNOWLEDGE-LIFECYCLE.md](knowledge/KNOWLEDGE-LIFECYCLE.md))
+  — without requiring discovery to be re-run or discarded.
+- This is consistent with, and extends, decisions already accepted elsewhere
+  in the project: ADR-002 separates evidence from conclusion within a single
+  classification pass; ADR-005 ensures presentation never mutates stored
+  state. This ADR extends the same discipline across time — across rescans
+  and any future manual override capability.
+
+### Consequences
+
+- Rescans must be able to update discovery without silently discarding
+  engineering knowledge attached to interpretation, such as a manual
+  override or the rationale for a prior classification. How that is
+  preserved is future work; this ADR establishes only the principle.
+- Any future manual override capability adjusts interpretation, never
+  discovery. An override changes what NetworkMapper concludes about a
+  device, not what was actually observed about it.
+- Classification rules remain the current mechanism for producing
+  interpretation from discovery (ADR-002, ADR-003) and are unchanged by this
+  ADR. This ADR does not modify `DeviceClassifier`, `RuleResult`, or any
+  classification rule.
+- The current `Device` model does not yet structurally separate discovery
+  fields from `device_type`. This ADR does not change that model now; it
+  establishes the principle that future schema, persistence, or UI work must
+  follow.
+- This ADR does not implement persistence, configuration, database schema,
+  or UI. Those remain explicitly deferred.
+
+### Future Work
+
+The following are explicitly deferred and are not authorized by this ADR:
+
+- A persisted schema that structurally separates discovery fields from
+  interpretation fields.
+- A mechanism for recording, storing, and reconciling manual overrides with
+  subsequent rescans.
+- A merge strategy for how a rescan reconciles newly discovered facts with
+  previously recorded discovery, without discarding interpretation history.
+- Any UI or reporting concepts for presenting discovery separately from
+  interpretation.
+
+Each of the above requires its own approved sprint and, per
+[ENGINEERING.md](../ENGINEERING.md), its own updates to `ROADMAP.md`,
+`docs/architecture/`, and `docs/ADR.md`.
+
+### Engineering Philosophy
+
+This decision reinforces existing NetworkMapper principles rather than
+introducing new ones. [ENGINEERING.md](../ENGINEERING.md) already states that
+discovery gathers facts, intelligence interprets facts, and exporters present
+facts. It also already calls for evidence-driven engineering: classification
+changes should be justified by corroborated evidence, not accumulated as
+permanent rule exceptions for every observed convention.
+
+Explainability remains the deciding constraint. Because interpretation is
+kept separate and adjustable, NetworkMapper can explain not only what it
+concluded, but that the conclusion is distinct from, and does not overwrite,
+what was actually observed.
+
+"If you can't make it perfect, make it adjustable."
+Network discovery operates in environments shaped by years of accumulated operational decisions, legacy systems, and inconsistent naming conventions. Rather than attempting to encode every possible convention into automated logic, NetworkMapper preserves objective discovery while allowing engineers to adjust interpretations explicitly and transparently. The software's goal is not to eliminate engineering judgment, but to support and preserve it
