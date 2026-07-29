@@ -52,8 +52,16 @@ NetworkMapper's long-term goal is to understand device relationships, not just e
 
 The Knowledge Framework is the mechanism by which that accumulation happens deliberately rather than incidentally. Over time, it is intended to give Architecture Reviews (see [ENGINEERING.md](../../ENGINEERING.md)) a durable record of what the project has learned, and why specific classification and benchmarking decisions were made.
 
+## Vendor Knowledge
+
+Individual Field Observations are raw, single-encounter accounts. Once multiple independent observations about the same vendor have been corroborated into Knowledge, that understanding is organized by vendor in [docs/knowledge/vendors/](./vendors/), rather than staying scattered across individual observation entries.
+
+Vendor Knowledge is corroborated operational experience — deployment characteristics, naming conventions, and operational context — not a product catalog, vendor marketing, or a device inventory. See [docs/knowledge/vendors/README.md](./vendors/README.md) for the full explanation of what Vendor Knowledge is, why it is kept separate from Field Observations, and when a vendor document should be created.
+
 ## Related Documents
 
 - [FIELD-OBSERVATIONS.md](./FIELD-OBSERVATIONS.md) — the canonical observation format, with worked examples.
 - [OBSERVATION-TEMPLATE.md](./OBSERVATION-TEMPLATE.md) — a reusable template for recording new observations.
 - [KNOWLEDGE-LIFECYCLE.md](./KNOWLEDGE-LIFECYCLE.md) — how an observation matures into knowledge, benchmarks, classification, validation, and architecture review.
+- [vendors/README.md](./vendors/README.md) — what Vendor Knowledge is and how it relates to Field Observations.
+- [vendors/VENDOR-TEMPLATE.md](./vendors/VENDOR-TEMPLATE.md) — a reusable template for future vendor documents.

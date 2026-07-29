@@ -143,6 +143,7 @@ Current benchmark capabilities:
 ## Foundation
 
 - ✅ KNOW-001 Knowledge Framework
+- ✅ KNOW-002 Vendor Knowledge Foundation
 
 Establishes how operational knowledge enters, matures within, and influences
 NetworkMapper.
@@ -153,6 +154,8 @@ Current knowledge documentation:
 - Canonical field observation format
 - Reusable observation template
 - Observation-to-architecture-review lifecycle
+- Vendor Knowledge subsystem overview
+- Reusable vendor document template
 
 See [docs/knowledge/](docs/knowledge/) for the current documents.
 
