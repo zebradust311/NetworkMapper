@@ -15,6 +15,10 @@
     {
       "ip_address": "192.168.10.40",
       "device_type": "PHONE"
+    },
+    {
+      "ip_address": "192.168.10.50",
+      "device_type": "HYPERVISOR"
     }
   ]
 }

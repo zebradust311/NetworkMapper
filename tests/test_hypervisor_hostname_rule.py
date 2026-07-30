@@ -75,6 +75,144 @@ class HypervisorHostnameRuleTest(unittest.TestCase):
             "Hostname 'ESXI-01' matched known hypervisor naming convention.",
         )
 
+    def test_esx_hostname_matches_legacy_vmware_pattern(self):
+        device = Device(
+            ip_address="192.168.1.64",
+            hostname="esx-01",
+            vendor="Unknown",
+        )
+
+        result = HypervisorHostnameRule().classify(device)
+
+        self.assertIsInstance(result, RuleResult)
+        self.assertTrue(result.matched)
+        self.assertEqual(result.suggested_device_type, DeviceType.HYPERVISOR)
+        self.assertEqual(
+            result.reason,
+            "Hostname 'esx-01' matched known hypervisor naming convention.",
+        )
+
+    def test_hyperv_hostname_matches_microsoft_pattern(self):
+        device = Device(
+            ip_address="192.168.1.65",
+            hostname="hyperv-node-01",
+            vendor="Unknown",
+        )
+
+        result = HypervisorHostnameRule().classify(device)
+
+        self.assertIsInstance(result, RuleResult)
+        self.assertTrue(result.matched)
+        self.assertEqual(result.suggested_device_type, DeviceType.HYPERVISOR)
+        self.assertEqual(
+            result.reason,
+            "Hostname 'hyperv-node-01' matched known hypervisor naming convention.",
+        )
+
+    def test_vcenter_hostname_matches_management_appliance_pattern(self):
+        device = Device(
+            ip_address="192.168.1.66",
+            hostname="vcenter-01",
+            vendor="Unknown",
+        )
+
+        result = HypervisorHostnameRule().classify(device)
+
+        self.assertIsInstance(result, RuleResult)
+        self.assertTrue(result.matched)
+        self.assertEqual(result.suggested_device_type, DeviceType.HYPERVISOR)
+        self.assertEqual(
+            result.reason,
+            "Hostname 'vcenter-01' matched known hypervisor naming convention.",
+        )
+
+    def test_vmhost_hostname_matches_generic_administrator_pattern(self):
+        device = Device(
+            ip_address="192.168.1.67",
+            hostname="vmhost-01",
+            vendor="Unknown",
+        )
+
+        result = HypervisorHostnameRule().classify(device)
+
+        self.assertIsInstance(result, RuleResult)
+        self.assertTrue(result.matched)
+        self.assertEqual(result.suggested_device_type, DeviceType.HYPERVISOR)
+        self.assertEqual(
+            result.reason,
+            "Hostname 'vmhost-01' matched known hypervisor naming convention.",
+        )
+
+    def test_generic_vm_hostname_without_specific_keyword_does_not_match(self):
+        device = Device(
+            ip_address="192.168.1.68",
+            hostname="vm-01",
+            vendor="Unknown",
+        )
+
+        result = HypervisorHostnameRule().classify(device)
+
+        self.assertIsInstance(result, RuleResult)
+        self.assertFalse(result.matched)
+        self.assertIsNone(result.suggested_device_type)
+        self.assertEqual(
+            result.reason,
+            "Hostname 'vm-01' did not match known hypervisor naming conventions.",
+        )
+
+    def test_hostname_match_with_corroborating_port_enriches_reason(self):
+        device = Device(
+            ip_address="192.168.1.69",
+            hostname="esxi-02",
+            vendor="Unknown",
+            open_ports=[443],
+        )
+
+        result = HypervisorHostnameRule().classify(device)
+
+        self.assertTrue(result.matched)
+        self.assertEqual(result.suggested_device_type, DeviceType.HYPERVISOR)
+        self.assertEqual(
+            result.reason,
+            "Hostname 'esxi-02' with open port 443 matched known hypervisor evidence.",
+        )
+
+    def test_hostname_match_with_corroborating_service_enriches_reason(self):
+        device = Device(
+            ip_address="192.168.1.70",
+            hostname="vcenter-02",
+            vendor="Unknown",
+            detected_services=["https"],
+        )
+
+        result = HypervisorHostnameRule().classify(device)
+
+        self.assertTrue(result.matched)
+        self.assertEqual(result.suggested_device_type, DeviceType.HYPERVISOR)
+        self.assertEqual(
+            result.reason,
+            "Hostname 'vcenter-02' with service 'https' matched known hypervisor evidence.",
+        )
+
+    def test_hostname_match_with_port_and_service_enriches_reason(self):
+        device = Device(
+            ip_address="192.168.1.71",
+            hostname="hyperv-02",
+            vendor="Unknown",
+            open_ports=[3389],
+            detected_services=["ms-wbt-server"],
+        )
+
+        result = HypervisorHostnameRule().classify(device)
+
+        self.assertTrue(result.matched)
+        self.assertEqual(result.suggested_device_type, DeviceType.HYPERVISOR)
+        self.assertEqual(
+            result.reason,
+            "Hostname 'hyperv-02' with open port 3389 and service 'ms-wbt-server' "
+            "matched known hypervisor evidence.",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -20,6 +20,11 @@
       "ip_address": "192.168.10.40",
       "hostname": "phone-01",
       "vendor": "Yealink"
+    },
+    {
+      "ip_address": "192.168.10.50",
+      "hostname": "vcenter-01",
+      "vendor": "Unknown"
     }
   ]
 }

@@ -24,6 +24,16 @@
       "ip_address": "10.20.0.40",
       "hostname": "SRV-APP01",
       "vendor": "Unknown"
+    },
+    {
+      "ip_address": "10.20.0.50",
+      "hostname": "hyperv-node-01",
+      "vendor": "Unknown"
+    },
+    {
+      "ip_address": "10.20.0.60",
+      "hostname": "vmhost-01",
+      "vendor": "Unknown"
     }
   ]
 }
