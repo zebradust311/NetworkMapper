@@ -355,6 +355,16 @@ After implementing a sprint:
 
 1. Execute the requested regression target.
 
+   - `python -m devtools validate` covers the classification subsystem only
+     (the classifier, RuleResult evidence, and every classification rule).
+   - Use `python -m devtools validate --all` whenever a sprint touches
+     discovery, exporters, the CLI, benchmark infrastructure, the
+     classification workbench, project comparison, or project
+     summary/reporting. `validate` alone does not exercise any of these.
+   - See `devtools/README.md` and
+     `docs/reports/TEST-001-Validation-Coverage-Assessment.md` for the
+     investigation behind this distinction.
+
 2. Use only the stdout/stderr produced by that execution.
 
 3. Summarize the results.
@@ -434,10 +444,16 @@ Current commands include:
 ```text
 python -m devtools validate
 
+python -m devtools validate --all
+
 python -m devtools benchmark
 
 python -m devtools compare
 ```
+
+`validate` runs the fast, classifier-only regression suite. `validate --all`
+runs every test module and every benchmark dataset, discovered
+automatically, without changing what `validate` alone does.
 
 Future developer automation should extend this interface whenever practical.
 
@@ -765,9 +781,13 @@ historical context for future engineering decisions.
 
 Implementation engineers should prefer these commands.
 
-Validation
+Validation (fast, classifier-only)
 
 python -m devtools validate
+
+Validation (comprehensive — every test module, every benchmark dataset)
+
+python -m devtools validate --all
 
 Diagnostics
 

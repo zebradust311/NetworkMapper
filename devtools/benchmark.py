@@ -34,6 +34,25 @@ class BenchmarkCommandResult:
     passed: bool
 
 
+def discover_benchmark_datasets(root: Path = DEFAULT_BENCHMARK_ROOT) -> tuple[Path, ...]:
+    """Return every benchmark dataset directory with both required fixture files.
+
+    Used by full validation so new datasets are picked up automatically,
+    rather than requiring a second hardcoded list to stay in sync.
+    """
+    if not root.is_dir():
+        return ()
+
+    datasets = [
+        entry
+        for entry in sorted(root.iterdir())
+        if entry.is_dir()
+        and (entry / "inventory.json").is_file()
+        and (entry / "expected_results.json").is_file()
+    ]
+    return tuple(datasets)
+
+
 def build_argument_parser() -> argparse.ArgumentParser:
     """Build and return the benchmark command parser."""
     parser = argparse.ArgumentParser(
