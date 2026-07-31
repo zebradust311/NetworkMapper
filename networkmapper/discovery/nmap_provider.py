@@ -7,6 +7,13 @@ from networkmapper.discovery.provider import DiscoveryProvider
 from networkmapper.discovery.scan_profile import ScanProfile
 
 
+# 902/903 are VMware's core ESXi host management ports (vmware-authd
+# authentication and the legacy MKS remote-console channel). They are
+# present on every ESXi installation, unlike 5988/5989 (CIM/WBEM hardware
+# management), which are optional, frequently disabled, and considered
+# legacy on modern ESXi versions. 5988/5989 were evaluated for inclusion
+# (FEAT-002B) and deliberately excluded: their lower universality doesn't
+# justify the added scan surface without a specific classification need.
 CLASSIFICATION_PORTS = [
     22,
     53,
@@ -22,6 +29,8 @@ CLASSIFICATION_PORTS = [
     5061,
     8080,
     8443,
+    902,
+    903,
 ]
 
 

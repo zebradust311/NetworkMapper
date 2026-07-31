@@ -34,6 +34,13 @@
       "ip_address": "10.20.0.60",
       "hostname": "vmhost-01",
       "vendor": "Unknown"
+    },
+    {
+      "ip_address": "10.20.0.70",
+      "hostname": "esxi-mgmt-01",
+      "vendor": "Unknown",
+      "open_ports": [902, 903],
+      "detected_services": ["vmware-auth"]
     }
   ]
 }

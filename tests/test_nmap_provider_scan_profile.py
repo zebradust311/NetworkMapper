@@ -59,7 +59,7 @@ class NmapProviderScanProfileTest(unittest.TestCase):
                     hosts="172.16.100.10 172.16.100.11",
                     arguments=(
                         "-Pn -sV --version-light -p "
-                        "22,53,80,161,443,445,515,631,9100,3389,5060,5061,8080,8443"
+                        "22,53,80,161,443,445,515,631,9100,3389,5060,5061,8080,8443,902,903"
                     ),
                 ),
             ]
@@ -159,7 +159,7 @@ class NmapProviderScanProfileTest(unittest.TestCase):
 
             if arguments == (
                 "-Pn -sV --version-light -p "
-                "22,53,80,161,443,445,515,631,9100,3389,5060,5061,8080,8443"
+                "22,53,80,161,443,445,515,631,9100,3389,5060,5061,8080,8443,902,903"
             ):
                 return {
                     "scan": {
@@ -191,6 +191,53 @@ class NmapProviderScanProfileTest(unittest.TestCase):
         self.assertEqual(
             devices[0].detected_services,
             ["http", "jetdirect", "snmp"],
+        )
+
+    @patch("networkmapper.discovery.nmap_provider.nmap.PortScanner")
+    def test_standard_enrichment_captures_vmware_management_ports(self, port_scanner_mock):
+        scanner = port_scanner_mock.return_value
+
+        def scan_side_effect(*, hosts, arguments):
+            if arguments == "-sn":
+                return {
+                    "scan": {
+                        "172.16.100.30": {
+                            "hostnames": [{"name": "esxi-mgmt-01"}],
+                        }
+                    }
+                }
+
+            if arguments == (
+                "-Pn -sV --version-light -p "
+                "22,53,80,161,443,445,515,631,9100,3389,5060,5061,8080,8443,902,903"
+            ):
+                return {
+                    "scan": {
+                        "172.16.100.30": {
+                            "tcp": {
+                                902: {"state": "open", "name": "vmware-auth"},
+                                903: {"state": "open", "name": "iss-realsecure"},
+                            },
+                        }
+                    }
+                }
+
+            return {"scan": {}}
+
+        scanner.scan.side_effect = scan_side_effect
+
+        provider = NmapProvider(
+            "172.16.100.0/24",
+            scan_profile=ScanProfile.STANDARD,
+        )
+        devices = provider.discover()
+
+        self.assertEqual(len(devices), 1)
+        self.assertEqual(devices[0].ip_address, "172.16.100.30")
+        self.assertEqual(devices[0].open_ports, [902, 903])
+        self.assertEqual(
+            devices[0].detected_services,
+            ["iss-realsecure", "vmware-auth"],
         )
 
     @patch("networkmapper.discovery.nmap_provider.nmap.PortScanner")

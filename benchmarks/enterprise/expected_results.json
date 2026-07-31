@@ -23,6 +23,10 @@
     {
       "ip_address": "10.20.0.60",
       "device_type": "HYPERVISOR"
+    },
+    {
+      "ip_address": "10.20.0.70",
+      "device_type": "HYPERVISOR"
     }
   ]
 }
