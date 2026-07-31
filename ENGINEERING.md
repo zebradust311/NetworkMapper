@@ -335,63 +335,23 @@ If additional work is discovered, report it separately.
 
 # Sprint Workflow
 
-Every sprint follows this sequence:
-
-1. Planning
-2. Implementation
-3. Focused tests
-4. Focused regression
-5. Human review
-6. Commit
-7. Push
+The canonical sprint lifecycle is defined in
+[docs/process/sprint-lifecycle.md](docs/process/sprint-lifecycle.md):
+Investigation → Architecture Review → Implementation → Validation → Human
+Review → Commit.
 
 Never combine multiple unrelated objectives into one sprint.
+
+See also [docs/process/engineering-principles.md](docs/process/engineering-principles.md)
+and [docs/process/role-definitions.md](docs/process/role-definitions.md).
 
 ---
 
 # Validation Workflow
 
-After implementing a sprint:
-
-1. Execute the requested regression target.
-
-   - `python -m devtools validate` covers the classification subsystem only
-     (the classifier, RuleResult evidence, and every classification rule).
-   - Use `python -m devtools validate --all` whenever a sprint touches
-     discovery, exporters, the CLI, benchmark infrastructure, the
-     classification workbench, project comparison, or project
-     summary/reporting. `validate` alone does not exercise any of these.
-   - See `devtools/README.md` and
-     `docs/reports/TEST-001-Validation-Coverage-Assessment.md` for the
-     investigation behind this distinction.
-
-2. Use only the stdout/stderr produced by that execution.
-
-3. Summarize the results.
-
-4. Stop.
-
-If additional validation is required:
-
-- rerun the requested tests
-- do not inspect cached output
-
-Never inspect:
-
-- VS Code workspaceStorage
-- GitHub Copilot chat-session-resources
-- content.txt
-- editor cache
-- temporary AI transcripts
-- IDE-generated files
-
-Never execute PowerShell commands that reference those locations.
-
-If test output is unavailable:
-
-Rerun the tests.
-
-Never recover cached output.
+Validation commands and when to use each — `validate`, `validate --all`,
+`benchmark`, `diagnostics` — are defined in
+[docs/process/validation-workflow.md](docs/process/validation-workflow.md).
 
 ---
 
@@ -429,6 +389,11 @@ Before implementation:
    - report the discrepancy
    - do not modify ROADMAP.md
    - do not implement duplicate work
+
+See also [docs/process/stop-conditions.md](docs/process/stop-conditions.md) for
+the complete, mandatory set of stop conditions, and
+[docs/process/role-definitions.md](docs/process/role-definitions.md) for how
+this policy maps onto the AI Investigator/Implementer/Reviewer roles.
 
 ---
 
@@ -779,7 +744,9 @@ historical context for future engineering decisions.
 
 ## Canonical Developer Commands
 
-Implementation engineers should prefer these commands.
+Implementation engineers should prefer these commands. See
+[docs/process/validation-workflow.md](docs/process/validation-workflow.md) for
+guidance on which validation command to use for a given sprint.
 
 Validation (fast, classifier-only)
 

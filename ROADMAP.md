@@ -303,15 +303,12 @@ Every sprint follows:
 
 ## Next Sprint
 
-**DEV-002 — Shared Evidence Helper Library**
+DEV-002 was completed as part of the DEV-003 sprint (shared evidence helpers
+landed alongside the developer automation framework) but was never marked
+complete here.
 
-Goals:
-
-- Eliminate duplicated rule helper logic
-- Preserve all classifier behavior
-- Preserve RuleResult evidence
-- Reduce maintenance cost
-- Improve consistency
+No next sprint is currently designated. See `docs/reports/` for recent
+investigation and implementation history.
 
 ---
 

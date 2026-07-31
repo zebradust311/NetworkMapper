@@ -1,10 +1,10 @@
 # Engineering Reports
 
-This directory contains investigation reports generated during engineering
-sprints.
+This directory contains investigation reports and implementation reports
+generated during engineering sprints.
 
-These reports capture the research, analysis, and rationale that lead to
-engineering decisions.
+These reports capture the research, analysis, rationale, and outcomes that
+lead to and follow from engineering decisions.
 
 Reports are historical engineering artifacts. They are not normative
 architecture documentation and do not supersede ADRs or other architecture
@@ -79,6 +79,41 @@ ADR Considerations (if applicable)
 
 Additional sections may be included when appropriate for the investigation.
 
+## Implementation Report Format
+
+Implementation sprints produce a mandatory, intentionally lightweight report,
+using the same naming convention and status block as investigation reports:
+
+```text
+# Status
+
+Investigation Complete
+
+Implementation: Completed
+
+Production Code Modified: Yes / No
+
+ADR Required: Yes / No
+
+Recommended Next Sprint:
+<Sprint ID – Sprint Name>
+
+Summary
+
+Files Changed
+
+Validation Performed
+
+Known Issues
+
+Next Recommended Sprint
+```
+
+This is intentionally smaller than the Investigation Report format above — a
+mandatory report only stays lightweight if it is actually small. "Known
+Issues" captures pre-existing or incidental problems surfaced during
+implementation, not just risks the sprint itself introduced.
+
 ## Lifecycle
 
 Engineering reports are historical artifacts.
@@ -100,7 +135,8 @@ decision-making process.
 |--------------|---------|-----------------|
 | `docs/architecture/` | Canonical architecture and ADRs | Yes |
 | `docs/knowledge/` | Operational knowledge and field observations | Yes |
-| `docs/reports/` | Investigation reports and engineering analyses | No |
+| `docs/reports/` | Investigation and implementation reports | No |
+| `docs/process/` | Engineering workflow (lifecycle, principles, roles) | Yes |
 
 Engineering reports provide historical context for engineering decisions.
 Architecture documents define the approved design.

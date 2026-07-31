@@ -51,32 +51,10 @@ Avoid combining unrelated work.
 
 # Sprint Workflow
 
-Every sprint follows this sequence.
-
-```
-Plan
-    │
-    ▼
-Prompt
-    │
-    ▼
-Implementation
-    │
-    ▼
-Focused Tests
-    │
-    ▼
-Focused Regression
-    │
-    ▼
-Human Review
-    │
-    ▼
-Commit
-    │
-    ▼
-Push
-```
+The canonical sprint lifecycle is defined in
+[docs/process/sprint-lifecycle.md](process/sprint-lifecycle.md):
+Investigation → Architecture Review → Implementation → Validation → Human
+Review → Commit.
 
 Never skip review.
 
@@ -111,6 +89,10 @@ preserving rule ordering and first-match-wins.
 
 Do not modify DeviceClassifier.
 ```
+
+See [docs/process/prompt-templates.md](process/prompt-templates.md) for
+copy-pasteable templates covering Investigation, Architecture, and
+Implementation sprints.
 
 ---
 
@@ -156,6 +138,9 @@ Execution Policy
 10. Stop.
 ```
 
+See [docs/process/stop-conditions.md](process/stop-conditions.md) for the
+complete, mandatory set of situations that require stopping immediately.
+
 ---
 
 # Review Process
@@ -178,20 +163,12 @@ Commit.
 
 # Validation Rules
 
-Always validate using:
+Validation commands and when to use each — `validate`, `validate --all`,
+`benchmark`, `diagnostics` — are defined in
+[docs/process/validation-workflow.md](process/validation-workflow.md).
 
-- python -m devtools validate
-- unittest
-- pytest
-- compiler output
-
-Never validate using IDE artifacts.
-
-If validation is incomplete:
-
-Rerun tests.
-
-Do not inspect cached output.
+Never validate using IDE artifacts. If validation is incomplete, rerun the
+tests — do not inspect cached output.
 
 ---
 
@@ -367,6 +344,18 @@ ADR.md
 Engineering changes update:
 
 ENGINEERING.md
+
+Process/workflow changes update:
+
+docs/process/
+
+Knowledge changes update:
+
+docs/knowledge/
+
+Investigation and implementation reports live in:
+
+docs/reports/ (see docs/reports/README.md)
 
 Developer workflow changes update:
 
