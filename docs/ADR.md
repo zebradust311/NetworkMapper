@@ -324,4 +324,170 @@ concluded, but that the conclusion is distinct from, and does not overwrite,
 what was actually observed.
 
 "If you can't make it perfect, make it adjustable."
-Network discovery operates in environments shaped by years of accumulated operational decisions, legacy systems, and inconsistent naming conventions. Rather than attempting to encode every possible convention into automated logic, NetworkMapper preserves objective discovery while allowing engineers to adjust interpretations explicitly and transparently. The software's goal is not to eliminate engineering judgment, but to support and preserve it
+Network discovery operates in environments shaped by years of accumulated operational decisions, legacy systems, and inconsistent naming conventions. Rather than attempting to encode every possible convention into automated logic, NetworkMapper preserves objective discovery while allowing engineers to adjust interpretations explicitly and transparently. The software's goal is not to eliminate engineering judgment, but to support and preserve it.
+
+---
+
+## ADR-009 — Per-Service Discovery Evidence Is a Correlated Record
+
+**Status:** Accepted
+
+### Context
+
+During FEAT-003A (Discovery Capability Assessment), the two highest-value
+near-term discovery improvements identified were: recovering service
+product/version/CPE data that Nmap's `-sV` already returns during
+STANDARD-profile enrichment but that `NmapProvider._extract_detected_services()`
+currently discards
+([networkmapper/discovery/nmap_provider.py](../networkmapper/discovery/nmap_provider.py)),
+and adding a small number of targeted NSE scripts (`http-title`,
+`ssl-cert`, `smb-os-discovery`) on ports already scanned. Both are
+inherently per-port facts.
+
+FEAT-003B (Discovery Evidence Model Investigation) found that `Device`'s
+existing representation of per-port evidence —
+`open_ports: list[int]` and `detected_services: list[str]`
+([networkmapper/core/models.py](../networkmapper/core/models.py)) — are
+two independent lists, each built by a separate loop over Nmap's scan
+result and independently sorted (`open_ports` numerically,
+`detected_services` alphabetically). No code anywhere in the repository
+correlates a specific entry in one list to a specific entry in the other;
+every existing classification rule only asks "is port P open?" or "is
+service S present?" as independent yes-or-no signals. This has never
+surfaced as a defect because no evidence collected so far has needed the
+correlation — but product, version, HTTP title, and TLS certificate
+evidence all do: they are meaningless, or actively misleading, without
+knowing which port they were observed on.
+
+ARCH-002A (Per-Service Discovery Evidence Architecture Review) evaluated
+three representations against this requirement and against existing
+repository patterns, and recommended a correlated per-service record.
+
+### Decision
+
+Per-service discovery evidence is represented as a list of explicitly
+named, typed records on `Device` — one record per observed open port —
+rather than as independent parallel lists. Each record correlates, at
+minimum, the port, the protocol used to reach it, and whatever
+service/product/version evidence discovery obtained for that port.
+
+Fields are added to this record the same way fields have always been
+added to `Device`: as explicit, named attributes. A generic, untyped
+metadata dictionary is explicitly rejected as the shape of this record
+(see Alternatives Considered).
+
+This decision establishes the representational principle only. It does
+not itself change `Device`, `NmapProvider`, `ProjectSerializer`,
+`BenchmarkRunner`, the Classification Workbench, or any classification
+rule — see Future Work.
+
+### Alternatives Considered
+
+**Retain the parallel-list model (no change).** Zero migration cost, but
+structurally unable to express the evidence this decision exists to
+support — a device with product/version data on some but not all open
+ports has no way to express which entry in a third or fourth parallel
+list corresponds to which port. Rejected: the correlation gap this ADR
+resolves would simply be inherited by any new field added this way,
+compounding rather than closing it.
+
+**A generic per-port metadata dictionary** (e.g., a list of dicts with an
+open-ended `metadata` key). No precedent exists anywhere in the current
+codebase for a generic, untyped model field — every field ever added to
+`Device` is explicitly named and typed. A generic dictionary also works
+against the explainability the classification subsystem is built around:
+`RuleResult.reason` strings describe named evidence, and
+[docs/architecture/classification.md](architecture/classification.md)
+names explainability as a defining characteristic of the subsystem.
+Rejected in favor of explicitly named fields.
+
+**A dict-based port-to-evidence correlation index** (e.g., a separate
+`dict[int, str]` per attribute). Functionally equivalent to the record
+approach but untyped, and would require a new dict per new attribute,
+recreating the parallel-list problem one level down. Dominated by the
+selected record approach on every evaluated criterion; rejected without
+extended analysis.
+
+**An independent, device-external service entity** (a second top-level
+collection alongside `NetworkGraph`, cross-referenced by device IP). No
+repository evidence supports it: `NetworkGraph` has exactly one
+collection today, keyed by device IP, and nothing about per-service
+evidence requires independent addressability. Rejected as an unjustified
+abstraction.
+
+### Rationale
+
+- This decision does not modify ADR-001 (Two-Phase STANDARD Discovery).
+  It changes what the enrichment phase writes into, not the two-phase
+  structure itself.
+- This decision extends, without modifying, ADR-008 (Discovery is
+  Immutable, Interpretation is Adjustable). ADR-008 explicitly deferred
+  "a persisted schema that structurally separates discovery fields from
+  interpretation fields" as future work requiring its own approved
+  sprint. This ADR is that follow-on work, scoped narrowly to the
+  per-service portion of the discovery record; it does not undertake the
+  full discovery/interpretation schema separation ADR-008 left open, and
+  `device_type` remains outside this decision's scope entirely.
+- This decision does not modify ADR-002 (RuleResult), ADR-003 (First
+  Match Wins Classification), or ADR-004 (Read-Only Evidence API).
+  Classification rules gain the option to consume correlated evidence;
+  the rule contract, evaluation order, and evidence API are unaffected.
+- Explicit, named fields over a generic metadata container is consistent
+  with [ENGINEERING.md](../ENGINEERING.md)'s coding standards ("Prefer
+  dataclasses for models," "Prefer explicit names") and with the
+  incremental, named-field pattern every prior `Device` field has
+  followed.
+- The compositional shape — a model containing a list of smaller typed
+  records — is not new to the codebase: `Project` already contains
+  `NetworkGraph` as a nested field, and `NetworkGraph` already contains a
+  keyed collection of `Device` objects.
+
+### Consequences
+
+- Future per-port or per-interface discovery evidence (service
+  version/product now; SNMP, LLDP/CDP, or other per-interface evidence
+  later) has an established representational pattern to follow, rather
+  than each future sprint re-deriving or inconsistently resolving the
+  same correlation question.
+- `open_ports` and `detected_services`, as independent parallel lists,
+  are superseded as the representation for per-port evidence. Whether
+  they are removed outright, retained temporarily as derived convenience
+  views during a migration, or deprecated gradually is implementation
+  work deferred to FEAT-003C.
+- Classification rules that currently call
+  `first_matching_port`/`first_matching_service` against the flat lists
+  will need to be migrated, or those helpers re-implemented against the
+  new structure, as part of FEAT-003C — not part of this decision.
+- `ProjectSerializer`, `BenchmarkRunner.load_inventory()`, and the
+  Classification Workbench display will each need updates to read/write
+  the new structure as part of FEAT-003C. This ADR does not design those
+  changes.
+- FEAT-003B separately identified that `open_ports`/`detected_services`
+  are not currently persisted by `ProjectSerializer` at all (a
+  pre-existing defect, not introduced by this decision). Whether and how
+  that gap is closed is a FEAT-003C implementation decision this ADR does
+  not resolve.
+
+### Future Work
+
+The following are explicitly deferred and are not authorized by this ADR:
+
+- The exact field set and types of the per-service record (this ADR
+  establishes that it is a named, typed record — not a generic
+  dictionary — but not its final field list).
+- Whether `open_ports`/`detected_services` are removed, retained as
+  derived views, or deprecated gradually.
+- Migration of `NmapProvider`, `ProjectSerializer`, `BenchmarkRunner`,
+  the Classification Workbench, and existing classification rules to the
+  new structure.
+- Any new NSE-script-driven evidence collection (`http-title`,
+  `ssl-cert`, `smb-os-discovery`) — this ADR settles only how such
+  evidence would be represented once collected, not the collection work
+  itself.
+- Fixing the pre-existing `open_ports`/`detected_services` persistence
+  gap identified in FEAT-003B.
+
+Each of the above belongs to FEAT-003C and, per
+[ENGINEERING.md](../ENGINEERING.md), any further architectural questions
+it surfaces should stop and report rather than be resolved silently
+mid-implementation.
