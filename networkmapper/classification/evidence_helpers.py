@@ -15,6 +15,27 @@ def service_names(services: Sequence[ServiceEvidence]) -> list[str]:
     return [entry.service for entry in services if entry.service]
 
 
+def first_matching_product(
+    services: Sequence[ServiceEvidence],
+    candidate_keywords: Collection[str],
+) -> str | None:
+    """Return the first service product string containing any candidate keyword, if any.
+
+    Unlike `first_matching_service`, this performs a substring search rather
+    than exact membership, because Nmap product strings are free-text
+    descriptions (e.g. "VMware ESXi Server httpd"), not fixed values.
+    """
+    for entry in services:
+        if not entry.product:
+            continue
+
+        product_lower = entry.product.lower()
+        if any(keyword in product_lower for keyword in candidate_keywords):
+            return entry.product
+
+    return None
+
+
 def normalize_vendor(vendor: str | None, *, strip: bool = True) -> str:
     """Normalize vendor text for deterministic matching."""
     normalized = vendor or ""

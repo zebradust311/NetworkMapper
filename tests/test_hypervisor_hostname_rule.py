@@ -212,6 +212,72 @@ class HypervisorHostnameRuleTest(unittest.TestCase):
             "matched known hypervisor evidence.",
         )
 
+    def test_hostname_match_with_vmware_product_enriches_reason(self):
+        device = Device(
+            ip_address="192.168.1.72",
+            hostname="esxi-03",
+            vendor="Unknown",
+            services=[
+                ServiceEvidence(
+                    port=443,
+                    protocol="tcp",
+                    service="https",
+                    product="VMware ESXi Server httpd",
+                ),
+            ],
+        )
+
+        result = HypervisorHostnameRule().classify(device)
+
+        self.assertTrue(result.matched)
+        self.assertEqual(result.suggested_device_type, DeviceType.HYPERVISOR)
+        self.assertEqual(
+            result.reason,
+            "Hostname 'esxi-03' with open port 443 and service 'https' "
+            "matched known hypervisor evidence. Detected service product "
+            "'VMware ESXi Server httpd' matched known hypervisor product identifier.",
+        )
+
+    def test_hostname_match_with_vmware_product_and_no_port_or_service_signal(self):
+        device = Device(
+            ip_address="192.168.1.73",
+            hostname="esxi-04",
+            vendor="Unknown",
+            services=[
+                ServiceEvidence(port=8443, protocol="tcp", product="VMware vCenter Server"),
+            ],
+        )
+
+        result = HypervisorHostnameRule().classify(device)
+
+        self.assertTrue(result.matched)
+        self.assertEqual(result.suggested_device_type, DeviceType.HYPERVISOR)
+        self.assertEqual(
+            result.reason,
+            "Hostname 'esxi-04' matched known hypervisor naming convention. "
+            "Detected service product 'VMware vCenter Server' matched known "
+            "hypervisor product identifier.",
+        )
+
+    def test_hostname_match_without_vmware_product_is_unaffected(self):
+        device = Device(
+            ip_address="192.168.1.74",
+            hostname="esxi-05",
+            vendor="Unknown",
+            services=[
+                ServiceEvidence(port=443, protocol="tcp", service="https", product="nginx"),
+            ],
+        )
+
+        result = HypervisorHostnameRule().classify(device)
+
+        self.assertTrue(result.matched)
+        self.assertEqual(
+            result.reason,
+            "Hostname 'esxi-05' with open port 443 and service 'https' "
+            "matched known hypervisor evidence.",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

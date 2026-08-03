@@ -67,6 +67,44 @@ class CiscoSwitchRuleTest(unittest.TestCase):
             "Hostname 'switch-core-01' with open port 161 and service 'snmp' matched known switch management evidence.",
         )
 
+    def test_switch_hostname_with_management_signal_and_cisco_product_enriches_reason(self):
+        device = Device(
+            ip_address="192.168.1.44",
+            hostname="switch-core-02",
+            vendor="Unknown",
+            services=[
+                ServiceEvidence(port=22, protocol="tcp", service="ssh", product="Cisco SSH"),
+            ],
+        )
+
+        result = CiscoSwitchRule().classify(device)
+
+        self.assertIsInstance(result, RuleResult)
+        self.assertTrue(result.matched)
+        self.assertEqual(result.suggested_device_type, DeviceType.SWITCH)
+        self.assertEqual(
+            result.reason,
+            "Hostname 'switch-core-02' with open port 22 and service 'ssh' matched "
+            "known switch management evidence. Detected service product 'Cisco SSH' "
+            "matched known Cisco product identifier.",
+        )
+
+    def test_switch_hostname_without_management_signal_does_not_match_on_product_alone(self):
+        device = Device(
+            ip_address="192.168.1.45",
+            hostname="switch-core-03",
+            vendor="Unknown",
+            services=[
+                ServiceEvidence(port=80, protocol="tcp", product="Cisco embedded httpd"),
+            ],
+        )
+
+        result = CiscoSwitchRule().classify(device)
+
+        self.assertIsInstance(result, RuleResult)
+        self.assertFalse(result.matched)
+        self.assertIsNone(result.suggested_device_type)
+
 
 if __name__ == "__main__":
     unittest.main()

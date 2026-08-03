@@ -147,6 +147,81 @@ class PrinterVendorRuleTest(unittest.TestCase):
             "Detected IPP service indicates printer networking.",
         )
 
+    def test_printer_product_classifies_without_vendor_or_networking_match(self):
+        device = Device(
+            ip_address="192.168.1.18",
+            vendor=None,
+            services=[
+                ServiceEvidence(
+                    port=631,
+                    protocol="tcp",
+                    service="ipp",
+                    product="HP LaserJet 4250",
+                ),
+            ],
+        )
+
+        result = self.rule.classify(device)
+
+        self.assertIsInstance(result, RuleResult)
+        self.assertTrue(result.matched)
+        self.assertEqual(result.suggested_device_type, DeviceType.PRINTER)
+        self.assertEqual(
+            result.reason,
+            "Detected service product 'HP LaserJet 4250' matched known printer "
+            "vendor identifier.",
+        )
+
+    def test_printer_product_takes_precedence_over_networking_only_signal(self):
+        device = Device(
+            ip_address="192.168.1.19",
+            vendor="Unknown",
+            services=[
+                ServiceEvidence(
+                    port=9100,
+                    protocol="tcp",
+                    service="jetdirect",
+                    product="Brother HL-L2350DW series",
+                ),
+            ],
+        )
+
+        result = self.rule.classify(device)
+
+        self.assertIsInstance(result, RuleResult)
+        self.assertTrue(result.matched)
+        self.assertEqual(result.suggested_device_type, DeviceType.PRINTER)
+        self.assertEqual(
+            result.reason,
+            "Detected service product 'Brother HL-L2350DW series' matched known "
+            "printer vendor identifier.",
+        )
+
+    def test_non_printer_product_falls_back_to_networking_signal(self):
+        device = Device(
+            ip_address="192.168.1.20",
+            vendor=None,
+            services=[
+                ServiceEvidence(
+                    port=9100,
+                    protocol="tcp",
+                    service="jetdirect",
+                    product="Generic Print Server",
+                ),
+            ],
+        )
+
+        result = self.rule.classify(device)
+
+        self.assertIsInstance(result, RuleResult)
+        self.assertTrue(result.matched)
+        self.assertEqual(result.suggested_device_type, DeviceType.PRINTER)
+        self.assertEqual(
+            result.reason,
+            "Open TCP port 9100 (JetDirect) indicates printer networking. "
+            "Detected JETDIRECT service indicates printer networking.",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

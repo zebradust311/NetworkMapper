@@ -3,6 +3,7 @@ from __future__ import annotations
 from networkmapper.classification.classification_rule import ClassificationRule
 from networkmapper.classification.evidence_helpers import (
     first_matching_port,
+    first_matching_product,
     first_matching_service,
     format_hostname_evidence_reason,
     normalize_hostname,
@@ -23,6 +24,12 @@ SWITCH_HOSTNAME_HINTS = (
 )
 SWITCH_MANAGEMENT_PORTS = {22, 23, 161}
 SWITCH_MANAGEMENT_SERVICES = {"ssh", "telnet", "snmp"}
+
+# Cisco IOS/IOS-XE SSH daemons are commonly identified distinctly by Nmap's
+# banner-based service detection (e.g. "Cisco SSH"). Treated as additional
+# corroboration text only, never as an independent match trigger, so the
+# existing hostname-plus-management-signal gate is unchanged.
+SWITCH_PRODUCT_KEYWORDS = {"cisco"}
 
 
 class CiscoSwitchRule(ClassificationRule):
@@ -51,19 +58,27 @@ class CiscoSwitchRule(ClassificationRule):
             SWITCH_MANAGEMENT_SERVICES,
             return_lower=True,
         )
+        matched_product = first_matching_product(device.services, SWITCH_PRODUCT_KEYWORDS)
         hostname_looks_like_switch = any(hint in hostname for hint in SWITCH_HOSTNAME_HINTS)
         has_management_signal = matched_port is not None or matched_service is not None
 
         if hostname_looks_like_switch and has_management_signal:
+            reason = format_hostname_evidence_reason(
+                raw_hostname,
+                matched_port,
+                matched_service,
+                "switch management",
+            )
+            if matched_product is not None:
+                reason += (
+                    f" Detected service product {matched_product!r} matched known "
+                    "Cisco product identifier."
+                )
+
             return RuleResult(
                 matched=True,
                 confidence_contribution=0,
-                reason=format_hostname_evidence_reason(
-                    raw_hostname,
-                    matched_port,
-                    matched_service,
-                    "switch management",
-                ),
+                reason=reason,
                 suggested_device_type=DeviceType.SWITCH,
             )
 

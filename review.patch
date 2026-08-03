@@ -1,0 +1,683 @@
+diff --git a/docs/reports/FEAT-003D-Service-Product-Version-Classification.md b/docs/reports/FEAT-003D-Service-Product-Version-Classification.md
+new file mode 100644
+index 0000000..d35d322
+--- /dev/null
++++ b/docs/reports/FEAT-003D-Service-Product-Version-Classification.md
+@@ -0,0 +1,239 @@
++# Status
++
++Implementation Complete
++
++Production Code Modified: Yes
++
++ADR Required: No
++
++Recommended Next Sprint:
++FEAT-003E – NSE-Script Discovery Evidence Collection (http-title, ssl-cert,
++smb-os-discovery), per ADR-009's deferred Future Work — see Recommended
++Next Sprint below for the reasoning.
++
++---
++
++## Summary
++
++Every one of the 8 classification rules was evaluated for whether the
++`ServiceEvidence.product`/`.version` fields FEAT-003C introduced (and left
++unconsumed — see FEAT-003C's Known Issues) could improve confidence,
++specificity, or explainability. Three rules received targeted, evidence-
++supported changes; five were deliberately left unchanged, each with a
++documented reason. No discovery, scan-profile, or architecture change was
++made; ADR-009 required no revision.
++
++A new generic helper, `first_matching_product()`, was added to
++`evidence_helpers.py` alongside the existing `first_matching_port`/
++`first_matching_service`. It performs substring matching (not exact
++membership), because Nmap product strings are free-text descriptions
++(e.g. `"VMware ESXi Server httpd"`), unlike the fixed port numbers and
++service names the existing helpers match against.
++
++**Implemented:**
++
++- **`HypervisorHostnameRule`** — if any service's `product` contains
++  `"vmware"`, the reason text is enriched with that product string as
++  additional corroboration. This does not change *when* the rule
++  matches (the hostname-keyword gate is unchanged); it only strengthens
++  *why* an already-matching device is explained as a hypervisor. Chosen
++  because VMware's ESXi/vCenter management httpd is one of the most
++  reliably product-fingerprinted services in Nmap's default probe
++  database.
++- **`CiscoSwitchRule`** — if any service's `product` contains `"cisco"`,
++  the reason text is enriched the same way, appended only when the
++  existing hostname-plus-management-signal match already fired. Product
++  evidence alone (without a port/service signal) does **not** trigger a
++  match — verified by a new test asserting exactly that. Chosen because
++  Cisco IOS/IOS-XE SSH daemons are commonly identified by product string
++  in Nmap's banner-based detection.
++- **`PrinterVendorRule`** — reuses the *existing*, already-trusted
++  `SUPPORTED_PRINTER_VENDOR_KEYWORDS` list (previously checked only
++  against the `vendor` field) against service `product` strings too, as
++  a new independent match tier between the vendor check and the
++  networking-protocol fallback. Chosen because Nmap's IPP (port 631)
++  probe commonly returns the exact printer make/model as the product
++  string (e.g. `"HP LaserJet 4250"`), which is at least as strong an
++  identifier as the vendor field, and because reusing an already-
++  accepted keyword list — rather than introducing a new one — avoids
++  inventing an unsupported fingerprint.
++
++**Deliberately not implemented** (see Rule-by-Rule Evaluation for full
++reasoning): `ServerHostnameRule`, `DellWorkstationRule`,
++`UbiquitiAccessPointRule`, `SonicWallFirewallRule`, `VoiceVendorRule`.
++
++All three benchmark datasets remain at 100% accuracy — none of the
++curated fixture devices populate `product`, so no existing classification
++outcome changed. Full validation (`python -m devtools validate --all`)
++shows zero regressions; the one error present is the pre-existing,
++unrelated CSV exporter defect documented in TEST-001 and reconfirmed in
++FEAT-003C.
++
++---
++
++## Rule-by-Rule Evaluation
++
++| Rule | Product/version evidence used? | Reasoning |
++|---|---|---|
++| `ServerHostnameRule` | No | Pure hostname-keyword rule (`"dc"`, `"cam"`, `"srv"`, `"server"`) with no vendor or service concept at all. "Server" is not a product-identifiable category — no product string would discriminate it. |
++| `HypervisorHostnameRule` | **Yes** | See Summary. `"vmware"` in `product` is a well-established, reliable Nmap fingerprint family. |
++| `UbiquitiAccessPointRule` | No | Ubiquiti's web management interface does not reliably expose a `"Ubiquiti"`-branded product string via plain `-sV` (no NSE scripts were added in FEAT-003C or this sprint). Implementing this would mean guessing at a fingerprint not actually verified against Nmap's behavior — explicitly prohibited by this sprint's scope. |
++| `SonicWallFirewallRule` | No | Genuine uncertainty: I could not verify, with the confidence the "strong, deterministic evidence" bar requires, that Nmap's default `-sV --version-light` probe reliably identifies SonicWall products by name without deeper probe intensity or NSE scripts (neither of which this sprint may add). Per the constraint against inventing unsupported fingerprints, this was left unimplemented rather than guessed at. Listed explicitly here because SonicWall was named as an example in this sprint's scope — the omission is a deliberate evidentiary decision, not an oversight. |
++| `PrinterVendorRule` | **Yes** | See Summary. IPP product-string detection for exact printer make/model is one of Nmap's best-documented "product" detections for office hardware. |
++| `ServerHostnameRule` | (listed above) | |
++| `CiscoSwitchRule` | **Yes** | See Summary. Cisco SSH banner detection is well-established. |
++| `DellWorkstationRule` | No | No realistic Dell-branded network service exists for a general-purpose Windows workstation for Nmap to fingerprint. Vendor/hostname-keyword matching remains the only viable signal. |
++| `VoiceVendorRule` | No | SIP service detection in Nmap's default probe set (port 5060/5061) typically returns a generic `"sip"` service name without a reliable phone vendor/model product string absent deeper SIP-specific probing. Left unimplemented for the same reason as SonicWall: insufficient confidence to meet the "strong, deterministic evidence" bar. |
++
++**On the sprint's example list** (`VMware products`, `Apache HTTP
++Server`, `Microsoft IIS`, `JetDirect`, `SonicWall products`, `Cisco
++service banners`): two examples were deliberately not pursued for reasons
++distinct from the "insufficient confidence" cases above, worth stating
++explicitly:
++
++- **Apache HTTP Server / Microsoft IIS** — Nmap's product detection for
++  these is extremely reliable, but neither is a *device-type-specific*
++  identifier. Both run on servers, printers, hypervisor management
++  interfaces, routers, and firewalls alike. Reliable detection alone
++  does not make a signal useful to a *specific* classification rule when
++  it doesn't discriminate between device types. No rule was extended
++  with generic web-server product matching for this reason.
++- **JetDirect** — already effectively handled. Port 9100's JetDirect/
++  AppSocket protocol is a raw binary protocol with no application-layer
++  handshake, so Nmap's `-sV` typically cannot populate a `product` field
++  for it at all; the existing `service` name check (`"jetdirect"` /
++  `"pdl-datastream"` in `PRINTER_SERVICE_KEYWORDS`) is already the
++  correct and only realistic signal available over that port. No
++  additional product-based work was needed or added.
++
++---
++
++## Files Changed
++
++**Production code**
++
++- `networkmapper/classification/evidence_helpers.py` — added
++  `first_matching_product()`.
++- `networkmapper/classification/rules/hypervisor_hostname_rule.py` —
++  added `HYPERVISOR_PRODUCT_KEYWORDS`; appends product corroboration to
++  the reason text when present.
++- `networkmapper/classification/rules/cisco_switch_rule.py` — added
++  `SWITCH_PRODUCT_KEYWORDS`; appends product corroboration to the reason
++  text only when the existing hostname-plus-management-signal match
++  already fired.
++- `networkmapper/classification/rules/printer_vendor_rule.py` —
++  restructured `classify()` into a single linear flow (vendor → product →
++  networking → no match), removing duplicate branching that existed
++  before this sprint; added `_find_printer_vendor_product()`.
++
++**Tests**
++
++- `tests/test_hypervisor_hostname_rule.py` — 3 new tests: product
++  corroboration with a port/service match, product corroboration with
++  neither, and confirmation that a non-VMware product leaves the reason
++  unaffected.
++- `tests/test_cisco_switch_rule.py` — 2 new tests: product corroboration
++  when the existing management-signal gate is satisfied, and confirmation
++  that product evidence alone (no port/service) does **not** trigger a
++  match.
++- `tests/test_printer_vendor_rule.py` — 3 new tests: product-only match,
++  product taking precedence over a simultaneous networking-only signal,
++  and a non-printer product correctly falling back to the existing
++  networking-signal path.
++- `tests/test_devtools_validate.py` — updated the fast-validation
++  test-count pin (`75` → `83`) to reflect the 8 new tests added to files
++  already inside `STANDARD_REGRESSION_TESTS`. This is a deliberate,
++  expected update to a literal test-count assertion whose purpose is to
++  catch *unexpected* changes to the fast classification-only regression
++  surface — this sprint's change to that count is intended and verified,
++  not a regression it should have caught.
++
++No production code outside `networkmapper/classification/` was touched.
++No discovery code, scan profile, benchmark fixture, serializer, or
++documentation file was modified — none needed a change, since this
++sprint's evidence source (`ServiceEvidence.product`) already existed in
++full from FEAT-003C.
++
++## Validation Performed
++
++`python -m devtools validate --all`:
++
++```
++Unit Tests: 151 run, 0 failures, 1 error
++Benchmarks: enterprise PASS (100.0%), homelab PASS (100.0%), small_office PASS (100.0%)
++Overall Status: FAIL
++Runtime: 0.59s
++```
++
++The single error is the same pre-existing, unrelated
++`tests.test_csv_exporter.CsvExporterTest.test_export_writes_expected_csv_rows`
++defect documented in TEST-001 and reconfirmed in FEAT-003C
++(`AttributeError: 'str' object has no attribute 'name'` in
++`csv_exporter.py`, untouched by this sprint).
++
++One regression surfaced during validation and was fixed within this
++sprint, not left as a known issue: `test_devtools_validate.py`'s
++hardcoded fast-validation test count (`75`) no longer matched reality
++after this sprint added 8 new tests to already-fast-listed rule test
++files. This was a expected consequence of intentionally adding tests to
++already-included files, confirmed by checking that all three modified
++test files (`test_cisco_switch_rule`, `test_hypervisor_hostname_rule`,
++`test_printer_vendor_rule`) are already members of
++`STANDARD_REGRESSION_TESTS` — not evidence of scope creep into the fast
++path. The pin was updated to `83` accordingly.
++
++All three benchmark datasets remain at 100% accuracy, unchanged from
++before this sprint — none of the curated fixture devices populate
++`product`, so none of this sprint's new evidence paths fire against
++existing benchmark data. This was expected and is not, by itself, strong
++validation that the new rules work; correctness is established by the
++new unit tests, which construct `ServiceEvidence` entries with `product`
++set directly.
++
++## Known Issues
++
++- **No benchmark case exercises the new product-based evidence paths.**
++  All three benchmark datasets predate `product` capture and none was
++  updated, per this sprint's instruction to update fixtures "only when
++  behavior intentionally changes" — no existing fixture device's
++  classification outcome changed. Adding a benchmark case that
++  specifically exercises product-based classification (e.g. a device
++  identifiable only by product string, with no matching vendor or
++  hostname) would be a reasonable follow-up but was not required by this
++  sprint's validation instructions, which named unit tests, not new
++  benchmark cases, as the required coverage.
++- **`ServiceEvidence.version` remains fully unconsumed.** This sprint
++  used `.product` but not `.version` (e.g. distinguishing an outdated
++  vs. current firmware/software version is a monitoring/risk concern,
++  not a device-type classification signal, so no rule needed it). This
++  is a deliberate scope decision, not an oversight — flagged for
++  visibility rather than as a defect.
++- **The `"hp"` keyword in `SUPPORTED_PRINTER_VENDOR_KEYWORDS`** is a
++  short, two-character substring, now also matched against free-text
++  product strings (previously only against the shorter `vendor` field).
++  This carries a small false-positive risk against product text
++  containing an incidental `"hp"` substring (e.g. a hypothetical
++  service naming itself something containing "...hp..."). This risk is
++  inherited from the pre-existing, already-accepted keyword list — not
++  newly introduced — and no realistic false positive was found during
++  this sprint's evaluation of common service/product strings (Apache
++  httpd, OpenSSH, lighttpd, SonicWALL, Microsoft-IIS, and vsftpd were all
++  checked and do not contain `"hp"` as a substring).
++
++## Next Recommended Sprint
++
++**FEAT-003E — NSE-Script Discovery Evidence Collection**
++(`http-title`, `ssl-cert`, `smb-os-discovery`), per ADR-009's Future Work
++and FEAT-003A's original recommendation. This sprint closed the loop on
++the product/version evidence FEAT-003C already collected from the
++existing `-sV` scan (per FEAT-003C's own recommended next sprint). The
++next incremental, well-justified step is on the *discovery* side again:
++adding a small number of targeted NSE scripts on ports already inside
++`CLASSIFICATION_PORTS` would surface materially stronger identifiers
++(e.g. an HTTP title of "SonicWALL Network Security Appliance" or a TLS
++certificate CN) for exactly the rules this sprint had to skip
++(`SonicWallFirewallRule`, `UbiquitiAccessPointRule`) due to insufficient
++confidence in what `-sV` alone provides — those gaps would not need to
++remain gaps once NSE-derived evidence exists to evaluate. This was
++explicitly deferred by ADR-009 as future work and is not blocked by
++anything in this sprint.
+diff --git a/networkmapper/classification/evidence_helpers.py b/networkmapper/classification/evidence_helpers.py
+index 1ef7d62..1a1f899 100644
+--- a/networkmapper/classification/evidence_helpers.py
++++ b/networkmapper/classification/evidence_helpers.py
+@@ -15,6 +15,27 @@ def service_names(services: Sequence[ServiceEvidence]) -> list[str]:
+     return [entry.service for entry in services if entry.service]
+ 
+ 
++def first_matching_product(
++    services: Sequence[ServiceEvidence],
++    candidate_keywords: Collection[str],
++) -> str | None:
++    """Return the first service product string containing any candidate keyword, if any.
++
++    Unlike `first_matching_service`, this performs a substring search rather
++    than exact membership, because Nmap product strings are free-text
++    descriptions (e.g. "VMware ESXi Server httpd"), not fixed values.
++    """
++    for entry in services:
++        if not entry.product:
++            continue
++
++        product_lower = entry.product.lower()
++        if any(keyword in product_lower for keyword in candidate_keywords):
++            return entry.product
++
++    return None
++
++
+ def normalize_vendor(vendor: str | None, *, strip: bool = True) -> str:
+     """Normalize vendor text for deterministic matching."""
+     normalized = vendor or ""
+diff --git a/networkmapper/classification/rules/cisco_switch_rule.py b/networkmapper/classification/rules/cisco_switch_rule.py
+index 2407af1..175c312 100644
+--- a/networkmapper/classification/rules/cisco_switch_rule.py
++++ b/networkmapper/classification/rules/cisco_switch_rule.py
+@@ -3,6 +3,7 @@ from __future__ import annotations
+ from networkmapper.classification.classification_rule import ClassificationRule
+ from networkmapper.classification.evidence_helpers import (
+     first_matching_port,
++    first_matching_product,
+     first_matching_service,
+     format_hostname_evidence_reason,
+     normalize_hostname,
+@@ -24,6 +25,12 @@ SWITCH_HOSTNAME_HINTS = (
+ SWITCH_MANAGEMENT_PORTS = {22, 23, 161}
+ SWITCH_MANAGEMENT_SERVICES = {"ssh", "telnet", "snmp"}
+ 
++# Cisco IOS/IOS-XE SSH daemons are commonly identified distinctly by Nmap's
++# banner-based service detection (e.g. "Cisco SSH"). Treated as additional
++# corroboration text only, never as an independent match trigger, so the
++# existing hostname-plus-management-signal gate is unchanged.
++SWITCH_PRODUCT_KEYWORDS = {"cisco"}
++
+ 
+ class CiscoSwitchRule(ClassificationRule):
+     """Match Cisco vendors as switch devices."""
+@@ -51,19 +58,27 @@ class CiscoSwitchRule(ClassificationRule):
+             SWITCH_MANAGEMENT_SERVICES,
+             return_lower=True,
+         )
++        matched_product = first_matching_product(device.services, SWITCH_PRODUCT_KEYWORDS)
+         hostname_looks_like_switch = any(hint in hostname for hint in SWITCH_HOSTNAME_HINTS)
+         has_management_signal = matched_port is not None or matched_service is not None
+ 
+         if hostname_looks_like_switch and has_management_signal:
++            reason = format_hostname_evidence_reason(
++                raw_hostname,
++                matched_port,
++                matched_service,
++                "switch management",
++            )
++            if matched_product is not None:
++                reason += (
++                    f" Detected service product {matched_product!r} matched known "
++                    "Cisco product identifier."
++                )
++
+             return RuleResult(
+                 matched=True,
+                 confidence_contribution=0,
+-                reason=format_hostname_evidence_reason(
+-                    raw_hostname,
+-                    matched_port,
+-                    matched_service,
+-                    "switch management",
+-                ),
++                reason=reason,
+                 suggested_device_type=DeviceType.SWITCH,
+             )
+ 
+diff --git a/networkmapper/classification/rules/hypervisor_hostname_rule.py b/networkmapper/classification/rules/hypervisor_hostname_rule.py
+index 89713cc..65e1983 100644
+--- a/networkmapper/classification/rules/hypervisor_hostname_rule.py
++++ b/networkmapper/classification/rules/hypervisor_hostname_rule.py
+@@ -3,6 +3,7 @@ from __future__ import annotations
+ from networkmapper.classification.classification_rule import ClassificationRule
+ from networkmapper.classification.evidence_helpers import (
+     first_matching_port,
++    first_matching_product,
+     first_matching_service,
+     format_hostname_evidence_reason,
+     normalize_hostname,
+@@ -36,6 +37,13 @@ HYPERVISOR_HOSTNAME_KEYWORDS = (
+ HYPERVISOR_CORROBORATING_PORTS = {443, 3389}
+ HYPERVISOR_CORROBORATING_SERVICES = {"https", "ms-wbt-server"}
+ 
++# Nmap's default service-probe database reliably identifies VMware's ESXi
++# and vCenter management httpd by product string (e.g. "VMware ESXi Server
++# httpd"), unlike the generic port/service signals above. This is treated
++# as additional corroboration text only, never as an independent match
++# trigger, since HYPERVISOR_HOSTNAME_KEYWORDS remains the sole match gate.
++HYPERVISOR_PRODUCT_KEYWORDS = {"vmware"}
++
+ 
+ class HypervisorHostnameRule(ClassificationRule):
+     """Match hostnames that indicate a hypervisor, such as those containing 'esxi' or 'vcenter'."""
+@@ -61,6 +69,7 @@ class HypervisorHostnameRule(ClassificationRule):
+             HYPERVISOR_CORROBORATING_SERVICES,
+             return_lower=True,
+         )
++        matched_product = first_matching_product(device.services, HYPERVISOR_PRODUCT_KEYWORDS)
+ 
+         if matched_port is not None or matched_service is not None:
+             reason = format_hostname_evidence_reason(
+@@ -72,6 +81,12 @@ class HypervisorHostnameRule(ClassificationRule):
+         else:
+             reason = f"Hostname {raw_hostname!r} matched known hypervisor naming convention."
+ 
++        if matched_product is not None:
++            reason += (
++                f" Detected service product {matched_product!r} matched known "
++                "hypervisor product identifier."
++            )
++
+         return RuleResult(
+             matched=True,
+             confidence_contribution=0,
+diff --git a/networkmapper/classification/rules/printer_vendor_rule.py b/networkmapper/classification/rules/printer_vendor_rule.py
+index 6c56f2f..915b0b8 100644
+--- a/networkmapper/classification/rules/printer_vendor_rule.py
++++ b/networkmapper/classification/rules/printer_vendor_rule.py
+@@ -3,6 +3,7 @@ from __future__ import annotations
+ from networkmapper.classification.classification_rule import ClassificationRule
+ from networkmapper.classification.evidence_helpers import (
+     first_matching_port,
++    first_matching_product,
+     first_matching_service,
+     normalize_vendor,
+     service_names,
+@@ -50,31 +51,24 @@ class PrinterVendorRule(ClassificationRule):
+         """Return a rule result for printer vendor matching evidence."""
+         raw_vendor = device.vendor
+         vendor = normalize_vendor(raw_vendor, strip=True)
+-        if not vendor:
+-            matched_port, matched_service = self._find_printer_networking(device)
+-            if matched_port is not None or matched_service is not None:
+-                return RuleResult(
+-                    matched=True,
+-                    confidence_contribution=0,
+-                    reason=self._format_networking_reason(matched_port, matched_service),
+-                    suggested_device_type=DeviceType.PRINTER,
+-                )
+ 
++        if vendor and any(keyword in vendor for keyword in SUPPORTED_PRINTER_VENDOR_KEYWORDS):
+             return RuleResult(
+-                matched=False,
++                matched=True,
+                 confidence_contribution=0,
+-                reason=(
+-                    f"Vendor {raw_vendor!r} is not a known printer vendor and "
+-                    "no printer networking protocols were detected."
+-                ),
+-                suggested_device_type=None,
++                reason=f"Vendor {raw_vendor!r} matched known printer vendor.",
++                suggested_device_type=DeviceType.PRINTER,
+             )
+ 
+-        if any(keyword in vendor for keyword in SUPPORTED_PRINTER_VENDOR_KEYWORDS):
++        matched_product = self._find_printer_vendor_product(device)
++        if matched_product is not None:
+             return RuleResult(
+                 matched=True,
+                 confidence_contribution=0,
+-                reason=f"Vendor {raw_vendor!r} matched known printer vendor.",
++                reason=(
++                    f"Detected service product {matched_product!r} matched known "
++                    "printer vendor identifier."
++                ),
+                 suggested_device_type=DeviceType.PRINTER,
+             )
+ 
+@@ -97,6 +91,17 @@ class PrinterVendorRule(ClassificationRule):
+             suggested_device_type=None,
+         )
+ 
++    def _find_printer_vendor_product(self, device: Device) -> str | None:
++        """Return a service product string that names a known printer vendor, if any.
++
++        Nmap's IPP (port 631) service probe commonly returns the exact
++        printer make/model as the product string (e.g. "HP LaserJet
++        4250"), which is at least as strong an identifier as the vendor
++        field and reuses the same trusted vendor keyword list rather than
++        introducing a new fingerprint.
++        """
++        return first_matching_product(device.services, SUPPORTED_PRINTER_VENDOR_KEYWORDS)
++
+     def _find_printer_networking(self, device: Device) -> tuple[int | None, str | None]:
+         matched_port = first_matching_port(
+             service_ports(device.services),
+diff --git a/tests/test_cisco_switch_rule.py b/tests/test_cisco_switch_rule.py
+index 95f3e5f..c79f1af 100644
+--- a/tests/test_cisco_switch_rule.py
++++ b/tests/test_cisco_switch_rule.py
+@@ -67,6 +67,44 @@ class CiscoSwitchRuleTest(unittest.TestCase):
+             "Hostname 'switch-core-01' with open port 161 and service 'snmp' matched known switch management evidence.",
+         )
+ 
++    def test_switch_hostname_with_management_signal_and_cisco_product_enriches_reason(self):
++        device = Device(
++            ip_address="192.168.1.44",
++            hostname="switch-core-02",
++            vendor="Unknown",
++            services=[
++                ServiceEvidence(port=22, protocol="tcp", service="ssh", product="Cisco SSH"),
++            ],
++        )
++
++        result = CiscoSwitchRule().classify(device)
++
++        self.assertIsInstance(result, RuleResult)
++        self.assertTrue(result.matched)
++        self.assertEqual(result.suggested_device_type, DeviceType.SWITCH)
++        self.assertEqual(
++            result.reason,
++            "Hostname 'switch-core-02' with open port 22 and service 'ssh' matched "
++            "known switch management evidence. Detected service product 'Cisco SSH' "
++            "matched known Cisco product identifier.",
++        )
++
++    def test_switch_hostname_without_management_signal_does_not_match_on_product_alone(self):
++        device = Device(
++            ip_address="192.168.1.45",
++            hostname="switch-core-03",
++            vendor="Unknown",
++            services=[
++                ServiceEvidence(port=80, protocol="tcp", product="Cisco embedded httpd"),
++            ],
++        )
++
++        result = CiscoSwitchRule().classify(device)
++
++        self.assertIsInstance(result, RuleResult)
++        self.assertFalse(result.matched)
++        self.assertIsNone(result.suggested_device_type)
++
+ 
+ if __name__ == "__main__":
+     unittest.main()
+\ No newline at end of file
+diff --git a/tests/test_devtools_validate.py b/tests/test_devtools_validate.py
+index 1fc3ffc..757105a 100644
+--- a/tests/test_devtools_validate.py
++++ b/tests/test_devtools_validate.py
+@@ -23,7 +23,7 @@ class FastValidationBackwardCompatibilityTest(unittest.TestCase):
+     def test_run_validation_still_covers_exactly_the_standard_regression_tests(self):
+         result = run_validation()
+ 
+-        self.assertEqual(result.tests_run, 75)
++        self.assertEqual(result.tests_run, 83)
+         self.assertTrue(result.passed)
+         self.assertEqual(result.exit_code, 0)
+ 
+diff --git a/tests/test_hypervisor_hostname_rule.py b/tests/test_hypervisor_hostname_rule.py
+index 9c98dd7..7fc4f9b 100644
+--- a/tests/test_hypervisor_hostname_rule.py
++++ b/tests/test_hypervisor_hostname_rule.py
+@@ -212,6 +212,72 @@ class HypervisorHostnameRuleTest(unittest.TestCase):
+             "matched known hypervisor evidence.",
+         )
+ 
++    def test_hostname_match_with_vmware_product_enriches_reason(self):
++        device = Device(
++            ip_address="192.168.1.72",
++            hostname="esxi-03",
++            vendor="Unknown",
++            services=[
++                ServiceEvidence(
++                    port=443,
++                    protocol="tcp",
++                    service="https",
++                    product="VMware ESXi Server httpd",
++                ),
++            ],
++        )
++
++        result = HypervisorHostnameRule().classify(device)
++
++        self.assertTrue(result.matched)
++        self.assertEqual(result.suggested_device_type, DeviceType.HYPERVISOR)
++        self.assertEqual(
++            result.reason,
++            "Hostname 'esxi-03' with open port 443 and service 'https' "
++            "matched known hypervisor evidence. Detected service product "
++            "'VMware ESXi Server httpd' matched known hypervisor product identifier.",
++        )
++
++    def test_hostname_match_with_vmware_product_and_no_port_or_service_signal(self):
++        device = Device(
++            ip_address="192.168.1.73",
++            hostname="esxi-04",
++            vendor="Unknown",
++            services=[
++                ServiceEvidence(port=8443, protocol="tcp", product="VMware vCenter Server"),
++            ],
++        )
++
++        result = HypervisorHostnameRule().classify(device)
++
++        self.assertTrue(result.matched)
++        self.assertEqual(result.suggested_device_type, DeviceType.HYPERVISOR)
++        self.assertEqual(
++            result.reason,
++            "Hostname 'esxi-04' matched known hypervisor naming convention. "
++            "Detected service product 'VMware vCenter Server' matched known "
++            "hypervisor product identifier.",
++        )
++
++    def test_hostname_match_without_vmware_product_is_unaffected(self):
++        device = Device(
++            ip_address="192.168.1.74",
++            hostname="esxi-05",
++            vendor="Unknown",
++            services=[
++                ServiceEvidence(port=443, protocol="tcp", service="https", product="nginx"),
++            ],
++        )
++
++        result = HypervisorHostnameRule().classify(device)
++
++        self.assertTrue(result.matched)
++        self.assertEqual(
++            result.reason,
++            "Hostname 'esxi-05' with open port 443 and service 'https' "
++            "matched known hypervisor evidence.",
++        )
++
+ 
+ if __name__ == "__main__":
+     unittest.main()
+\ No newline at end of file
+diff --git a/tests/test_printer_vendor_rule.py b/tests/test_printer_vendor_rule.py
+index 78151f7..81d673d 100644
+--- a/tests/test_printer_vendor_rule.py
++++ b/tests/test_printer_vendor_rule.py
+@@ -147,6 +147,81 @@ class PrinterVendorRuleTest(unittest.TestCase):
+             "Detected IPP service indicates printer networking.",
+         )
+ 
++    def test_printer_product_classifies_without_vendor_or_networking_match(self):
++        device = Device(
++            ip_address="192.168.1.18",
++            vendor=None,
++            services=[
++                ServiceEvidence(
++                    port=631,
++                    protocol="tcp",
++                    service="ipp",
++                    product="HP LaserJet 4250",
++                ),
++            ],
++        )
++
++        result = self.rule.classify(device)
++
++        self.assertIsInstance(result, RuleResult)
++        self.assertTrue(result.matched)
++        self.assertEqual(result.suggested_device_type, DeviceType.PRINTER)
++        self.assertEqual(
++            result.reason,
++            "Detected service product 'HP LaserJet 4250' matched known printer "
++            "vendor identifier.",
++        )
++
++    def test_printer_product_takes_precedence_over_networking_only_signal(self):
++        device = Device(
++            ip_address="192.168.1.19",
++            vendor="Unknown",
++            services=[
++                ServiceEvidence(
++                    port=9100,
++                    protocol="tcp",
++                    service="jetdirect",
++                    product="Brother HL-L2350DW series",
++                ),
++            ],
++        )
++
++        result = self.rule.classify(device)
++
++        self.assertIsInstance(result, RuleResult)
++        self.assertTrue(result.matched)
++        self.assertEqual(result.suggested_device_type, DeviceType.PRINTER)
++        self.assertEqual(
++            result.reason,
++            "Detected service product 'Brother HL-L2350DW series' matched known "
++            "printer vendor identifier.",
++        )
++
++    def test_non_printer_product_falls_back_to_networking_signal(self):
++        device = Device(
++            ip_address="192.168.1.20",
++            vendor=None,
++            services=[
++                ServiceEvidence(
++                    port=9100,
++                    protocol="tcp",
++                    service="jetdirect",
++                    product="Generic Print Server",
++                ),
++            ],
++        )
++
++        result = self.rule.classify(device)
++
++        self.assertIsInstance(result, RuleResult)
++        self.assertTrue(result.matched)
++        self.assertEqual(result.suggested_device_type, DeviceType.PRINTER)
++        self.assertEqual(
++            result.reason,
++            "Open TCP port 9100 (JetDirect) indicates printer networking. "
++            "Detected JETDIRECT service indicates printer networking.",
++        )
++
+ 
+ if __name__ == "__main__":
+     unittest.main()
+\ No newline at end of file

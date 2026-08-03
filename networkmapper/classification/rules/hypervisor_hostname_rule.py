@@ -3,6 +3,7 @@ from __future__ import annotations
 from networkmapper.classification.classification_rule import ClassificationRule
 from networkmapper.classification.evidence_helpers import (
     first_matching_port,
+    first_matching_product,
     first_matching_service,
     format_hostname_evidence_reason,
     normalize_hostname,
@@ -36,6 +37,13 @@ HYPERVISOR_HOSTNAME_KEYWORDS = (
 HYPERVISOR_CORROBORATING_PORTS = {443, 3389}
 HYPERVISOR_CORROBORATING_SERVICES = {"https", "ms-wbt-server"}
 
+# Nmap's default service-probe database reliably identifies VMware's ESXi
+# and vCenter management httpd by product string (e.g. "VMware ESXi Server
+# httpd"), unlike the generic port/service signals above. This is treated
+# as additional corroboration text only, never as an independent match
+# trigger, since HYPERVISOR_HOSTNAME_KEYWORDS remains the sole match gate.
+HYPERVISOR_PRODUCT_KEYWORDS = {"vmware"}
+
 
 class HypervisorHostnameRule(ClassificationRule):
     """Match hostnames that indicate a hypervisor, such as those containing 'esxi' or 'vcenter'."""
@@ -61,6 +69,7 @@ class HypervisorHostnameRule(ClassificationRule):
             HYPERVISOR_CORROBORATING_SERVICES,
             return_lower=True,
         )
+        matched_product = first_matching_product(device.services, HYPERVISOR_PRODUCT_KEYWORDS)
 
         if matched_port is not None or matched_service is not None:
             reason = format_hostname_evidence_reason(
@@ -71,6 +80,12 @@ class HypervisorHostnameRule(ClassificationRule):
             )
         else:
             reason = f"Hostname {raw_hostname!r} matched known hypervisor naming convention."
+
+        if matched_product is not None:
+            reason += (
+                f" Detected service product {matched_product!r} matched known "
+                "hypervisor product identifier."
+            )
 
         return RuleResult(
             matched=True,
