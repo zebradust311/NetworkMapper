@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from networkmapper.classification.classifier import DeviceClassifier
-from networkmapper.core.models import Device, DeviceType
+from networkmapper.core.models import Device, DeviceType, ServiceEvidence
 
 
 @dataclass(frozen=True)
@@ -58,8 +58,16 @@ class BenchmarkRunner:
                     mac_address=device_payload.get("mac_address"),
                     vendor=device_payload.get("vendor"),
                     operating_system=device_payload.get("operating_system"),
-                    open_ports=device_payload.get("open_ports", []),
-                    detected_services=device_payload.get("detected_services", []),
+                    services=[
+                        ServiceEvidence(
+                            port=entry["port"],
+                            protocol=entry.get("protocol", "tcp"),
+                            service=entry.get("service"),
+                            product=entry.get("product"),
+                            version=entry.get("version"),
+                        )
+                        for entry in device_payload.get("services", [])
+                    ],
                     device_type=DeviceType.UNKNOWN,
                     discovery_sources=device_payload.get("discovery_sources", []),
                 )

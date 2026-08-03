@@ -4,7 +4,7 @@ import json
 from datetime import datetime
 from typing import Any
 
-from networkmapper.core.models import Device, DeviceType
+from networkmapper.core.models import Device, DeviceType, ServiceEvidence
 from networkmapper.core.network_graph import NetworkGraph
 from networkmapper.project.models import Project
 
@@ -26,6 +26,16 @@ class ProjectSerializer:
                     "mac_address": device.mac_address,
                     "vendor": device.vendor,
                     "operating_system": device.operating_system,
+                    "services": [
+                        {
+                            "port": entry.port,
+                            "protocol": entry.protocol,
+                            "service": entry.service,
+                            "product": entry.product,
+                            "version": entry.version,
+                        }
+                        for entry in device.services
+                    ],
                     "device_type": device.device_type.value,
                     "discovery_sources": device.discovery_sources,
                 }
@@ -56,6 +66,16 @@ class ProjectSerializer:
                 mac_address=device_payload.get("mac_address"),
                 vendor=device_payload.get("vendor"),
                 operating_system=device_payload.get("operating_system"),
+                services=[
+                    ServiceEvidence(
+                        port=entry["port"],
+                        protocol=entry["protocol"],
+                        service=entry.get("service"),
+                        product=entry.get("product"),
+                        version=entry.get("version"),
+                    )
+                    for entry in device_payload.get("services", [])
+                ],
                 device_type=DeviceType(device_payload.get("device_type", DeviceType.UNKNOWN.value)),
                 discovery_sources=device_payload.get("discovery_sources", []),
             )

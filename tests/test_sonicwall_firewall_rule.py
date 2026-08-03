@@ -2,7 +2,7 @@ import unittest
 
 from networkmapper.classification.rule_result import RuleResult
 from networkmapper.classification.rules.sonicwall_firewall_rule import SonicWallFirewallRule
-from networkmapper.core.models import Device, DeviceType
+from networkmapper.core.models import Device, DeviceType, ServiceEvidence
 
 
 class SonicWallFirewallRuleTest(unittest.TestCase):
@@ -69,8 +69,7 @@ class SonicWallFirewallRuleTest(unittest.TestCase):
             ip_address="192.168.1.34",
             hostname="tz-370",
             vendor="Unknown",
-            open_ports=[443],
-            detected_services=["https"],
+            services=[ServiceEvidence(port=443, protocol="tcp", service="https")],
         )
 
         result = SonicWallFirewallRule().classify(device)

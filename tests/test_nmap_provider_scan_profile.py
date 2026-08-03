@@ -1,6 +1,7 @@
 import unittest
 from unittest.mock import call, patch
 
+from networkmapper.core.models import ServiceEvidence
 from networkmapper.discovery.nmap_provider import NmapProvider
 from networkmapper.discovery.scan_profile import ScanProfile
 
@@ -86,8 +87,7 @@ class NmapProviderScanProfileTest(unittest.TestCase):
         self.assertEqual(devices[0].hostname, "host-01")
         self.assertEqual(devices[0].mac_address, "AA:BB:CC:DD:EE:FF")
         self.assertEqual(devices[0].vendor, "Cisco")
-        self.assertEqual(devices[0].open_ports, [])
-        self.assertEqual(devices[0].detected_services, [])
+        self.assertEqual(devices[0].services, [])
         self.assertEqual(devices[0].discovery_sources, ["nmap"])
 
     @patch("networkmapper.discovery.nmap_provider.nmap.PortScanner")
@@ -135,13 +135,15 @@ class NmapProviderScanProfileTest(unittest.TestCase):
             set(devices_by_ip),
             {"172.16.100.10", "172.16.100.11"},
         )
-        self.assertEqual(devices_by_ip["172.16.100.10"].open_ports, [80, 161, 443])
         self.assertEqual(
-            devices_by_ip["172.16.100.10"].detected_services,
-            ["http", "https", "snmp"],
+            devices_by_ip["172.16.100.10"].services,
+            [
+                ServiceEvidence(port=80, protocol="tcp", service="http"),
+                ServiceEvidence(port=161, protocol="udp", service="snmp"),
+                ServiceEvidence(port=443, protocol="tcp", service="https"),
+            ],
         )
-        self.assertEqual(devices_by_ip["172.16.100.11"].open_ports, [])
-        self.assertEqual(devices_by_ip["172.16.100.11"].detected_services, [])
+        self.assertEqual(devices_by_ip["172.16.100.11"].services, [])
 
     @patch("networkmapper.discovery.nmap_provider.nmap.PortScanner")
     def test_standard_enrichment_populates_device_from_tcp_service_data(self, port_scanner_mock):
@@ -187,10 +189,13 @@ class NmapProviderScanProfileTest(unittest.TestCase):
 
         self.assertEqual(len(devices), 1)
         self.assertEqual(devices[0].ip_address, "172.16.100.20")
-        self.assertEqual(devices[0].open_ports, [80, 161, 9100])
         self.assertEqual(
-            devices[0].detected_services,
-            ["http", "jetdirect", "snmp"],
+            devices[0].services,
+            [
+                ServiceEvidence(port=80, protocol="tcp", service="http"),
+                ServiceEvidence(port=161, protocol="udp", service="snmp"),
+                ServiceEvidence(port=9100, protocol="tcp", service="jetdirect"),
+            ],
         )
 
     @patch("networkmapper.discovery.nmap_provider.nmap.PortScanner")
@@ -234,14 +239,76 @@ class NmapProviderScanProfileTest(unittest.TestCase):
 
         self.assertEqual(len(devices), 1)
         self.assertEqual(devices[0].ip_address, "172.16.100.30")
-        self.assertEqual(devices[0].open_ports, [902, 903])
         self.assertEqual(
-            devices[0].detected_services,
-            ["iss-realsecure", "vmware-auth"],
+            devices[0].services,
+            [
+                ServiceEvidence(port=902, protocol="tcp", service="vmware-auth"),
+                ServiceEvidence(port=903, protocol="tcp", service="iss-realsecure"),
+            ],
         )
 
     @patch("networkmapper.discovery.nmap_provider.nmap.PortScanner")
-    def test_fast_scan_does_not_collect_ports_or_services(self, port_scanner_mock):
+    def test_standard_enrichment_captures_product_and_version_from_existing_sv_scan(
+        self, port_scanner_mock
+    ):
+        """-sV is already run for STANDARD enrichment; product/version it already
+        returns should be captured rather than discarded (FEAT-003A)."""
+        scanner = port_scanner_mock.return_value
+
+        def scan_side_effect(*, hosts, arguments):
+            if arguments == "-sn":
+                return {
+                    "scan": {
+                        "172.16.100.40": {
+                            "hostnames": [{"name": "web-01"}],
+                        }
+                    }
+                }
+
+            if arguments == (
+                "-Pn -sV --version-light -p "
+                "22,53,80,161,443,445,515,631,9100,3389,5060,5061,8080,8443,902,903"
+            ):
+                return {
+                    "scan": {
+                        "172.16.100.40": {
+                            "tcp": {
+                                80: {
+                                    "state": "open",
+                                    "name": "http",
+                                    "product": "Apache httpd",
+                                    "version": "2.4.41",
+                                },
+                            },
+                        }
+                    }
+                }
+
+            return {"scan": {}}
+
+        scanner.scan.side_effect = scan_side_effect
+
+        provider = NmapProvider(
+            "172.16.100.0/24",
+            scan_profile=ScanProfile.STANDARD,
+        )
+        devices = provider.discover()
+
+        self.assertEqual(
+            devices[0].services,
+            [
+                ServiceEvidence(
+                    port=80,
+                    protocol="tcp",
+                    service="http",
+                    product="Apache httpd",
+                    version="2.4.41",
+                ),
+            ],
+        )
+
+    @patch("networkmapper.discovery.nmap_provider.nmap.PortScanner")
+    def test_fast_scan_does_not_collect_services(self, port_scanner_mock):
         scanner = port_scanner_mock.return_value
         scanner.scan.return_value = {
             "scan": {
@@ -261,8 +328,7 @@ class NmapProviderScanProfileTest(unittest.TestCase):
         devices = provider.discover()
 
         self.assertEqual(len(devices), 1)
-        self.assertEqual(devices[0].open_ports, [])
-        self.assertEqual(devices[0].detected_services, [])
+        self.assertEqual(devices[0].services, [])
 
 
 if __name__ == "__main__":

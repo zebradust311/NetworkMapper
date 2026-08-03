@@ -98,8 +98,7 @@ NmapProvider currently supports profile-driven scanning and returns Device objec
 - hostname
 - MAC address
 - vendor
-- open ports
-- detected services
+- correlated per-service evidence (port, protocol, service name, product, and version, per ADR-009)
 - discovery sources
 
 The current discovery system is under active development. It already supports provider abstraction and a working Nmap-based path, but broader provider coverage described elsewhere in the roadmap is not yet implemented.

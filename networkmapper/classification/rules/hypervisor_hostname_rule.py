@@ -6,6 +6,8 @@ from networkmapper.classification.evidence_helpers import (
     first_matching_service,
     format_hostname_evidence_reason,
     normalize_hostname,
+    service_names,
+    service_ports,
 )
 from networkmapper.classification.rule_result import RuleResult
 from networkmapper.core.models import Device, DeviceType
@@ -51,9 +53,11 @@ class HypervisorHostnameRule(ClassificationRule):
                 suggested_device_type=None,
             )
 
-        matched_port = first_matching_port(device.open_ports, HYPERVISOR_CORROBORATING_PORTS)
+        matched_port = first_matching_port(
+            service_ports(device.services), HYPERVISOR_CORROBORATING_PORTS
+        )
         matched_service = first_matching_service(
-            device.detected_services,
+            service_names(device.services),
             HYPERVISOR_CORROBORATING_SERVICES,
             return_lower=True,
         )

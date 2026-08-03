@@ -10,15 +10,17 @@
       "ip_address": "10.20.0.20",
       "hostname": "tz-370",
       "vendor": "Unknown",
-      "open_ports": [443],
-      "detected_services": ["https"]
+      "services": [
+        {"port": 443, "protocol": "tcp", "service": "https"}
+      ]
     },
     {
       "ip_address": "10.20.0.30",
       "hostname": "switch-core-01",
       "vendor": "Unknown",
-      "open_ports": [161],
-      "detected_services": ["snmp"]
+      "services": [
+        {"port": 161, "protocol": "tcp", "service": "snmp"}
+      ]
     },
     {
       "ip_address": "10.20.0.40",
@@ -39,8 +41,10 @@
       "ip_address": "10.20.0.70",
       "hostname": "esxi-mgmt-01",
       "vendor": "Unknown",
-      "open_ports": [902, 903],
-      "detected_services": ["vmware-auth"]
+      "services": [
+        {"port": 902, "protocol": "tcp", "service": "vmware-auth"},
+        {"port": 903, "protocol": "tcp", "service": "vmware-auth"}
+      ]
     }
   ]
 }

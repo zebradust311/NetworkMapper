@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import nmap
 
-from networkmapper.core.models import Device
+from networkmapper.core.models import Device, ServiceEvidence
 from networkmapper.discovery.provider import DiscoveryProvider
 from networkmapper.discovery.scan_profile import ScanProfile
 
@@ -99,10 +99,7 @@ class NmapProvider(DiscoveryProvider):
             if ip_address not in devices_by_ip:
                 continue
 
-            devices_by_ip[ip_address].open_ports = self._extract_open_ports(host_data)
-            devices_by_ip[ip_address].detected_services = self._extract_detected_services(
-                host_data
-            )
+            devices_by_ip[ip_address].services = self._extract_services(host_data)
 
         return list(devices_by_ip.values())
 
@@ -113,8 +110,7 @@ class NmapProvider(DiscoveryProvider):
             hostname=self._extract_hostname(host_data),
             mac_address=self._extract_mac_address(host_data),
             vendor=self._extract_vendor(host_data),
-            open_ports=[],
-            detected_services=[],
+            services=[],
             discovery_sources=["nmap"],
         )
 
@@ -159,30 +155,30 @@ class NmapProvider(DiscoveryProvider):
 
         return None
 
-    def _extract_open_ports(self, host_data: dict) -> list[int]:
-        """Extract open port numbers from Nmap host data."""
-        open_ports: set[int] = set()
+    def _extract_services(self, host_data: dict) -> list[ServiceEvidence]:
+        """Extract correlated per-port service evidence from Nmap host data.
+
+        Per ADR-009, evidence for a port (service name, product, version) is
+        kept on one record per port rather than split across independent
+        lists, so a specific port and everything observed about it stay
+        linked.
+        """
+        services: list[ServiceEvidence] = []
 
         for protocol in ("tcp", "udp"):
             protocol_data = host_data.get(protocol, {})
             for port, service_data in protocol_data.items():
-                if service_data.get("state") == "open":
-                    open_ports.add(int(port))
-
-        return sorted(open_ports)
-
-    def _extract_detected_services(self, host_data: dict) -> list[str]:
-        """Extract detected service names from Nmap host data."""
-        detected_services: set[str] = set()
-
-        for protocol in ("tcp", "udp"):
-            protocol_data = host_data.get(protocol, {})
-            for service_data in protocol_data.values():
                 if service_data.get("state") != "open":
                     continue
 
-                service_name = (service_data.get("name") or "").strip()
-                if service_name:
-                    detected_services.add(service_name)
+                services.append(
+                    ServiceEvidence(
+                        port=int(port),
+                        protocol=protocol,
+                        service=(service_data.get("name") or "").strip() or None,
+                        product=(service_data.get("product") or "").strip() or None,
+                        version=(service_data.get("version") or "").strip() or None,
+                    )
+                )
 
-        return sorted(detected_services)
+        return sorted(services, key=lambda entry: (entry.port, entry.protocol))

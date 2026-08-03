@@ -6,7 +6,7 @@ import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
-from networkmapper.core.models import DeviceType
+from networkmapper.core.models import DeviceType, ServiceEvidence
 from networkmapper.developer.benchmark_runner import (
     BenchmarkMismatch,
     BenchmarkReport,
@@ -39,8 +39,10 @@ class BenchmarkRunnerTest(unittest.TestCase):
                             "ip_address": "192.168.50.10",
                             "hostname": "host-01",
                             "vendor": "Cisco",
-                            "open_ports": [22, 161],
-                            "detected_services": ["ssh", "snmp"],
+                            "services": [
+                                {"port": 22, "protocol": "tcp", "service": "ssh"},
+                                {"port": 161, "protocol": "udp", "service": "snmp"},
+                            ],
                         }
                     ]
                 },
@@ -52,8 +54,13 @@ class BenchmarkRunnerTest(unittest.TestCase):
             self.assertEqual(devices[0].ip_address, "192.168.50.10")
             self.assertEqual(devices[0].hostname, "host-01")
             self.assertEqual(devices[0].vendor, "Cisco")
-            self.assertEqual(devices[0].open_ports, [22, 161])
-            self.assertEqual(devices[0].detected_services, ["ssh", "snmp"])
+            self.assertEqual(
+                devices[0].services,
+                [
+                    ServiceEvidence(port=22, protocol="tcp", service="ssh"),
+                    ServiceEvidence(port=161, protocol="udp", service="snmp"),
+                ],
+            )
             self.assertEqual(devices[0].device_type, DeviceType.UNKNOWN)
 
     def test_accuracy_calculation_for_perfect_match_dataset(self):

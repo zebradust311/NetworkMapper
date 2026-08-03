@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import replace
 
 from networkmapper.classification.device_classifier import DeviceClassifier
-from networkmapper.core.models import Device, DeviceType
+from networkmapper.core.models import Device, DeviceType, ServiceEvidence
 from networkmapper.project.models import Project
 
 
@@ -49,10 +49,8 @@ class ClassificationWorkbench:
             + f"Vendor:\n{self._display_value(device.vendor)}\n\n"
             + f"MAC Address:\n{self._display_value(device.mac_address)}\n\n"
             + f"Operating System:\n{self._display_value(device.operating_system)}\n\n"
-            + "Open Ports:\n"
-            + f"{self._display_list(device.open_ports)}\n\n"
-            + "Detected Services:\n"
-            + f"{self._display_list(device.detected_services)}\n\n"
+            + "Services:\n"
+            + f"{self._display_services(device.services)}\n\n"
             + f"Current DeviceType:\n{self._display_value(device.device_type)}\n"
             + "\n"
             + "Rule Evidence:\n"
@@ -91,12 +89,24 @@ class ClassificationWorkbench:
 
         return "\n\n".join(sections)
 
-    def _display_list(self, values: list[object]) -> str:
-        """Return one value per line for populated lists, otherwise Unknown."""
-        if not values:
+    def _display_services(self, services: list[ServiceEvidence]) -> str:
+        """Return one correlated service-evidence entry per line, otherwise Unknown."""
+        if not services:
             return "Unknown"
 
-        return "\n".join(str(value) for value in values)
+        return "\n".join(self._format_service(entry) for entry in services)
+
+    def _format_service(self, entry: ServiceEvidence) -> str:
+        """Format one service-evidence entry as `port/protocol service (product version)`."""
+        line = f"{entry.port}/{entry.protocol}"
+        if entry.service:
+            line += f" {entry.service}"
+        if entry.product:
+            product_display = entry.product
+            if entry.version:
+                product_display += f" {entry.version}"
+            line += f" ({product_display})"
+        return line
 
     def _display_value(self, value: object) -> str:
         """Return a clean display string for missing values in the report."""

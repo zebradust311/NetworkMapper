@@ -7,6 +7,8 @@ from networkmapper.classification.evidence_helpers import (
     format_hostname_evidence_reason,
     normalize_hostname,
     normalize_vendor,
+    service_names,
+    service_ports,
 )
 from networkmapper.classification.rule_result import RuleResult
 from networkmapper.core.models import Device, DeviceType
@@ -41,11 +43,11 @@ class CiscoSwitchRule(ClassificationRule):
 
         hostname = normalize_hostname(raw_hostname, strip=False)
         matched_port = first_matching_port(
-            device.open_ports,
+            service_ports(device.services),
             SWITCH_MANAGEMENT_PORTS,
         )
         matched_service = first_matching_service(
-            device.detected_services,
+            service_names(device.services),
             SWITCH_MANAGEMENT_SERVICES,
             return_lower=True,
         )

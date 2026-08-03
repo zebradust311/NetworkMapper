@@ -2,7 +2,7 @@ import unittest
 
 from networkmapper.classification.rule_result import RuleResult
 from networkmapper.classification.rules.cisco_switch_rule import CiscoSwitchRule
-from networkmapper.core.models import Device, DeviceType
+from networkmapper.core.models import Device, DeviceType, ServiceEvidence
 
 
 class CiscoSwitchRuleTest(unittest.TestCase):
@@ -54,8 +54,7 @@ class CiscoSwitchRuleTest(unittest.TestCase):
             ip_address="192.168.1.43",
             hostname="switch-core-01",
             vendor="Unknown",
-            open_ports=[161],
-            detected_services=["snmp"],
+            services=[ServiceEvidence(port=161, protocol="udp", service="snmp")],
         )
 
         result = CiscoSwitchRule().classify(device)

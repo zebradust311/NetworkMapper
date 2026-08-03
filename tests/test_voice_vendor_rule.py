@@ -2,7 +2,7 @@ import unittest
 
 from networkmapper.classification.rule_result import RuleResult
 from networkmapper.classification.rules.voice_vendor_rule import VoiceVendorRule
-from networkmapper.core.models import Device, DeviceType
+from networkmapper.core.models import Device, DeviceType, ServiceEvidence
 
 
 class VoiceVendorRuleTest(unittest.TestCase):
@@ -78,8 +78,7 @@ class VoiceVendorRuleTest(unittest.TestCase):
             ip_address="192.168.1.25",
             hostname="desk-phone-01",
             vendor=None,
-            open_ports=[5060],
-            detected_services=["sip"],
+            services=[ServiceEvidence(port=5060, protocol="tcp", service="sip")],
         )
 
         result = VoiceVendorRule().classify(device)

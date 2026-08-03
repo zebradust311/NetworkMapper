@@ -2,7 +2,7 @@ import unittest
 
 from networkmapper.classification.rule_result import RuleResult
 from networkmapper.classification.rules.hypervisor_hostname_rule import HypervisorHostnameRule
-from networkmapper.core.models import Device, DeviceType
+from networkmapper.core.models import Device, DeviceType, ServiceEvidence
 
 
 class HypervisorHostnameRuleTest(unittest.TestCase):
@@ -165,7 +165,7 @@ class HypervisorHostnameRuleTest(unittest.TestCase):
             ip_address="192.168.1.69",
             hostname="esxi-02",
             vendor="Unknown",
-            open_ports=[443],
+            services=[ServiceEvidence(port=443, protocol="tcp")],
         )
 
         result = HypervisorHostnameRule().classify(device)
@@ -182,7 +182,7 @@ class HypervisorHostnameRuleTest(unittest.TestCase):
             ip_address="192.168.1.70",
             hostname="vcenter-02",
             vendor="Unknown",
-            detected_services=["https"],
+            services=[ServiceEvidence(port=8443, protocol="tcp", service="https")],
         )
 
         result = HypervisorHostnameRule().classify(device)
@@ -199,8 +199,7 @@ class HypervisorHostnameRuleTest(unittest.TestCase):
             ip_address="192.168.1.71",
             hostname="hyperv-02",
             vendor="Unknown",
-            open_ports=[3389],
-            detected_services=["ms-wbt-server"],
+            services=[ServiceEvidence(port=3389, protocol="tcp", service="ms-wbt-server")],
         )
 
         result = HypervisorHostnameRule().classify(device)

@@ -15,8 +15,9 @@
       "ip_address": "172.30.0.30",
       "hostname": "desk-phone-01",
       "vendor": null,
-      "open_ports": [5060],
-      "detected_services": ["sip"]
+      "services": [
+        {"port": 5060, "protocol": "tcp", "service": "sip"}
+      ]
     },
     {
       "ip_address": "172.30.0.40",

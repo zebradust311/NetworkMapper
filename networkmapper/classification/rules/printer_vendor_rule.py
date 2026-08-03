@@ -5,6 +5,8 @@ from networkmapper.classification.evidence_helpers import (
     first_matching_port,
     first_matching_service,
     normalize_vendor,
+    service_names,
+    service_ports,
 )
 from networkmapper.classification.rule_result import RuleResult
 from networkmapper.core.models import Device, DeviceType
@@ -97,12 +99,12 @@ class PrinterVendorRule(ClassificationRule):
 
     def _find_printer_networking(self, device: Device) -> tuple[int | None, str | None]:
         matched_port = first_matching_port(
-            device.open_ports,
+            service_ports(device.services),
             PRINTER_PROTOCOL_PORTS,
         )
 
         matched_service = first_matching_service(
-            device.detected_services,
+            service_names(device.services),
             PRINTER_SERVICE_KEYWORDS,
             return_lower=False,
         )

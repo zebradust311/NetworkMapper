@@ -2,6 +2,18 @@ from __future__ import annotations
 
 from collections.abc import Collection, Sequence
 
+from networkmapper.core.models import ServiceEvidence
+
+
+def service_ports(services: Sequence[ServiceEvidence]) -> list[int]:
+    """Return the ports from a device's correlated service evidence, in order."""
+    return [entry.port for entry in services]
+
+
+def service_names(services: Sequence[ServiceEvidence]) -> list[str]:
+    """Return the known service names from a device's correlated service evidence, in order."""
+    return [entry.service for entry in services if entry.service]
+
 
 def normalize_vendor(vendor: str | None, *, strip: bool = True) -> str:
     """Normalize vendor text for deterministic matching."""

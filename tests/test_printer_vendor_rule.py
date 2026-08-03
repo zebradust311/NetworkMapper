@@ -2,7 +2,7 @@ import unittest
 
 from networkmapper.classification.rules.printer_vendor_rule import PrinterVendorRule
 from networkmapper.classification.rule_result import RuleResult
-from networkmapper.core.models import Device, DeviceType
+from networkmapper.core.models import Device, DeviceType, ServiceEvidence
 
 
 class PrinterVendorRuleTest(unittest.TestCase):
@@ -117,8 +117,7 @@ class PrinterVendorRuleTest(unittest.TestCase):
         device = Device(
             ip_address="192.168.1.16",
             vendor=None,
-            open_ports=[9100],
-            detected_services=[],
+            services=[ServiceEvidence(port=9100, protocol="tcp")],
         )
 
         result = self.rule.classify(device)
@@ -135,8 +134,7 @@ class PrinterVendorRuleTest(unittest.TestCase):
         device = Device(
             ip_address="192.168.1.17",
             vendor=None,
-            open_ports=[],
-            detected_services=["ipp"],
+            services=[ServiceEvidence(port=80, protocol="tcp", service="ipp")],
         )
 
         result = self.rule.classify(device)
