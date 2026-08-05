@@ -145,6 +145,36 @@ class BenchmarkRunnerTest(unittest.TestCase):
                 ],
             )
 
+    def test_dataset_loading_populates_smb_identity_fields(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            inventory_path = temp_path / "inventory.json"
+            self._write_json(
+                inventory_path,
+                {
+                    "devices": [
+                        {
+                            "ip_address": "192.168.50.22",
+                            "hostname": "dc-01",
+                            "vendor": "Unknown",
+                            "operating_system": "Windows Server 2019 Standard 17763",
+                            "computer_name": "DC01",
+                            "domain": "corp.local",
+                            "smb_signing": "disabled (dangerous, but default)",
+                        }
+                    ]
+                },
+            )
+
+            devices = self.runner.load_inventory(inventory_path)
+
+            self.assertEqual(
+                devices[0].operating_system, "Windows Server 2019 Standard 17763"
+            )
+            self.assertEqual(devices[0].computer_name, "DC01")
+            self.assertEqual(devices[0].domain, "corp.local")
+            self.assertEqual(devices[0].smb_signing, "disabled (dangerous, but default)")
+
     def test_accuracy_calculation_for_perfect_match_dataset(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)

@@ -42,6 +42,16 @@ CLASSIFICATION_PORTS = [
 # is needed here.
 STANDARD_ENRICHMENT_SCRIPTS = ["http-title", "ssl-cert", "vmware-version", "http-auth"]
 
+# FEAT-003H: smb-os-discovery and smb-security-mode are "hostrule" NSE
+# scripts — they negotiate a session against the SMB port already in
+# CLASSIFICATION_PORTS (445) but report their findings once per host
+# (Nmap's "Host script results"), not per port, because the facts they
+# reveal (OS, computer name, domain, signing policy) describe the host
+# itself rather than any specific service. python-nmap surfaces this as
+# host_data["hostscript"], separate from the per-port "script" dict used
+# by http-title/ssl-cert/http-auth/vmware-version.
+STANDARD_HOST_ENRICHMENT_SCRIPTS = ["smb-os-discovery", "smb-security-mode"]
+
 
 class NmapProvider(DiscoveryProvider):
     """Discover network hosts using profile-driven Nmap scan settings."""
@@ -108,7 +118,14 @@ class NmapProvider(DiscoveryProvider):
             if ip_address not in devices_by_ip:
                 continue
 
-            devices_by_ip[ip_address].services = self._extract_services(host_data)
+            device = devices_by_ip[ip_address]
+            device.services = self._extract_services(host_data)
+
+            smb_identity = self._extract_smb_identity(host_data)
+            device.operating_system = smb_identity["operating_system"]
+            device.computer_name = smb_identity["computer_name"]
+            device.domain = smb_identity["domain"]
+            device.smb_signing = smb_identity["smb_signing"]
 
         return list(devices_by_ip.values())
 
@@ -142,7 +159,7 @@ class NmapProvider(DiscoveryProvider):
         ADR-009's per-service evidence model directly.
         """
         classification_ports = ",".join(str(port) for port in CLASSIFICATION_PORTS)
-        scripts = ",".join(STANDARD_ENRICHMENT_SCRIPTS)
+        scripts = ",".join(STANDARD_ENRICHMENT_SCRIPTS + STANDARD_HOST_ENRICHMENT_SCRIPTS)
         return f"-Pn -sV --version-light --script {scripts} -p {classification_ports}"
 
     def _extract_hostname(self, host_data: dict) -> str | None:
@@ -176,9 +193,9 @@ class NmapProvider(DiscoveryProvider):
         """Extract the authentication realm from http-auth NSE script output.
 
         http-auth's output isn't a fixed "Label: value" line like ssl-cert's
-        (FEAT-003F's `_extract_cert_field` pattern) — it reports the raw
-        challenge line (e.g. "Basic realm=NETGEAR R7000"), so this searches
-        for the "realm=" marker rather than a line prefix.
+        (see `_extract_labeled_field`) — it reports the raw challenge line
+        (e.g. "Basic realm=NETGEAR R7000"), so this searches for the
+        "realm=" marker rather than a line prefix.
         """
         if not http_auth_output:
             return None
@@ -220,8 +237,8 @@ class NmapProvider(DiscoveryProvider):
                         product=(service_data.get("product") or "").strip() or None,
                         version=self._extract_version(service_data, scripts),
                         http_title=self._clean_script_output(scripts.get("http-title")),
-                        tls_subject=self._extract_cert_field(scripts.get("ssl-cert"), "Subject"),
-                        tls_issuer=self._extract_cert_field(scripts.get("ssl-cert"), "Issuer"),
+                        tls_subject=self._extract_labeled_field(scripts.get("ssl-cert"), "Subject"),
+                        tls_issuer=self._extract_labeled_field(scripts.get("ssl-cert"), "Issuer"),
                         http_auth_realm=self._extract_http_auth_realm(scripts.get("http-auth")),
                     )
                 )
@@ -247,16 +264,49 @@ class NmapProvider(DiscoveryProvider):
         cleaned = " ".join(raw_output.strip().splitlines()).strip()
         return cleaned or None
 
-    def _extract_cert_field(self, ssl_cert_output: str | None, field_label: str) -> str | None:
-        """Extract a labeled field (e.g. "Subject") from ssl-cert NSE script output."""
-        if not ssl_cert_output:
+    def _extract_labeled_field(self, script_output: str | None, field_label: str) -> str | None:
+        """Extract a labeled field (e.g. "Subject", "Computer name") from
+        multi-line NSE script output whose lines follow a "Label: value"
+        convention. Originally written for ssl-cert (FEAT-003F); reused for
+        smb-os-discovery/smb-security-mode host-script output (FEAT-003H)
+        since both follow the same convention."""
+        if not script_output:
             return None
 
         prefix = f"{field_label}:"
-        for line in ssl_cert_output.splitlines():
+        for line in script_output.splitlines():
             stripped = line.strip()
             if stripped.startswith(prefix):
                 value = stripped[len(prefix):].strip()
                 return value or None
 
         return None
+
+    def _host_script_output(self, host_data: dict, script_id: str) -> str | None:
+        """Return the raw output of one host-level ("hostrule") NSE script, if present."""
+        for entry in host_data.get("hostscript", []):
+            if entry.get("id") == script_id:
+                return entry.get("output")
+
+        return None
+
+    def _extract_smb_identity(self, host_data: dict) -> dict[str, str | None]:
+        """Extract device-level SMB identity evidence from Nmap host-script results.
+
+        Per ADR-009, evidence describing the host itself (not a specific
+        service) belongs on Device rather than ServiceEvidence, even though
+        the underlying SMB session is negotiated against port 445.
+        """
+        os_discovery_output = self._host_script_output(host_data, "smb-os-discovery")
+        security_mode_output = self._host_script_output(host_data, "smb-security-mode")
+
+        domain = self._extract_labeled_field(
+            os_discovery_output, "Domain name"
+        ) or self._extract_labeled_field(os_discovery_output, "Workgroup")
+
+        return {
+            "operating_system": self._extract_labeled_field(os_discovery_output, "OS"),
+            "computer_name": self._extract_labeled_field(os_discovery_output, "Computer name"),
+            "domain": domain,
+            "smb_signing": self._extract_labeled_field(security_mode_output, "message_signing"),
+        }

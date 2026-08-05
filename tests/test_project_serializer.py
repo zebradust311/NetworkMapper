@@ -67,6 +67,39 @@ class ProjectSerializerTest(unittest.TestCase):
         )
         self.assertEqual(loaded_device.device_type, DeviceType.SERVER)
 
+    def test_save_and_load_round_trips_smb_identity_evidence(self):
+        project = Project(
+            customer_name="Acme",
+            created_date=datetime(2026, 1, 1, 12, 0, 0),
+            modified_date=datetime(2026, 1, 2, 12, 0, 0),
+        )
+        project.network_graph.add_device(
+            Device(
+                ip_address="10.0.0.30",
+                hostname="dc-01",
+                vendor="Unknown",
+                operating_system="Windows Server 2019 Standard 17763",
+                computer_name="DC01",
+                domain="corp.local",
+                smb_signing="disabled (dangerous, but default)",
+                device_type=DeviceType.SERVER,
+                discovery_sources=["nmap"],
+            )
+        )
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            file_path = Path(temp_dir) / "project.json"
+            ProjectSerializer.save(project, str(file_path))
+            loaded_project = ProjectSerializer.load(str(file_path))
+
+        loaded_device = loaded_project.network_graph.get_device("10.0.0.30")
+
+        self.assertIsNotNone(loaded_device)
+        self.assertEqual(loaded_device.operating_system, "Windows Server 2019 Standard 17763")
+        self.assertEqual(loaded_device.computer_name, "DC01")
+        self.assertEqual(loaded_device.domain, "corp.local")
+        self.assertEqual(loaded_device.smb_signing, "disabled (dangerous, but default)")
+
     def test_save_and_load_round_trips_device_with_no_services(self):
         project = Project(
             customer_name="Acme",

@@ -329,6 +329,41 @@ class HypervisorHostnameRuleTest(unittest.TestCase):
             "known hypervisor product identifier.",
         )
 
+    def test_hostname_match_with_windows_server_os_corroborates_reason(self):
+        device = Device(
+            ip_address="192.168.1.78",
+            hostname="hyperv-node-03",
+            vendor="Unknown",
+            operating_system="Windows Server 2016 Standard 14393",
+        )
+
+        result = HypervisorHostnameRule().classify(device)
+
+        self.assertTrue(result.matched)
+        self.assertEqual(result.suggested_device_type, DeviceType.HYPERVISOR)
+        self.assertEqual(
+            result.reason,
+            "Hostname 'hyperv-node-03' matched known hypervisor naming convention. "
+            "Detected operating system 'Windows Server 2016 Standard 14393' "
+            "matched known hypervisor operating system indicator.",
+        )
+
+    def test_hostname_match_without_windows_server_os_is_unaffected(self):
+        device = Device(
+            ip_address="192.168.1.79",
+            hostname="esxi-09",
+            vendor="Unknown",
+            operating_system="ESXi 6.7.0",
+        )
+
+        result = HypervisorHostnameRule().classify(device)
+
+        self.assertTrue(result.matched)
+        self.assertEqual(
+            result.reason,
+            "Hostname 'esxi-09' matched known hypervisor naming convention.",
+        )
+
     def test_hostname_match_with_vmware_tls_subject_enriches_reason(self):
         device = Device(
             ip_address="192.168.1.76",

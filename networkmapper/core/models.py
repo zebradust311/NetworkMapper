@@ -59,6 +59,11 @@ class Device:
         mac_address: The device MAC address, if available.
         vendor: The vendor or manufacturer, if known.
         operating_system: The operating system, if identified.
+        computer_name: The host's self-reported computer name, if known.
+        domain: The host's Windows domain or workgroup name, if known.
+        smb_signing: The SMB message-signing posture, if known (e.g. "disabled
+            (dangerous, but default)"). Recorded as evidence for future
+            security/compliance reporting; not currently used in classification.
         services: The correlated per-port discovery evidence observed for the device.
         device_type: The inferred device type, if known.
         discovery_sources: The discovery methods or providers that found the device.
@@ -69,6 +74,9 @@ class Device:
     mac_address: Optional[str] = None
     vendor: Optional[str] = None
     operating_system: Optional[str] = None
+    computer_name: Optional[str] = None
+    domain: Optional[str] = None
+    smb_signing: Optional[str] = None
     services: list[ServiceEvidence] = field(default_factory=list)
     device_type: DeviceType = DeviceType.UNKNOWN
     discovery_sources: list[str] = field(default_factory=list)

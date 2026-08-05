@@ -26,6 +26,9 @@ class ProjectSerializer:
                     "mac_address": device.mac_address,
                     "vendor": device.vendor,
                     "operating_system": device.operating_system,
+                    "computer_name": device.computer_name,
+                    "domain": device.domain,
+                    "smb_signing": device.smb_signing,
                     "services": [
                         {
                             "port": entry.port,
@@ -70,6 +73,9 @@ class ProjectSerializer:
                 mac_address=device_payload.get("mac_address"),
                 vendor=device_payload.get("vendor"),
                 operating_system=device_payload.get("operating_system"),
+                computer_name=device_payload.get("computer_name"),
+                domain=device_payload.get("domain"),
+                smb_signing=device_payload.get("smb_signing"),
                 services=[
                     ServiceEvidence(
                         port=entry["port"],

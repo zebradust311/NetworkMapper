@@ -30,7 +30,10 @@
     {
       "ip_address": "10.20.0.50",
       "hostname": "hyperv-node-01",
-      "vendor": "Unknown"
+      "vendor": "Unknown",
+      "operating_system": "Windows Server 2016 Standard 14393",
+      "computer_name": "HYPERV-NODE-01",
+      "domain": "corp.local"
     },
     {
       "ip_address": "10.20.0.60",
@@ -44,6 +47,18 @@
       "services": [
         {"port": 902, "protocol": "tcp", "service": "vmware-auth"},
         {"port": 903, "protocol": "tcp", "service": "vmware-auth"}
+      ]
+    },
+    {
+      "ip_address": "10.20.0.80",
+      "hostname": "app-server-02",
+      "vendor": "Unknown",
+      "operating_system": "Windows Server 2019 Standard 17763",
+      "computer_name": "APP-SERVER-02",
+      "domain": "corp.local",
+      "smb_signing": "disabled (dangerous, but default)",
+      "services": [
+        {"port": 445, "protocol": "tcp", "service": "microsoft-ds"}
       ]
     }
   ]

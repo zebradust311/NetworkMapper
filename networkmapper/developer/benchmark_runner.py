@@ -58,6 +58,9 @@ class BenchmarkRunner:
                     mac_address=device_payload.get("mac_address"),
                     vendor=device_payload.get("vendor"),
                     operating_system=device_payload.get("operating_system"),
+                    computer_name=device_payload.get("computer_name"),
+                    domain=device_payload.get("domain"),
+                    smb_signing=device_payload.get("smb_signing"),
                     services=[
                         ServiceEvidence(
                             port=entry["port"],

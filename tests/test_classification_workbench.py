@@ -184,6 +184,59 @@ class ClassificationWorkbenchTest(unittest.TestCase):
             report,
         )
 
+    def test_generate_renders_smb_identity_evidence(self):
+        project = Project(
+            customer_name="Acme",
+            created_date=datetime(2026, 1, 1, 12, 0, 0),
+            modified_date=datetime(2026, 1, 2, 12, 0, 0),
+        )
+        project.network_graph.add_device(
+            Device(
+                ip_address="172.16.100.13",
+                hostname="dc-01",
+                vendor="Unknown",
+                operating_system="Windows Server 2019 Standard 17763",
+                computer_name="DC01",
+                domain="corp.local",
+                smb_signing="disabled (dangerous, but default)",
+                device_type=DeviceType.UNKNOWN,
+            )
+        )
+
+        report = ClassificationWorkbench().generate(project)
+
+        self.assertIn(
+            "Operating System:\nWindows Server 2019 Standard 17763",
+            report,
+        )
+        self.assertIn("Computer Name:\nDC01", report)
+        self.assertIn("Domain:\ncorp.local", report)
+        self.assertIn(
+            "SMB Signing:\ndisabled (dangerous, but default)",
+            report,
+        )
+
+    def test_generate_renders_unknown_smb_identity_fields_as_unknown(self):
+        project = Project(
+            customer_name="Acme",
+            created_date=datetime(2026, 1, 1, 12, 0, 0),
+            modified_date=datetime(2026, 1, 2, 12, 0, 0),
+        )
+        project.network_graph.add_device(
+            Device(
+                ip_address="172.16.100.14",
+                hostname="host-14",
+                vendor="Unknown",
+                device_type=DeviceType.UNKNOWN,
+            )
+        )
+
+        report = ClassificationWorkbench().generate(project)
+
+        self.assertIn("Computer Name:\nUnknown", report)
+        self.assertIn("Domain:\nUnknown", report)
+        self.assertIn("SMB Signing:\nUnknown", report)
+
     def test_generate_renders_unknown_for_empty_services(self):
         project = Project(
             customer_name="Acme",

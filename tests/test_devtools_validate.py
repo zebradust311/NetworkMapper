@@ -23,7 +23,7 @@ class FastValidationBackwardCompatibilityTest(unittest.TestCase):
     def test_run_validation_still_covers_exactly_the_standard_regression_tests(self):
         result = run_validation()
 
-        self.assertEqual(result.tests_run, 104)
+        self.assertEqual(result.tests_run, 108)
         self.assertTrue(result.passed)
         self.assertEqual(result.exit_code, 0)
 

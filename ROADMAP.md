@@ -307,11 +307,18 @@ DEV-002 was completed as part of the DEV-003 sprint (shared evidence helpers
 landed alongside the developer automation framework) but was never marked
 complete here.
 
-FEAT-003G (HTTP Authentication Realm discovery) is complete. Per
-ARCH-003's roadmap, the next discovery-evidence sprint is SMB OS
-Discovery + SMB Security Mode + the SMB2 dialect field — filed as
-**FEAT-003H** (ARCH-003 provisionally referred to this work as
-"FEAT-003G" before FEAT-003G was claimed by the HTTP Auth Realm sprint).
+FEAT-003G (HTTP Authentication Realm discovery) is complete.
+
+FEAT-003H (SMB Identity Discovery — SMB OS Discovery + SMB Security
+Mode, filed as FEAT-003H rather than ARCH-003's provisional "FEAT-003G"
+label, which FEAT-003G's own sprint claimed first) is complete.
+`smb2-time` was considered and excluded — ARCH-003's original
+description of it as a source of SMB2 dialect evidence was a factual
+error, corrected during FEAT-003H implementation; the script reports
+only server date/time, which has no classification consumer.
+
+Per ARCH-003's roadmap, the next discovery-evidence candidate is RDP
+NTLM Info, tentatively **FEAT-003I**.
 
 See `docs/reports/` for recent investigation and implementation history.
 

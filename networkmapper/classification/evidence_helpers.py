@@ -107,6 +107,14 @@ def normalize_hostname(hostname: str | None, *, strip: bool = False) -> str:
     return normalized.lower()
 
 
+def normalize_operating_system(operating_system: str | None, *, strip: bool = True) -> str:
+    """Normalize operating system text for deterministic matching."""
+    normalized = operating_system or ""
+    if strip:
+        normalized = normalized.strip()
+    return normalized.lower()
+
+
 def first_matching_port(
     open_ports: Sequence[int],
     candidate_ports: Collection[int],

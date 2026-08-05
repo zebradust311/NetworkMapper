@@ -7,6 +7,7 @@ from networkmapper.classification.evidence_helpers import (
     first_matching_service,
     format_hostname_evidence_reason,
     normalize_hostname,
+    normalize_operating_system,
     service_names,
     service_ports,
 )
@@ -46,6 +47,15 @@ HYPERVISOR_CORROBORATING_SERVICES = {"https", "ms-wbt-server"}
 # remains the sole match gate.
 HYPERVISOR_PRODUCT_KEYWORDS = {"vmware"}
 
+# smb-os-discovery (FEAT-003H) can corroborate a Hyper-V hostname match:
+# Hyper-V is a Windows Server role, so a device that both matches a
+# hyperv-style hostname convention AND discloses a Windows Server OS via
+# unauthenticated SMB negotiation has two independent signals pointing the
+# same direction. Corroboration only, like HYPERVISOR_PRODUCT_KEYWORDS —
+# many non-hypervisor machines also run Windows Server, so this never
+# triggers a match on its own.
+HYPERVISOR_OPERATING_SYSTEM_KEYWORDS = {"windows server"}
+
 
 class HypervisorHostnameRule(ClassificationRule):
     """Match hostnames that indicate a hypervisor, such as those containing 'esxi' or 'vcenter'."""
@@ -72,6 +82,13 @@ class HypervisorHostnameRule(ClassificationRule):
             return_lower=True,
         )
         matched_identifier = first_matching_identifier(device.services, HYPERVISOR_PRODUCT_KEYWORDS)
+        raw_operating_system = device.operating_system
+        operating_system = normalize_operating_system(raw_operating_system)
+        matched_operating_system = (
+            raw_operating_system
+            if any(keyword in operating_system for keyword in HYPERVISOR_OPERATING_SYSTEM_KEYWORDS)
+            else None
+        )
 
         if matched_port is not None or matched_service is not None:
             reason = format_hostname_evidence_reason(
@@ -88,6 +105,12 @@ class HypervisorHostnameRule(ClassificationRule):
             reason += (
                 f" Detected {label} {value!r} matched known hypervisor product "
                 "identifier."
+            )
+
+        if matched_operating_system is not None:
+            reason += (
+                f" Detected operating system {matched_operating_system!r} matched "
+                "known hypervisor operating system indicator."
             )
 
         return RuleResult(

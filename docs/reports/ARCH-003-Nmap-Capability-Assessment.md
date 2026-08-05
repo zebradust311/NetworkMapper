@@ -13,13 +13,16 @@ require a new ADR if pursued; this investigation reconfirms that finding
 and adds no new ADR-triggering candidate.
 
 Recommended Next Sprint:
-FEAT-003G – SMB OS Discovery (already scoped by FEAT-003E/F's Architecture
-Review), expanded by this investigation to also include SMB Security Mode
-and the SMB2 dialect field (`smb2-time`) as free additions from the same
-script family. RDP NTLM Info is
-recommended as a distinct, lower-risk follow-on sprint (tentatively
-FEAT-003H) rather than bundled into FEAT-003G — see Prioritized
-Implementation Roadmap.
+FEAT-003H – SMB OS Discovery (already scoped by FEAT-003E/F's Architecture
+Review; filed as FEAT-003H rather than FEAT-003G because FEAT-003G was
+separately claimed by the HTTP Authentication Realm sprint — see
+`ROADMAP.md`), expanded by this investigation to also include SMB
+Security Mode as a free addition from the same script family
+(`smb2-time` was also considered but is not recommended — see the
+FEAT-003H correction in Section 2.1). RDP NTLM Info is recommended as a
+distinct, lower-risk follow-on sprint (tentatively FEAT-003I) rather
+than bundled into the SMB sprint — see Prioritized Implementation
+Roadmap.
 
 ---
 
@@ -76,7 +79,7 @@ Three findings anchor the roadmap:
    but with a distinctly lower operational profile — RDP connection
    attempts are common, expected network traffic, unlike SMB session
    negotiation's lateral-movement-adjacent reputation. It should **not**
-   be bundled into FEAT-003G's SMB-specific sprint on the assumption that
+   be bundled into FEAT-003H's SMB-specific sprint on the assumption that
    "both populate `operating_system`" makes them operationally
    equivalent — they aren't.
 3. **HTTP Authentication Realm (`http-auth`) is a new, high-confidence
@@ -163,14 +166,15 @@ required format.
 
 #### `smb-os-discovery`
 
-Already fully evaluated in FEAT-003E and scoped as FEAT-003G by
-Architecture Review. Not re-derived here. Summary: OS version/build,
+Already fully evaluated in FEAT-003E and scoped as FEAT-003H by
+Architecture Review (filed as FEAT-003H rather than FEAT-003G — see
+`ROADMAP.md`). Not re-derived here. Summary: OS version/build,
 computer name, and domain/workgroup via SMB negotiation on port 445
 (already scanned); fully deterministic (structured protocol response);
 low scan cost; the one candidate across the whole investigation series
 with a distinct, real security consideration (SMB probing can read as
 lateral-movement-adjacent to IDS/SOC tooling). Status: recommended,
-sequenced as FEAT-003G, not yet implemented.
+sequenced as FEAT-003H, implemented.
 
 #### `smb-security-mode` (new to this investigation)
 
@@ -180,10 +184,10 @@ sequenced as FEAT-003G, not yet implemented.
 | Classification value | **Low, and indirect.** This is a security-posture indicator, not a device-identity indicator. SMBv1-only support weakly correlates with legacy Windows or older NAS firmware, but that's a vintage hint, not a device-type signal any current rule could act on. |
 | Deterministic or heuristic | Deterministic collection (structured protocol response). |
 | Scan cost / traffic | Effectively free if `smb-os-discovery` is already being run — same initial SMB negotiate exchange, same port, same connection. |
-| Security considerations | Identical to `smb-os-discovery`, because it is the same protocol interaction. No incremental risk beyond what FEAT-003G already accepts. |
+| Security considerations | Identical to `smb-os-discovery`, because it is the same protocol interaction. No incremental risk beyond what FEAT-003H already accepts. |
 | Implementation complexity | Trivial once `smb-os-discovery`'s SMB collection path exists — parsing one more field from output already being retrieved. |
 
-**Recommendation:** bundle into FEAT-003G as a free addition, not a
+**Recommendation:** bundle into FEAT-003H as a free addition, not a
 separate sprint. Its classification value doesn't justify a dedicated
 sprint on its own, but implementing it *outside* the sprint that's
 already paying SMB's operational-review cost would be wasteful. Flagged
@@ -192,29 +196,32 @@ as security/compliance-relevant evidence for a *future* capability
 certificate expiration — out of scope for classification value, not
 rejected outright.
 
-#### `smb2-time` (new to this investigation)
+#### `smb2-time` (new to this investigation; corrected during FEAT-003H)
+
+**Correction (FEAT-003H):** this entry originally described `smb2-time`
+as reporting a negotiated SMB2/SMB3 dialect ceiling. That was incorrect
+— verified against the script's actual documented output during FEAT-003H
+implementation, `smb2-time` reports exactly two fields, `date` (the
+target's current system time) and `start_date` (the SMB2 server's boot/
+start time), and nothing else. It does not expose the negotiated dialect
+in any parseable field. The assessment below is corrected accordingly;
+the original dialect-based recommendation is retracted.
 
 | Criterion | Assessment |
 |---|---|
-| Information collected | The negotiated SMB2/SMB3 dialect (`2.02`, `2.10`, `3.0`, `3.02`, `3.11`) and the target's reported current system date/time (with timezone offset). |
-| Classification value | **Low, on two different axes.** The negotiated dialect is a weak, indirect OS-vintage hint — dialect ceilings loosely correlate with OS generation (e.g. a `2.02`-only ceiling suggests an older stack; `3.1.1` support implies a materially newer one) but multiple OS/NAS generations overlap on supported dialects, so it is not a reliable device-type signal any rule could act on with confidence. The reported system time carries **no classification value at all** — it says nothing about device identity, only about clock state, and its only plausible use is a completely different future capability (clock-skew/drift diagnostics), not classification. |
-| Deterministic or heuristic | Deterministic collection (structured SMB2 negotiation response); the dialect's *interpretation* as an OS hint would be heuristic if ever used, which is why it is not recommended for that purpose. |
-| Scan cost / traffic | Effectively free if `smb-os-discovery`/`smb-security-mode` are already being collected — same SMB negotiate exchange, same port (445), same connection, one more field read from output already being retrieved. |
-| Security considerations | Identical to `smb-os-discovery`/`smb-security-mode` — same protocol interaction, no incremental risk beyond what FEAT-003G already accepts. |
-| Implementation complexity | Trivial once FEAT-003G's SMB collection path exists, for the dialect field. The time/timezone field is trivial to collect but has no current consumer or planned use. |
+| Information collected | The target's current system date/time (`date`) and the SMB2 server's boot/start time (`start_date`). No protocol dialect information. |
+| Classification value | **None.** Both fields describe clock/uptime state, not device identity — neither says anything about vendor, device type, or OS. |
+| Deterministic or heuristic | Deterministic collection (structured SMB2 negotiation response), but not applicable — there is no classification use to be heuristic or deterministic about. |
+| Scan cost / traffic | Would be effectively free if collected alongside `smb-os-discovery`/`smb-security-mode` — same SMB negotiate exchange, same port (445), same connection. |
+| Security considerations | Identical to `smb-os-discovery`/`smb-security-mode` — same protocol interaction, no incremental risk. |
+| Implementation complexity | N/A — not recommended for collection (see below). |
 
-**Recommendation:** bundle the **dialect** field into FEAT-003G as a
-third free addition alongside `smb-security-mode`, on the same "same
-exchange, same sprint, don't pay the operational-review cost twice"
-reasoning already applied to that field — but do **not** wire it into
-classification; record it for the same possible future
-vintage/health-context use as `smb-security-mode`. **Do not collect the
-system time/timezone field** — unlike `smb-security-mode`, it has no
-identified present or future consumer (not a security-posture indicator,
-not a classification signal), so collecting it would be speculative data
-collection with no stated purpose, which this project's evidence
-standard (FEAT-003D/E/F: don't invent unsupported or purposeless
-fingerprints) counsels against.
+**Recommendation (corrected):** **do not implement.** With the dialect
+premise removed, neither field `smb2-time` reports has an identified
+consumer — the same "no stated purpose" reasoning this report already
+applied to the (also-retracted) system-time field applies to the entire
+script now. `smb-os-discovery` and `smb-security-mode` remain
+recommended and are unaffected by this correction.
 
 ### 2.2 RDP
 
@@ -240,7 +247,7 @@ implementation choice, not an ADR). The same applies here: whichever
 sprint implements the second of the two sources should decide precedence
 deliberately, as an implementation decision, not an architectural one.
 
-**Recommendation:** distinct sprint from FEAT-003G, not bundled with it,
+**Recommendation:** distinct sprint from FEAT-003H, not bundled with it,
 specifically *because* its risk profile differs enough to warrant its
 own lighter-weight review rather than inheriting SMB's operational
 caveats by association. See Prioritized Implementation Roadmap.
@@ -418,10 +425,9 @@ software/process-enumeration scripts (same philosophy mismatch).
 
 | Candidate | Extend `ServiceEvidence`? | Device-level? | New evidence model? | Conflicts with ADR-009? | Intentionally ignore? |
 |---|---|---|---|---|---|
-| `smb-os-discovery` (OS/computer/domain) | No | **Yes** | No | No | No — FEAT-003G |
-| `smb-security-mode` | **Yes** (or device-level; weak either way) | Optional | No | No | Bundle into FEAT-003G, don't drive its own sprint |
-| `smb2-time` (dialect field) | **Yes** (or device-level; weak either way) | Optional | No | No | Bundle into FEAT-003G, not wired into classification |
-| `smb2-time` (system time field) | N/A — no identified consumer | N/A | No | No | **Yes** — do not collect, no stated purpose |
+| `smb-os-discovery` (OS/computer/domain) | No | **Yes** | No | No | No — FEAT-003H |
+| `smb-security-mode` | Device-level (FEAT-003H implementation decision — see FEAT-003H report) | **Yes** | No | No | Bundle into FEAT-003H, don't drive its own sprint |
+| `smb2-time` (both fields) | N/A — no identified consumer (corrected; no dialect field exists) | N/A | No | No | **Yes** — do not implement |
 | `rdp-ntlm-info` (OS/computer/domain) | No | **Yes**, same fields as SMB (multi-producer) | No | No | No — recommended |
 | `ssh-hostkey` | Would fit `ServiceEvidence` structurally | N/A | Arguably a *different* future model (device identity/fingerprint, not classification evidence) | No | **Yes**, for classification purposes |
 | `http-auth` realm | **Yes** | No | No | No | No — recommended |
@@ -442,9 +448,9 @@ software/process-enumeration scripts (same philosophy mismatch).
 
 | Candidate | Scan duration impact | New traffic | Auth required? | Privilege required? | IDS/IPS consideration | STANDARD-suitable? |
 |---|---|---|---|---|---|---|
-| `smb-os-discovery` | Low | Low (SMB negotiate) | No | No | **Real** — SMB probing reads as enumeration-adjacent | Yes, with documentation (FEAT-003G) |
-| `smb-security-mode` | Negligible (same exchange) | None beyond above | No | No | Same as above | Yes, bundled with FEAT-003G |
-| `smb2-time` (dialect field) | Negligible (same exchange) | None beyond above | No | No | Same as above | Yes, bundled with FEAT-003G |
+| `smb-os-discovery` | Low | Low (SMB negotiate) | No | No | **Real** — SMB probing reads as enumeration-adjacent | Yes, with documentation (FEAT-003H) |
+| `smb-security-mode` | Negligible (same exchange) | None beyond above | No | No | Same as above | Yes, bundled with FEAT-003H |
+| `smb2-time` | N/A — not implemented (corrected) | N/A | N/A | N/A | N/A | N/A |
 | `rdp-ntlm-info` | Low | Low (RDP negotiate) | **No** | No | **Low** — RDP connection attempts are common, unremarkable traffic | Yes |
 | `ssh-hostkey` | Low | Low (key exchange) | No | No | **Lowest of all candidates** — identical to routine `ssh-keyscan` usage | Yes, if ever prioritized for identity tracking |
 | `http-auth` | Low | Low (one more request per web port) | No | No | Minimal | Yes |
@@ -470,16 +476,16 @@ operational profile as the four candidates FEAT-003F already implemented
 — zero new risk, ports already scanned, no scan-argument change beyond
 one more script name.
 
-**Tier 2 (FEAT-003G, as already scoped, now expanded):** SMB OS
-Discovery plus SMB Security Mode plus the SMB2 dialect field from
-`smb2-time` (bundled — same script family, same port, same
-already-accepted operational review). The `smb2-time` system time/
-timezone field is explicitly excluded — no identified consumer.
+**Tier 2 (FEAT-003H, as already scoped, now expanded):** SMB OS
+Discovery plus SMB Security Mode (bundled — same script family, same
+port, same already-accepted operational review). `smb2-time` was
+considered and is explicitly excluded (corrected during FEAT-003H — it
+has no field with an identified consumer; see Section 2.1).
 
-**Tier 3 (new, distinct sprint — tentatively FEAT-003H):** RDP NTLM
+**Tier 3 (new, distinct sprint — tentatively FEAT-003I):** RDP NTLM
 Info. Kept separate from Tier 2 specifically because its risk profile is
 lower than SMB's, despite targeting the same `Device`-level fields —
-bundling it with FEAT-003G would import SMB's operational caveats onto a
+bundling it with FEAT-003H would import SMB's operational caveats onto a
 candidate that doesn't carry them, understating how safe this evidence
 source actually is. This sprint should also resolve the SMB/RDP
 precedence question raised in Section 2.2 as a routine implementation

@@ -98,6 +98,7 @@ NmapProvider currently supports profile-driven scanning and returns Device objec
 - hostname
 - MAC address
 - vendor
+- device-level identity evidence, where available (operating system, computer name, domain/workgroup, SMB signing posture — obtained via unauthenticated SMB negotiation on port 445, per ADR-009)
 - correlated per-service evidence (port, protocol, service name, product, version, and, where available, self-identifying evidence such as HTTP page title, TLS certificate subject/issuer, and HTTP authentication realm, per ADR-009)
 - discovery sources
 

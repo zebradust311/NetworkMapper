@@ -59,7 +59,7 @@ class NmapProviderScanProfileTest(unittest.TestCase):
                 call(
                     hosts="172.16.100.10 172.16.100.11",
                     arguments=(
-                        "-Pn -sV --version-light --script http-title,ssl-cert,vmware-version,http-auth -p "
+                        "-Pn -sV --version-light --script http-title,ssl-cert,vmware-version,http-auth,smb-os-discovery,smb-security-mode -p "
                         "22,53,80,161,443,445,515,631,9100,3389,5060,5061,8080,8443,902,903"
                     ),
                 ),
@@ -160,7 +160,7 @@ class NmapProviderScanProfileTest(unittest.TestCase):
                 }
 
             if arguments == (
-                "-Pn -sV --version-light --script http-title,ssl-cert,vmware-version,http-auth -p "
+                "-Pn -sV --version-light --script http-title,ssl-cert,vmware-version,http-auth,smb-os-discovery,smb-security-mode -p "
                 "22,53,80,161,443,445,515,631,9100,3389,5060,5061,8080,8443,902,903"
             ):
                 return {
@@ -213,7 +213,7 @@ class NmapProviderScanProfileTest(unittest.TestCase):
                 }
 
             if arguments == (
-                "-Pn -sV --version-light --script http-title,ssl-cert,vmware-version,http-auth -p "
+                "-Pn -sV --version-light --script http-title,ssl-cert,vmware-version,http-auth,smb-os-discovery,smb-security-mode -p "
                 "22,53,80,161,443,445,515,631,9100,3389,5060,5061,8080,8443,902,903"
             ):
                 return {
@@ -266,7 +266,7 @@ class NmapProviderScanProfileTest(unittest.TestCase):
                 }
 
             if arguments == (
-                "-Pn -sV --version-light --script http-title,ssl-cert,vmware-version,http-auth -p "
+                "-Pn -sV --version-light --script http-title,ssl-cert,vmware-version,http-auth,smb-os-discovery,smb-security-mode -p "
                 "22,53,80,161,443,445,515,631,9100,3389,5060,5061,8080,8443,902,903"
             ):
                 return {
@@ -399,6 +399,140 @@ class NmapProviderScanProfileTest(unittest.TestCase):
                 ),
             ],
         )
+
+    @patch("networkmapper.discovery.nmap_provider.nmap.PortScanner")
+    def test_standard_enrichment_captures_smb_identity_for_domain_joined_host(
+        self, port_scanner_mock
+    ):
+        scanner = port_scanner_mock.return_value
+
+        def scan_side_effect(*, hosts, arguments):
+            if arguments == "-sn":
+                return {"scan": {"172.16.100.56": {"hostnames": [{"name": "dc-01"}]}}}
+
+            return {
+                "scan": {
+                    "172.16.100.56": {
+                        "tcp": {
+                            445: {"state": "open", "name": "microsoft-ds"},
+                        },
+                        "hostscript": [
+                            {
+                                "id": "smb-os-discovery",
+                                "output": (
+                                    "\n"
+                                    "  OS: Windows Server 2019 Standard 17763 "
+                                    "(Windows Server 2019 Standard 6.3)\n"
+                                    "  Computer name: DC01\n"
+                                    "  NetBIOS computer name: DC01\\x00\n"
+                                    "  Domain name: corp.local\n"
+                                    "  Forest name: corp.local\n"
+                                    "  FQDN: DC01.corp.local\n"
+                                    "  System time: 2026-01-01T10:00:00-05:00"
+                                ),
+                            },
+                            {
+                                "id": "smb-security-mode",
+                                "output": (
+                                    "\n"
+                                    "  account_used: guest\n"
+                                    "  authentication_level: user\n"
+                                    "  challenge_response: supported\n"
+                                    "  message_signing: disabled (dangerous, but default)"
+                                ),
+                            },
+                        ],
+                    }
+                }
+            }
+
+        scanner.scan.side_effect = scan_side_effect
+
+        provider = NmapProvider("172.16.100.0/24", scan_profile=ScanProfile.STANDARD)
+        devices = provider.discover()
+
+        device = devices[0]
+        self.assertEqual(
+            device.operating_system,
+            "Windows Server 2019 Standard 17763 (Windows Server 2019 Standard 6.3)",
+        )
+        self.assertEqual(device.computer_name, "DC01")
+        self.assertEqual(device.domain, "corp.local")
+        self.assertEqual(device.smb_signing, "disabled (dangerous, but default)")
+
+    @patch("networkmapper.discovery.nmap_provider.nmap.PortScanner")
+    def test_standard_enrichment_falls_back_to_workgroup_for_non_domain_host(
+        self, port_scanner_mock
+    ):
+        scanner = port_scanner_mock.return_value
+
+        def scan_side_effect(*, hosts, arguments):
+            if arguments == "-sn":
+                return {"scan": {"172.16.100.57": {"hostnames": [{"name": "desktop-01"}]}}}
+
+            return {
+                "scan": {
+                    "172.16.100.57": {
+                        "tcp": {
+                            445: {"state": "open", "name": "microsoft-ds"},
+                        },
+                        "hostscript": [
+                            {
+                                "id": "smb-os-discovery",
+                                "output": (
+                                    "\n"
+                                    "  OS: Windows 10 Pro 19045 (Windows 10 Pro 6.3)\n"
+                                    "  Computer name: DESKTOP-01\n"
+                                    "  NetBIOS computer name: DESKTOP-01\\x00\n"
+                                    "  Workgroup: WORKGROUP\\x00\n"
+                                    "  System time: 2026-01-01T10:00:00-05:00"
+                                ),
+                            },
+                        ],
+                    }
+                }
+            }
+
+        scanner.scan.side_effect = scan_side_effect
+
+        provider = NmapProvider("172.16.100.0/24", scan_profile=ScanProfile.STANDARD)
+        devices = provider.discover()
+
+        device = devices[0]
+        self.assertEqual(device.operating_system, "Windows 10 Pro 19045 (Windows 10 Pro 6.3)")
+        self.assertEqual(device.computer_name, "DESKTOP-01")
+        self.assertEqual(device.domain, "WORKGROUP\\x00")
+
+    @patch("networkmapper.discovery.nmap_provider.nmap.PortScanner")
+    def test_standard_enrichment_leaves_smb_identity_none_without_host_scripts(
+        self, port_scanner_mock
+    ):
+        scanner = port_scanner_mock.return_value
+
+        def scan_side_effect(*, hosts, arguments):
+            if arguments == "-sn":
+                return {"scan": {"172.16.100.58": {"hostnames": [{"name": "printer-05"}]}}}
+
+            return {
+                "scan": {
+                    "172.16.100.58": {
+                        "tcp": {
+                            80: {"state": "open", "name": "http"},
+                        },
+                    }
+                }
+            }
+
+        scanner.scan.side_effect = scan_side_effect
+
+        provider = NmapProvider("172.16.100.0/24", scan_profile=ScanProfile.STANDARD)
+        devices = provider.discover()
+
+        device = devices[0]
+        self.assertIsNone(device.operating_system)
+        self.assertIsNone(device.computer_name)
+        self.assertIsNone(device.domain)
+        self.assertIsNone(device.smb_signing)
 
     @patch("networkmapper.discovery.nmap_provider.nmap.PortScanner")
     def test_standard_enrichment_captures_http_auth_realm_from_script_output(
