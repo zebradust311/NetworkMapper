@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from networkmapper.classification.classification_rule import ClassificationRule
 from networkmapper.classification.evidence_helpers import (
+    first_matching_identifier,
     first_matching_port,
-    first_matching_product,
     first_matching_service,
     normalize_vendor,
     service_names,
@@ -60,14 +60,15 @@ class PrinterVendorRule(ClassificationRule):
                 suggested_device_type=DeviceType.PRINTER,
             )
 
-        matched_product = self._find_printer_vendor_product(device)
-        if matched_product is not None:
+        matched_identifier = self._find_printer_vendor_identifier(device)
+        if matched_identifier is not None:
+            label, value = matched_identifier
             return RuleResult(
                 matched=True,
                 confidence_contribution=0,
                 reason=(
-                    f"Detected service product {matched_product!r} matched known "
-                    "printer vendor identifier."
+                    f"Detected {label} {value!r} matched known printer vendor "
+                    "identifier."
                 ),
                 suggested_device_type=DeviceType.PRINTER,
             )
@@ -91,16 +92,17 @@ class PrinterVendorRule(ClassificationRule):
             suggested_device_type=None,
         )
 
-    def _find_printer_vendor_product(self, device: Device) -> str | None:
-        """Return a service product string that names a known printer vendor, if any.
+    def _find_printer_vendor_identifier(self, device: Device) -> tuple[str, str] | None:
+        """Return a (label, value) evidence pair naming a known printer vendor, if any.
 
         Nmap's IPP (port 631) service probe commonly returns the exact
         printer make/model as the product string (e.g. "HP LaserJet
-        4250"), which is at least as strong an identifier as the vendor
-        field and reuses the same trusted vendor keyword list rather than
-        introducing a new fingerprint.
+        4250"), and printer web management UIs commonly show the same
+        make/model in their page title (FEAT-003F). Both reuse the same
+        trusted vendor keyword list rather than introducing a new
+        fingerprint.
         """
-        return first_matching_product(device.services, SUPPORTED_PRINTER_VENDOR_KEYWORDS)
+        return first_matching_identifier(device.services, SUPPORTED_PRINTER_VENDOR_KEYWORDS)
 
     def _find_printer_networking(self, device: Device) -> tuple[int | None, str | None]:
         matched_port = first_matching_port(

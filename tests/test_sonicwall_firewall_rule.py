@@ -2,7 +2,7 @@ import unittest
 
 from networkmapper.classification.rule_result import RuleResult
 from networkmapper.classification.rules.sonicwall_firewall_rule import SonicWallFirewallRule
-from networkmapper.core.models import Device, DeviceType, ServiceEvidence
+from networkmapper.core.models import Device, DeviceType, ServiceEvidence, ServiceEvidence
 
 
 class SonicWallFirewallRuleTest(unittest.TestCase):
@@ -81,6 +81,99 @@ class SonicWallFirewallRuleTest(unittest.TestCase):
             result.reason,
             "Hostname 'tz-370' with open port 443 and service 'https' matched known firewall management evidence.",
         )
+
+    def test_http_title_identifies_firewall_without_vendor_or_hostname_match(self):
+        device = Device(
+            ip_address="192.168.1.35",
+            hostname="fw-05",
+            vendor="Unknown",
+            services=[
+                ServiceEvidence(
+                    port=443,
+                    protocol="tcp",
+                    service="https",
+                    http_title="SonicWALL - Network Security Appliance",
+                ),
+            ],
+        )
+
+        result = SonicWallFirewallRule().classify(device)
+
+        self.assertIsInstance(result, RuleResult)
+        self.assertTrue(result.matched)
+        self.assertEqual(result.suggested_device_type, DeviceType.FIREWALL)
+        self.assertEqual(
+            result.reason,
+            "Detected HTTP title 'SonicWALL - Network Security Appliance' "
+            "matched known firewall vendor identifier.",
+        )
+
+    def test_tls_certificate_subject_identifies_firewall(self):
+        device = Device(
+            ip_address="192.168.1.36",
+            hostname="fw-06",
+            vendor="Unknown",
+            services=[
+                ServiceEvidence(
+                    port=443,
+                    protocol="tcp",
+                    service="https",
+                    tls_subject="commonName=SonicWALL",
+                ),
+            ],
+        )
+
+        result = SonicWallFirewallRule().classify(device)
+
+        self.assertIsInstance(result, RuleResult)
+        self.assertTrue(result.matched)
+        self.assertEqual(result.suggested_device_type, DeviceType.FIREWALL)
+        self.assertEqual(
+            result.reason,
+            "Detected TLS certificate subject 'commonName=SonicWALL' matched "
+            "known firewall vendor identifier.",
+        )
+
+    def test_identifier_match_takes_precedence_over_hostname_and_port_fallback(self):
+        device = Device(
+            ip_address="192.168.1.37",
+            hostname="unrelated-01",
+            vendor="Unknown",
+            services=[
+                ServiceEvidence(
+                    port=8443,
+                    protocol="tcp",
+                    tls_issuer="commonName=SonicWALL",
+                ),
+            ],
+        )
+
+        result = SonicWallFirewallRule().classify(device)
+
+        self.assertIsInstance(result, RuleResult)
+        self.assertTrue(result.matched)
+        self.assertEqual(result.suggested_device_type, DeviceType.FIREWALL)
+        self.assertEqual(
+            result.reason,
+            "Detected TLS certificate issuer 'commonName=SonicWALL' matched "
+            "known firewall vendor identifier.",
+        )
+
+    def test_unrelated_http_title_does_not_match(self):
+        device = Device(
+            ip_address="192.168.1.38",
+            hostname="web-01",
+            vendor="Unknown",
+            services=[
+                ServiceEvidence(port=443, protocol="tcp", http_title="Welcome to nginx!"),
+            ],
+        )
+
+        result = SonicWallFirewallRule().classify(device)
+
+        self.assertIsInstance(result, RuleResult)
+        self.assertFalse(result.matched)
+        self.assertIsNone(result.suggested_device_type)
 
 
 if __name__ == "__main__":

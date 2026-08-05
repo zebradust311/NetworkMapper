@@ -59,7 +59,7 @@ class NmapProviderScanProfileTest(unittest.TestCase):
                 call(
                     hosts="172.16.100.10 172.16.100.11",
                     arguments=(
-                        "-Pn -sV --version-light -p "
+                        "-Pn -sV --version-light --script http-title,ssl-cert,vmware-version -p "
                         "22,53,80,161,443,445,515,631,9100,3389,5060,5061,8080,8443,902,903"
                     ),
                 ),
@@ -160,7 +160,7 @@ class NmapProviderScanProfileTest(unittest.TestCase):
                 }
 
             if arguments == (
-                "-Pn -sV --version-light -p "
+                "-Pn -sV --version-light --script http-title,ssl-cert,vmware-version -p "
                 "22,53,80,161,443,445,515,631,9100,3389,5060,5061,8080,8443,902,903"
             ):
                 return {
@@ -213,7 +213,7 @@ class NmapProviderScanProfileTest(unittest.TestCase):
                 }
 
             if arguments == (
-                "-Pn -sV --version-light -p "
+                "-Pn -sV --version-light --script http-title,ssl-cert,vmware-version -p "
                 "22,53,80,161,443,445,515,631,9100,3389,5060,5061,8080,8443,902,903"
             ):
                 return {
@@ -266,7 +266,7 @@ class NmapProviderScanProfileTest(unittest.TestCase):
                 }
 
             if arguments == (
-                "-Pn -sV --version-light -p "
+                "-Pn -sV --version-light --script http-title,ssl-cert,vmware-version -p "
                 "22,53,80,161,443,445,515,631,9100,3389,5060,5061,8080,8443,902,903"
             ):
                 return {
@@ -304,6 +304,184 @@ class NmapProviderScanProfileTest(unittest.TestCase):
                     product="Apache httpd",
                     version="2.4.41",
                 ),
+            ],
+        )
+
+    @patch("networkmapper.discovery.nmap_provider.nmap.PortScanner")
+    def test_standard_enrichment_captures_http_title_from_script_output(
+        self, port_scanner_mock
+    ):
+        scanner = port_scanner_mock.return_value
+
+        def scan_side_effect(*, hosts, arguments):
+            if arguments == "-sn":
+                return {"scan": {"172.16.100.50": {"hostnames": [{"name": "fw-01"}]}}}
+
+            return {
+                "scan": {
+                    "172.16.100.50": {
+                        "tcp": {
+                            443: {
+                                "state": "open",
+                                "name": "https",
+                                "script": {
+                                    "http-title": "SonicWALL - Network Security Appliance",
+                                },
+                            },
+                        },
+                    }
+                }
+            }
+
+        scanner.scan.side_effect = scan_side_effect
+
+        provider = NmapProvider("172.16.100.0/24", scan_profile=ScanProfile.STANDARD)
+        devices = provider.discover()
+
+        self.assertEqual(
+            devices[0].services,
+            [
+                ServiceEvidence(
+                    port=443,
+                    protocol="tcp",
+                    service="https",
+                    http_title="SonicWALL - Network Security Appliance",
+                ),
+            ],
+        )
+
+    @patch("networkmapper.discovery.nmap_provider.nmap.PortScanner")
+    def test_standard_enrichment_captures_tls_subject_and_issuer_from_ssl_cert_script(
+        self, port_scanner_mock
+    ):
+        scanner = port_scanner_mock.return_value
+
+        def scan_side_effect(*, hosts, arguments):
+            if arguments == "-sn":
+                return {"scan": {"172.16.100.51": {"hostnames": [{"name": "fw-02"}]}}}
+
+            return {
+                "scan": {
+                    "172.16.100.51": {
+                        "tcp": {
+                            443: {
+                                "state": "open",
+                                "name": "https",
+                                "script": {
+                                    "ssl-cert": (
+                                        "Subject: commonName=SonicWALL\n"
+                                        "Issuer: commonName=SonicWALL\n"
+                                        "Public Key type: rsa\n"
+                                        "Not valid before: 2020-01-01T00:00:00\n"
+                                        "Not valid after:  2030-01-01T00:00:00"
+                                    ),
+                                },
+                            },
+                        },
+                    }
+                }
+            }
+
+        scanner.scan.side_effect = scan_side_effect
+
+        provider = NmapProvider("172.16.100.0/24", scan_profile=ScanProfile.STANDARD)
+        devices = provider.discover()
+
+        self.assertEqual(
+            devices[0].services,
+            [
+                ServiceEvidence(
+                    port=443,
+                    protocol="tcp",
+                    service="https",
+                    tls_subject="commonName=SonicWALL",
+                    tls_issuer="commonName=SonicWALL",
+                ),
+            ],
+        )
+
+    @patch("networkmapper.discovery.nmap_provider.nmap.PortScanner")
+    def test_standard_enrichment_prefers_vmware_version_script_over_sv_guess(
+        self, port_scanner_mock
+    ):
+        scanner = port_scanner_mock.return_value
+
+        def scan_side_effect(*, hosts, arguments):
+            if arguments == "-sn":
+                return {"scan": {"172.16.100.52": {"hostnames": [{"name": "esxi-01"}]}}}
+
+            return {
+                "scan": {
+                    "172.16.100.52": {
+                        "tcp": {
+                            443: {
+                                "state": "open",
+                                "name": "https",
+                                "product": "VMware ESXi Server httpd",
+                                "version": "1.0",
+                                "script": {
+                                    "vmware-version": (
+                                        "VMware ESXi\n6.7.0\nBuild 17167734"
+                                    ),
+                                },
+                            },
+                        },
+                    }
+                }
+            }
+
+        scanner.scan.side_effect = scan_side_effect
+
+        provider = NmapProvider("172.16.100.0/24", scan_profile=ScanProfile.STANDARD)
+        devices = provider.discover()
+
+        self.assertEqual(
+            devices[0].services,
+            [
+                ServiceEvidence(
+                    port=443,
+                    protocol="tcp",
+                    service="https",
+                    product="VMware ESXi Server httpd",
+                    version="VMware ESXi 6.7.0 Build 17167734",
+                ),
+            ],
+        )
+
+    @patch("networkmapper.discovery.nmap_provider.nmap.PortScanner")
+    def test_standard_enrichment_falls_back_to_sv_version_without_vmware_script(
+        self, port_scanner_mock
+    ):
+        scanner = port_scanner_mock.return_value
+
+        def scan_side_effect(*, hosts, arguments):
+            if arguments == "-sn":
+                return {"scan": {"172.16.100.53": {"hostnames": [{"name": "web-02"}]}}}
+
+            return {
+                "scan": {
+                    "172.16.100.53": {
+                        "tcp": {
+                            80: {
+                                "state": "open",
+                                "name": "http",
+                                "product": "nginx",
+                                "version": "1.18.0",
+                            },
+                        },
+                    }
+                }
+            }
+
+        scanner.scan.side_effect = scan_side_effect
+
+        provider = NmapProvider("172.16.100.0/24", scan_profile=ScanProfile.STANDARD)
+        devices = provider.discover()
+
+        self.assertEqual(
+            devices[0].services,
+            [
+                ServiceEvidence(port=80, protocol="tcp", service="http", product="nginx", version="1.18.0"),
             ],
         )
 

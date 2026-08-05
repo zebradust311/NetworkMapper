@@ -120,6 +120,40 @@ class ClassificationWorkbenchTest(unittest.TestCase):
             report,
         )
 
+    def test_generate_renders_http_title_and_tls_evidence(self):
+        project = Project(
+            customer_name="Acme",
+            created_date=datetime(2026, 1, 1, 12, 0, 0),
+            modified_date=datetime(2026, 1, 2, 12, 0, 0),
+        )
+        project.network_graph.add_device(
+            Device(
+                ip_address="172.16.100.10",
+                hostname="fw-01",
+                vendor="Unknown",
+                services=[
+                    ServiceEvidence(
+                        port=443,
+                        protocol="tcp",
+                        service="https",
+                        http_title="SonicWALL - Network Security Appliance",
+                        tls_subject="commonName=SonicWALL",
+                        tls_issuer="commonName=SonicWALL",
+                    ),
+                ],
+                device_type=DeviceType.UNKNOWN,
+            )
+        )
+
+        report = ClassificationWorkbench().generate(project)
+
+        self.assertIn(
+            "Services:\n443/tcp https | title: 'SonicWALL - Network Security "
+            "Appliance' | tls subject: 'commonName=SonicWALL' | tls issuer: "
+            "'commonName=SonicWALL'",
+            report,
+        )
+
     def test_generate_renders_unknown_for_empty_services(self):
         project = Project(
             customer_name="Acme",

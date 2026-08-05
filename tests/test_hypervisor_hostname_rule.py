@@ -278,6 +278,57 @@ class HypervisorHostnameRuleTest(unittest.TestCase):
             "matched known hypervisor evidence.",
         )
 
+    def test_hostname_match_with_vmware_http_title_enriches_reason(self):
+        device = Device(
+            ip_address="192.168.1.75",
+            hostname="esxi-06",
+            vendor="Unknown",
+            services=[
+                ServiceEvidence(
+                    port=443,
+                    protocol="tcp",
+                    service="https",
+                    http_title="VMware ESXi",
+                ),
+            ],
+        )
+
+        result = HypervisorHostnameRule().classify(device)
+
+        self.assertTrue(result.matched)
+        self.assertEqual(result.suggested_device_type, DeviceType.HYPERVISOR)
+        self.assertEqual(
+            result.reason,
+            "Hostname 'esxi-06' with open port 443 and service 'https' "
+            "matched known hypervisor evidence. Detected HTTP title "
+            "'VMware ESXi' matched known hypervisor product identifier.",
+        )
+
+    def test_hostname_match_with_vmware_tls_subject_enriches_reason(self):
+        device = Device(
+            ip_address="192.168.1.76",
+            hostname="esxi-07",
+            vendor="Unknown",
+            services=[
+                ServiceEvidence(
+                    port=8443,
+                    protocol="tcp",
+                    tls_subject="commonName=VMware",
+                ),
+            ],
+        )
+
+        result = HypervisorHostnameRule().classify(device)
+
+        self.assertTrue(result.matched)
+        self.assertEqual(result.suggested_device_type, DeviceType.HYPERVISOR)
+        self.assertEqual(
+            result.reason,
+            "Hostname 'esxi-07' matched known hypervisor naming convention. "
+            "Detected TLS certificate subject 'commonName=VMware' matched "
+            "known hypervisor product identifier.",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

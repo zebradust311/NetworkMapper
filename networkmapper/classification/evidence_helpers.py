@@ -25,13 +25,61 @@ def first_matching_product(
     than exact membership, because Nmap product strings are free-text
     descriptions (e.g. "VMware ESXi Server httpd"), not fixed values.
     """
-    for entry in services:
-        if not entry.product:
+    return first_containing([entry.product for entry in services], candidate_keywords)
+
+
+def service_http_titles(services: Sequence[ServiceEvidence]) -> list[str]:
+    """Return the known HTTP page titles from a device's correlated service evidence, in order."""
+    return [entry.http_title for entry in services if entry.http_title]
+
+
+def service_tls_subjects(services: Sequence[ServiceEvidence]) -> list[str]:
+    """Return the known TLS certificate subjects from a device's correlated service evidence, in order."""
+    return [entry.tls_subject for entry in services if entry.tls_subject]
+
+
+def service_tls_issuers(services: Sequence[ServiceEvidence]) -> list[str]:
+    """Return the known TLS certificate issuers from a device's correlated service evidence, in order."""
+    return [entry.tls_issuer for entry in services if entry.tls_issuer]
+
+
+def first_containing(
+    values: Sequence[str | None],
+    candidate_keywords: Collection[str],
+) -> str | None:
+    """Return the first non-empty value containing any candidate keyword (case-insensitive substring)."""
+    for value in values:
+        if not value:
             continue
 
-        product_lower = entry.product.lower()
-        if any(keyword in product_lower for keyword in candidate_keywords):
-            return entry.product
+        value_lower = value.lower()
+        if any(keyword in value_lower for keyword in candidate_keywords):
+            return value
+
+    return None
+
+
+def first_matching_identifier(
+    services: Sequence[ServiceEvidence],
+    candidate_keywords: Collection[str],
+) -> tuple[str, str] | None:
+    """Search product, HTTP title, and TLS certificate subject/issuer, in that
+    order, for the first value containing any candidate keyword.
+
+    Returns a (label, value) pair naming which evidence type matched, so
+    callers can produce an accurate reason string instead of assuming the
+    match came from a specific field.
+    """
+    checks = (
+        ("service product", [entry.product for entry in services]),
+        ("HTTP title", service_http_titles(services)),
+        ("TLS certificate subject", service_tls_subjects(services)),
+        ("TLS certificate issuer", service_tls_issuers(services)),
+    )
+    for label, values in checks:
+        match = first_containing(values, candidate_keywords)
+        if match is not None:
+            return label, match
 
     return None
 

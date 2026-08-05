@@ -97,7 +97,8 @@ class ClassificationWorkbench:
         return "\n".join(self._format_service(entry) for entry in services)
 
     def _format_service(self, entry: ServiceEvidence) -> str:
-        """Format one service-evidence entry as `port/protocol service (product version)`."""
+        """Format one service-evidence entry as `port/protocol service (product version)`,
+        with any HTTP title / TLS certificate evidence appended."""
         line = f"{entry.port}/{entry.protocol}"
         if entry.service:
             line += f" {entry.service}"
@@ -106,6 +107,12 @@ class ClassificationWorkbench:
             if entry.version:
                 product_display += f" {entry.version}"
             line += f" ({product_display})"
+        if entry.http_title:
+            line += f" | title: {entry.http_title!r}"
+        if entry.tls_subject:
+            line += f" | tls subject: {entry.tls_subject!r}"
+        if entry.tls_issuer:
+            line += f" | tls issuer: {entry.tls_issuer!r}"
         return line
 
     def _display_value(self, value: object) -> str:

@@ -33,6 +33,14 @@ CLASSIFICATION_PORTS = [
     903,
 ]
 
+# FEAT-003F: three narrowly-scoped NSE scripts, each targeting ports
+# already in CLASSIFICATION_PORTS with data already exchanged during the
+# existing -sV probe or TLS handshake. http-title and ssl-cert run against
+# any HTTP/HTTPS port already being scanned; vmware-version's own portrule
+# limits it to ports -sV already identifies as VMware-related, so no
+# per-host gating is needed here.
+STANDARD_ENRICHMENT_SCRIPTS = ["http-title", "ssl-cert", "vmware-version"]
+
 
 class NmapProvider(DiscoveryProvider):
     """Discover network hosts using profile-driven Nmap scan settings."""
@@ -124,9 +132,16 @@ class NmapProvider(DiscoveryProvider):
         return profile_arguments[self._scan_profile]
 
     def _standard_enrichment_arguments(self) -> str:
-        """Return the curated service-detection arguments for STANDARD enrichment."""
+        """Return the curated service-detection arguments for STANDARD enrichment.
+
+        The three NSE scripts are deliberately narrow (FEAT-003F): each
+        reuses data already exchanged during the -sV probe or handshake on
+        a port already in CLASSIFICATION_PORTS, adds no new scan target,
+        and matches ADR-009's per-service evidence model directly.
+        """
         classification_ports = ",".join(str(port) for port in CLASSIFICATION_PORTS)
-        return f"-Pn -sV --version-light -p {classification_ports}"
+        scripts = ",".join(STANDARD_ENRICHMENT_SCRIPTS)
+        return f"-Pn -sV --version-light --script {scripts} -p {classification_ports}"
 
     def _extract_hostname(self, host_data: dict) -> str | None:
         """Extract the primary hostname from Nmap host data when available."""
@@ -171,14 +186,52 @@ class NmapProvider(DiscoveryProvider):
                 if service_data.get("state") != "open":
                     continue
 
+                scripts = service_data.get("script", {})
+
                 services.append(
                     ServiceEvidence(
                         port=int(port),
                         protocol=protocol,
                         service=(service_data.get("name") or "").strip() or None,
                         product=(service_data.get("product") or "").strip() or None,
-                        version=(service_data.get("version") or "").strip() or None,
+                        version=self._extract_version(service_data, scripts),
+                        http_title=self._clean_script_output(scripts.get("http-title")),
+                        tls_subject=self._extract_cert_field(scripts.get("ssl-cert"), "Subject"),
+                        tls_issuer=self._extract_cert_field(scripts.get("ssl-cert"), "Issuer"),
                     )
                 )
 
         return sorted(services, key=lambda entry: (entry.port, entry.protocol))
+
+    def _extract_version(self, service_data: dict, scripts: dict) -> str | None:
+        """Return the product version for a port, preferring vmware-version's
+        script output over -sV's own guess when both are available, since
+        vmware-version queries the ESXi/vCenter API directly rather than
+        inferring version from a generic service banner."""
+        vmware_version = self._clean_script_output(scripts.get("vmware-version"))
+        if vmware_version:
+            return vmware_version
+
+        return (service_data.get("version") or "").strip() or None
+
+    def _clean_script_output(self, raw_output: str | None) -> str | None:
+        """Collapse multi-line NSE script output into one cleaned string."""
+        if not raw_output:
+            return None
+
+        cleaned = " ".join(raw_output.strip().splitlines()).strip()
+        return cleaned or None
+
+    def _extract_cert_field(self, ssl_cert_output: str | None, field_label: str) -> str | None:
+        """Extract a labeled field (e.g. "Subject") from ssl-cert NSE script output."""
+        if not ssl_cert_output:
+            return None
+
+        prefix = f"{field_label}:"
+        for line in ssl_cert_output.splitlines():
+            stripped = line.strip()
+            if stripped.startswith(prefix):
+                value = stripped[len(prefix):].strip()
+                return value or None
+
+        return None

@@ -32,6 +32,9 @@ class ServiceEvidence:
         service: The service name identified on the port, if known.
         product: The product name identified on the port, if known.
         version: The product version identified on the port, if known.
+        http_title: The HTML page title observed on the port, if known.
+        tls_subject: The TLS certificate subject observed on the port, if known.
+        tls_issuer: The TLS certificate issuer observed on the port, if known.
     """
 
     port: int
@@ -39,6 +42,9 @@ class ServiceEvidence:
     service: Optional[str] = None
     product: Optional[str] = None
     version: Optional[str] = None
+    http_title: Optional[str] = None
+    tls_subject: Optional[str] = None
+    tls_issuer: Optional[str] = None
 
 
 @dataclass

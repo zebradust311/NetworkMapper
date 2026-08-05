@@ -2,13 +2,16 @@ import unittest
 
 from networkmapper.classification.classifier import DeviceClassifier
 from networkmapper.classification.evidence_helpers import (
+    first_containing,
+    first_matching_identifier,
     first_matching_port,
+    first_matching_product,
     first_matching_service,
     format_hostname_evidence_reason,
     normalize_hostname,
     normalize_vendor,
 )
-from networkmapper.core.models import Device, DeviceType
+from networkmapper.core.models import Device, DeviceType, ServiceEvidence
 
 
 class DeviceClassifierTest(unittest.TestCase):
@@ -130,6 +133,71 @@ class EvidenceHelpersTest(unittest.TestCase):
             format_hostname_evidence_reason("switch-01", None, "snmp", "switch management"),
             "Hostname 'switch-01' with service 'snmp' matched known switch management evidence.",
         )
+
+    def test_first_containing_returns_first_matching_value(self):
+        self.assertEqual(
+            first_containing(["Apache httpd", "VMware ESXi Server httpd"], {"vmware"}),
+            "VMware ESXi Server httpd",
+        )
+
+    def test_first_containing_is_case_insensitive(self):
+        self.assertEqual(first_containing(["SONICWALL"], {"sonicwall"}), "SONICWALL")
+
+    def test_first_containing_skips_none_and_empty_values(self):
+        self.assertEqual(first_containing([None, "", "Cisco SSH"], {"cisco"}), "Cisco SSH")
+
+    def test_first_containing_returns_none_when_no_match(self):
+        self.assertIsNone(first_containing(["nginx", "Apache httpd"], {"vmware"}))
+
+    def test_first_matching_product_returns_first_matching_product_string(self):
+        services = [
+            ServiceEvidence(port=80, protocol="tcp", product="nginx"),
+            ServiceEvidence(port=443, protocol="tcp", product="VMware ESXi Server httpd"),
+        ]
+        self.assertEqual(first_matching_product(services, {"vmware"}), "VMware ESXi Server httpd")
+
+    def test_first_matching_product_returns_none_when_no_match(self):
+        services = [ServiceEvidence(port=80, protocol="tcp", product="nginx")]
+        self.assertIsNone(first_matching_product(services, {"vmware"}))
+
+    def test_first_matching_identifier_checks_product_before_http_title(self):
+        services = [
+            ServiceEvidence(
+                port=443,
+                protocol="tcp",
+                product="VMware ESXi Server httpd",
+                http_title="VMware ESXi",
+            ),
+        ]
+        self.assertEqual(
+            first_matching_identifier(services, {"vmware"}),
+            ("service product", "VMware ESXi Server httpd"),
+        )
+
+    def test_first_matching_identifier_falls_back_to_http_title(self):
+        services = [ServiceEvidence(port=443, protocol="tcp", http_title="SonicWALL Login")]
+        self.assertEqual(
+            first_matching_identifier(services, {"sonicwall"}),
+            ("HTTP title", "SonicWALL Login"),
+        )
+
+    def test_first_matching_identifier_falls_back_to_tls_subject(self):
+        services = [ServiceEvidence(port=443, protocol="tcp", tls_subject="commonName=SonicWALL")]
+        self.assertEqual(
+            first_matching_identifier(services, {"sonicwall"}),
+            ("TLS certificate subject", "commonName=SonicWALL"),
+        )
+
+    def test_first_matching_identifier_falls_back_to_tls_issuer(self):
+        services = [ServiceEvidence(port=443, protocol="tcp", tls_issuer="commonName=SonicWALL")]
+        self.assertEqual(
+            first_matching_identifier(services, {"sonicwall"}),
+            ("TLS certificate issuer", "commonName=SonicWALL"),
+        )
+
+    def test_first_matching_identifier_returns_none_when_no_evidence_matches(self):
+        services = [ServiceEvidence(port=80, protocol="tcp", product="nginx", http_title="Welcome")]
+        self.assertIsNone(first_matching_identifier(services, {"sonicwall"}))
 
 
 if __name__ == "__main__":

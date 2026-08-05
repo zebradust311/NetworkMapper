@@ -63,6 +63,49 @@ class BenchmarkRunnerTest(unittest.TestCase):
             )
             self.assertEqual(devices[0].device_type, DeviceType.UNKNOWN)
 
+    def test_dataset_loading_populates_http_title_and_tls_fields(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            inventory_path = temp_path / "inventory.json"
+            self._write_json(
+                inventory_path,
+                {
+                    "devices": [
+                        {
+                            "ip_address": "192.168.50.20",
+                            "hostname": "fw-01",
+                            "vendor": "Unknown",
+                            "services": [
+                                {
+                                    "port": 443,
+                                    "protocol": "tcp",
+                                    "service": "https",
+                                    "http_title": "SonicWALL - Network Security Appliance",
+                                    "tls_subject": "commonName=SonicWALL",
+                                    "tls_issuer": "commonName=SonicWALL",
+                                },
+                            ],
+                        }
+                    ]
+                },
+            )
+
+            devices = self.runner.load_inventory(inventory_path)
+
+            self.assertEqual(
+                devices[0].services,
+                [
+                    ServiceEvidence(
+                        port=443,
+                        protocol="tcp",
+                        service="https",
+                        http_title="SonicWALL - Network Security Appliance",
+                        tls_subject="commonName=SonicWALL",
+                        tls_issuer="commonName=SonicWALL",
+                    ),
+                ],
+            )
+
     def test_accuracy_calculation_for_perfect_match_dataset(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)

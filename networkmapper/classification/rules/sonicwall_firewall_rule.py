@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from networkmapper.classification.classification_rule import ClassificationRule
 from networkmapper.classification.evidence_helpers import (
+    first_matching_identifier,
     first_matching_port,
     first_matching_service,
     format_hostname_evidence_reason,
@@ -17,6 +18,15 @@ from networkmapper.core.models import Device, DeviceType
 FIREWALL_MANAGEMENT_PORTS = {443, 8443}
 FIREWALL_MANAGEMENT_SERVICES = {"https", "ssl/http"}
 
+# SonicWall's HTTPS management interface commonly self-identifies its own
+# brand in its page title or self-signed certificate subject/issuer
+# (FEAT-003F) — a device serving content that names its own vendor is at
+# least as strong an identifier as the MAC-OUI-derived vendor field, so
+# this is treated as an independent match tier rather than mere
+# corroboration, consistent with PrinterVendorRule's product-tier
+# precedent (FEAT-003D).
+FIREWALL_IDENTIFIER_KEYWORDS = {"sonicwall"}
+
 
 class SonicWallFirewallRule(ClassificationRule):
     """Match SonicWall vendors as high-confidence firewall devices."""
@@ -31,6 +41,19 @@ class SonicWallFirewallRule(ClassificationRule):
                 matched=True,
                 confidence_contribution=0,
                 reason=f"Vendor {raw_vendor!r} matched known firewall vendor.",
+                suggested_device_type=DeviceType.FIREWALL,
+            )
+
+        matched_identifier = first_matching_identifier(device.services, FIREWALL_IDENTIFIER_KEYWORDS)
+        if matched_identifier is not None:
+            label, value = matched_identifier
+            return RuleResult(
+                matched=True,
+                confidence_contribution=0,
+                reason=(
+                    f"Detected {label} {value!r} matched known firewall vendor "
+                    "identifier."
+                ),
                 suggested_device_type=DeviceType.FIREWALL,
             )
 

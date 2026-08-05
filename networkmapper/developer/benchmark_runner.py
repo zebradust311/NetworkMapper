@@ -65,6 +65,9 @@ class BenchmarkRunner:
                             service=entry.get("service"),
                             product=entry.get("product"),
                             version=entry.get("version"),
+                            http_title=entry.get("http_title"),
+                            tls_subject=entry.get("tls_subject"),
+                            tls_issuer=entry.get("tls_issuer"),
                         )
                         for entry in device_payload.get("services", [])
                     ],
