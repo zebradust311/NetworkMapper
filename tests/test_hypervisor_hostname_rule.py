@@ -304,6 +304,31 @@ class HypervisorHostnameRuleTest(unittest.TestCase):
             "'VMware ESXi' matched known hypervisor product identifier.",
         )
 
+    def test_hostname_match_with_vmware_http_auth_realm_enriches_reason(self):
+        device = Device(
+            ip_address="192.168.1.77",
+            hostname="esxi-08",
+            vendor="Unknown",
+            services=[
+                ServiceEvidence(
+                    port=8443,
+                    protocol="tcp",
+                    http_auth_realm="VMware ESXi",
+                ),
+            ],
+        )
+
+        result = HypervisorHostnameRule().classify(device)
+
+        self.assertTrue(result.matched)
+        self.assertEqual(result.suggested_device_type, DeviceType.HYPERVISOR)
+        self.assertEqual(
+            result.reason,
+            "Hostname 'esxi-08' matched known hypervisor naming convention. "
+            "Detected HTTP authentication realm 'VMware ESXi' matched "
+            "known hypervisor product identifier.",
+        )
+
     def test_hostname_match_with_vmware_tls_subject_enriches_reason(self):
         device = Device(
             ip_address="192.168.1.76",

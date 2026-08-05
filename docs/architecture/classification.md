@@ -41,7 +41,7 @@ RuleResult
 
 DeviceType Assignment
 
-Discovery providers collect evidence such as hostname, vendor, and correlated per-service evidence (port, protocol, service name, and, where available, product and version — see ADR-009). `DiscoveryEngine` passes each discovered `Device` into `DeviceClassifier`, which evaluates the device against the current ordered rule list. The resulting device type is then stored in the `NetworkGraph` and carried forward into the `Project`.
+Discovery providers collect evidence such as hostname, vendor, and correlated per-service evidence (port, protocol, service name, and, where available, product, version, HTTP page title, TLS certificate subject/issuer, and HTTP authentication realm — see ADR-009). `DiscoveryEngine` passes each discovered `Device` into `DeviceClassifier`, which evaluates the device against the current ordered rule list. The resulting device type is then stored in the `NetworkGraph` and carried forward into the `Project`.
 
 ## Responsibilities
 

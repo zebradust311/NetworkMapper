@@ -106,6 +106,45 @@ class BenchmarkRunnerTest(unittest.TestCase):
                 ],
             )
 
+    def test_dataset_loading_populates_http_auth_realm_field(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            inventory_path = temp_path / "inventory.json"
+            self._write_json(
+                inventory_path,
+                {
+                    "devices": [
+                        {
+                            "ip_address": "192.168.50.21",
+                            "hostname": "printer-01",
+                            "vendor": "Unknown",
+                            "services": [
+                                {
+                                    "port": 80,
+                                    "protocol": "tcp",
+                                    "service": "http",
+                                    "http_auth_realm": "HP LaserJet 4250",
+                                },
+                            ],
+                        }
+                    ]
+                },
+            )
+
+            devices = self.runner.load_inventory(inventory_path)
+
+            self.assertEqual(
+                devices[0].services,
+                [
+                    ServiceEvidence(
+                        port=80,
+                        protocol="tcp",
+                        service="http",
+                        http_auth_realm="HP LaserJet 4250",
+                    ),
+                ],
+            )
+
     def test_accuracy_calculation_for_perfect_match_dataset(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)

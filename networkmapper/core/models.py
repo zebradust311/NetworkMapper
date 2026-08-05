@@ -35,6 +35,7 @@ class ServiceEvidence:
         http_title: The HTML page title observed on the port, if known.
         tls_subject: The TLS certificate subject observed on the port, if known.
         tls_issuer: The TLS certificate issuer observed on the port, if known.
+        http_auth_realm: The HTTP authentication realm observed on the port, if known.
     """
 
     port: int
@@ -45,6 +46,7 @@ class ServiceEvidence:
     http_title: Optional[str] = None
     tls_subject: Optional[str] = None
     tls_issuer: Optional[str] = None
+    http_auth_realm: Optional[str] = None
 
 
 @dataclass

@@ -32,6 +32,7 @@ class ProjectSerializerTest(unittest.TestCase):
                         http_title="Apache2 Default Page",
                         tls_subject="commonName=web-01.acme.local",
                         tls_issuer="commonName=Acme Internal CA",
+                        http_auth_realm="Acme Internal Portal",
                     ),
                 ],
                 device_type=DeviceType.SERVER,
@@ -60,6 +61,7 @@ class ProjectSerializerTest(unittest.TestCase):
                     http_title="Apache2 Default Page",
                     tls_subject="commonName=web-01.acme.local",
                     tls_issuer="commonName=Acme Internal CA",
+                    http_auth_realm="Acme Internal Portal",
                 ),
             ],
         )

@@ -68,6 +68,7 @@ class BenchmarkRunner:
                             http_title=entry.get("http_title"),
                             tls_subject=entry.get("tls_subject"),
                             tls_issuer=entry.get("tls_issuer"),
+                            http_auth_realm=entry.get("http_auth_realm"),
                         )
                         for entry in device_payload.get("services", [])
                     ],

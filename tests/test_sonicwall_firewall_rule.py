@@ -159,6 +159,32 @@ class SonicWallFirewallRuleTest(unittest.TestCase):
             "known firewall vendor identifier.",
         )
 
+    def test_http_auth_realm_identifies_firewall_without_vendor_or_hostname_match(self):
+        device = Device(
+            ip_address="192.168.1.39",
+            hostname="fw-07",
+            vendor="Unknown",
+            services=[
+                ServiceEvidence(
+                    port=8443,
+                    protocol="tcp",
+                    service="https",
+                    http_auth_realm="SonicWALL",
+                ),
+            ],
+        )
+
+        result = SonicWallFirewallRule().classify(device)
+
+        self.assertIsInstance(result, RuleResult)
+        self.assertTrue(result.matched)
+        self.assertEqual(result.suggested_device_type, DeviceType.FIREWALL)
+        self.assertEqual(
+            result.reason,
+            "Detected HTTP authentication realm 'SonicWALL' matched known "
+            "firewall vendor identifier.",
+        )
+
     def test_unrelated_http_title_does_not_match(self):
         device = Device(
             ip_address="192.168.1.38",

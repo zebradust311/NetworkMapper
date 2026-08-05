@@ -43,6 +43,11 @@ def service_tls_issuers(services: Sequence[ServiceEvidence]) -> list[str]:
     return [entry.tls_issuer for entry in services if entry.tls_issuer]
 
 
+def service_http_auth_realms(services: Sequence[ServiceEvidence]) -> list[str]:
+    """Return the known HTTP authentication realms from a device's correlated service evidence, in order."""
+    return [entry.http_auth_realm for entry in services if entry.http_auth_realm]
+
+
 def first_containing(
     values: Sequence[str | None],
     candidate_keywords: Collection[str],
@@ -63,8 +68,9 @@ def first_matching_identifier(
     services: Sequence[ServiceEvidence],
     candidate_keywords: Collection[str],
 ) -> tuple[str, str] | None:
-    """Search product, HTTP title, and TLS certificate subject/issuer, in that
-    order, for the first value containing any candidate keyword.
+    """Search product, HTTP title, TLS certificate subject/issuer, and HTTP
+    authentication realm, in that order, for the first value containing any
+    candidate keyword.
 
     Returns a (label, value) pair naming which evidence type matched, so
     callers can produce an accurate reason string instead of assuming the
@@ -75,6 +81,7 @@ def first_matching_identifier(
         ("HTTP title", service_http_titles(services)),
         ("TLS certificate subject", service_tls_subjects(services)),
         ("TLS certificate issuer", service_tls_issuers(services)),
+        ("HTTP authentication realm", service_http_auth_realms(services)),
     )
     for label, values in checks:
         match = first_containing(values, candidate_keywords)

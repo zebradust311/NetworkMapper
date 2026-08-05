@@ -33,13 +33,14 @@ CLASSIFICATION_PORTS = [
     903,
 ]
 
-# FEAT-003F: three narrowly-scoped NSE scripts, each targeting ports
+# FEAT-003F/FEAT-003G: narrowly-scoped NSE scripts, each targeting ports
 # already in CLASSIFICATION_PORTS with data already exchanged during the
-# existing -sV probe or TLS handshake. http-title and ssl-cert run against
-# any HTTP/HTTPS port already being scanned; vmware-version's own portrule
-# limits it to ports -sV already identifies as VMware-related, so no
-# per-host gating is needed here.
-STANDARD_ENRICHMENT_SCRIPTS = ["http-title", "ssl-cert", "vmware-version"]
+# existing -sV probe, TLS handshake, or a single unauthenticated HTTP
+# request. http-title, ssl-cert, and http-auth run against any HTTP/HTTPS
+# port already being scanned; vmware-version's own portrule limits it to
+# ports -sV already identifies as VMware-related, so no per-host gating
+# is needed here.
+STANDARD_ENRICHMENT_SCRIPTS = ["http-title", "ssl-cert", "vmware-version", "http-auth"]
 
 
 class NmapProvider(DiscoveryProvider):
@@ -134,10 +135,11 @@ class NmapProvider(DiscoveryProvider):
     def _standard_enrichment_arguments(self) -> str:
         """Return the curated service-detection arguments for STANDARD enrichment.
 
-        The three NSE scripts are deliberately narrow (FEAT-003F): each
-        reuses data already exchanged during the -sV probe or handshake on
-        a port already in CLASSIFICATION_PORTS, adds no new scan target,
-        and matches ADR-009's per-service evidence model directly.
+        The NSE scripts are deliberately narrow (FEAT-003F/FEAT-003G): each
+        reuses data already exchanged during the -sV probe, handshake, or a
+        single unauthenticated request on a port already in
+        CLASSIFICATION_PORTS, adds no new scan target, and matches
+        ADR-009's per-service evidence model directly.
         """
         classification_ports = ",".join(str(port) for port in CLASSIFICATION_PORTS)
         scripts = ",".join(STANDARD_ENRICHMENT_SCRIPTS)
@@ -170,6 +172,28 @@ class NmapProvider(DiscoveryProvider):
 
         return None
 
+    def _extract_http_auth_realm(self, http_auth_output: str | None) -> str | None:
+        """Extract the authentication realm from http-auth NSE script output.
+
+        http-auth's output isn't a fixed "Label: value" line like ssl-cert's
+        (FEAT-003F's `_extract_cert_field` pattern) — it reports the raw
+        challenge line (e.g. "Basic realm=NETGEAR R7000"), so this searches
+        for the "realm=" marker rather than a line prefix.
+        """
+        if not http_auth_output:
+            return None
+
+        for line in http_auth_output.splitlines():
+            stripped = line.strip()
+            realm_index = stripped.lower().find("realm=")
+            if realm_index == -1:
+                continue
+
+            value = stripped[realm_index + len("realm="):].strip().strip('"')
+            return value or None
+
+        return None
+
     def _extract_services(self, host_data: dict) -> list[ServiceEvidence]:
         """Extract correlated per-port service evidence from Nmap host data.
 
@@ -198,6 +222,7 @@ class NmapProvider(DiscoveryProvider):
                         http_title=self._clean_script_output(scripts.get("http-title")),
                         tls_subject=self._extract_cert_field(scripts.get("ssl-cert"), "Subject"),
                         tls_issuer=self._extract_cert_field(scripts.get("ssl-cert"), "Issuer"),
+                        http_auth_realm=self._extract_http_auth_realm(scripts.get("http-auth")),
                     )
                 )
 

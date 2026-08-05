@@ -59,7 +59,7 @@ class NmapProviderScanProfileTest(unittest.TestCase):
                 call(
                     hosts="172.16.100.10 172.16.100.11",
                     arguments=(
-                        "-Pn -sV --version-light --script http-title,ssl-cert,vmware-version -p "
+                        "-Pn -sV --version-light --script http-title,ssl-cert,vmware-version,http-auth -p "
                         "22,53,80,161,443,445,515,631,9100,3389,5060,5061,8080,8443,902,903"
                     ),
                 ),
@@ -160,7 +160,7 @@ class NmapProviderScanProfileTest(unittest.TestCase):
                 }
 
             if arguments == (
-                "-Pn -sV --version-light --script http-title,ssl-cert,vmware-version -p "
+                "-Pn -sV --version-light --script http-title,ssl-cert,vmware-version,http-auth -p "
                 "22,53,80,161,443,445,515,631,9100,3389,5060,5061,8080,8443,902,903"
             ):
                 return {
@@ -213,7 +213,7 @@ class NmapProviderScanProfileTest(unittest.TestCase):
                 }
 
             if arguments == (
-                "-Pn -sV --version-light --script http-title,ssl-cert,vmware-version -p "
+                "-Pn -sV --version-light --script http-title,ssl-cert,vmware-version,http-auth -p "
                 "22,53,80,161,443,445,515,631,9100,3389,5060,5061,8080,8443,902,903"
             ):
                 return {
@@ -266,7 +266,7 @@ class NmapProviderScanProfileTest(unittest.TestCase):
                 }
 
             if arguments == (
-                "-Pn -sV --version-light --script http-title,ssl-cert,vmware-version -p "
+                "-Pn -sV --version-light --script http-title,ssl-cert,vmware-version,http-auth -p "
                 "22,53,80,161,443,445,515,631,9100,3389,5060,5061,8080,8443,902,903"
             ):
                 return {
@@ -396,6 +396,98 @@ class NmapProviderScanProfileTest(unittest.TestCase):
                     service="https",
                     tls_subject="commonName=SonicWALL",
                     tls_issuer="commonName=SonicWALL",
+                ),
+            ],
+        )
+
+    @patch("networkmapper.discovery.nmap_provider.nmap.PortScanner")
+    def test_standard_enrichment_captures_http_auth_realm_from_script_output(
+        self, port_scanner_mock
+    ):
+        scanner = port_scanner_mock.return_value
+
+        def scan_side_effect(*, hosts, arguments):
+            if arguments == "-sn":
+                return {"scan": {"172.16.100.54": {"hostnames": [{"name": "printer-02"}]}}}
+
+            return {
+                "scan": {
+                    "172.16.100.54": {
+                        "tcp": {
+                            80: {
+                                "state": "open",
+                                "name": "http",
+                                "script": {
+                                    "http-auth": (
+                                        "HTTP/1.1 401 Unauthorized\n"
+                                        "  Basic realm=NETGEAR R7000"
+                                    ),
+                                },
+                            },
+                        },
+                    }
+                }
+            }
+
+        scanner.scan.side_effect = scan_side_effect
+
+        provider = NmapProvider("172.16.100.0/24", scan_profile=ScanProfile.STANDARD)
+        devices = provider.discover()
+
+        self.assertEqual(
+            devices[0].services,
+            [
+                ServiceEvidence(
+                    port=80,
+                    protocol="tcp",
+                    service="http",
+                    http_auth_realm="NETGEAR R7000",
+                ),
+            ],
+        )
+
+    @patch("networkmapper.discovery.nmap_provider.nmap.PortScanner")
+    def test_standard_enrichment_strips_quotes_from_http_auth_realm(
+        self, port_scanner_mock
+    ):
+        scanner = port_scanner_mock.return_value
+
+        def scan_side_effect(*, hosts, arguments):
+            if arguments == "-sn":
+                return {"scan": {"172.16.100.55": {"hostnames": [{"name": "router-01"}]}}}
+
+            return {
+                "scan": {
+                    "172.16.100.55": {
+                        "tcp": {
+                            8080: {
+                                "state": "open",
+                                "name": "http-proxy",
+                                "script": {
+                                    "http-auth": (
+                                        'HTTP/1.1 401 Unauthorized\n'
+                                        '  Digest realm="D-Link Corp."'
+                                    ),
+                                },
+                            },
+                        },
+                    }
+                }
+            }
+
+        scanner.scan.side_effect = scan_side_effect
+
+        provider = NmapProvider("172.16.100.0/24", scan_profile=ScanProfile.STANDARD)
+        devices = provider.discover()
+
+        self.assertEqual(
+            devices[0].services,
+            [
+                ServiceEvidence(
+                    port=8080,
+                    protocol="tcp",
+                    service="http-proxy",
+                    http_auth_realm="D-Link Corp.",
                 ),
             ],
         )

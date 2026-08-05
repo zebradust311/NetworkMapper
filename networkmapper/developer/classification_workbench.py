@@ -98,7 +98,7 @@ class ClassificationWorkbench:
 
     def _format_service(self, entry: ServiceEvidence) -> str:
         """Format one service-evidence entry as `port/protocol service (product version)`,
-        with any HTTP title / TLS certificate evidence appended."""
+        with any HTTP title / TLS certificate / HTTP auth realm evidence appended."""
         line = f"{entry.port}/{entry.protocol}"
         if entry.service:
             line += f" {entry.service}"
@@ -113,6 +113,8 @@ class ClassificationWorkbench:
             line += f" | tls subject: {entry.tls_subject!r}"
         if entry.tls_issuer:
             line += f" | tls issuer: {entry.tls_issuer!r}"
+        if entry.http_auth_realm:
+            line += f" | auth realm: {entry.http_auth_realm!r}"
         return line
 
     def _display_value(self, value: object) -> str:

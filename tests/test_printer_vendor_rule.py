@@ -221,6 +221,30 @@ class PrinterVendorRuleTest(unittest.TestCase):
             "printer vendor identifier.",
         )
 
+    def test_printer_http_auth_realm_classifies_without_vendor_or_networking_match(self):
+        device = Device(
+            ip_address="192.168.1.22",
+            vendor=None,
+            services=[
+                ServiceEvidence(
+                    port=80,
+                    protocol="tcp",
+                    http_auth_realm="HP LaserJet 4250",
+                ),
+            ],
+        )
+
+        result = self.rule.classify(device)
+
+        self.assertIsInstance(result, RuleResult)
+        self.assertTrue(result.matched)
+        self.assertEqual(result.suggested_device_type, DeviceType.PRINTER)
+        self.assertEqual(
+            result.reason,
+            "Detected HTTP authentication realm 'HP LaserJet 4250' matched "
+            "known printer vendor identifier.",
+        )
+
     def test_non_printer_product_falls_back_to_networking_signal(self):
         device = Device(
             ip_address="192.168.1.20",

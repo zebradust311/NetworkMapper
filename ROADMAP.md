@@ -307,8 +307,13 @@ DEV-002 was completed as part of the DEV-003 sprint (shared evidence helpers
 landed alongside the developer automation framework) but was never marked
 complete here.
 
-No next sprint is currently designated. See `docs/reports/` for recent
-investigation and implementation history.
+FEAT-003G (HTTP Authentication Realm discovery) is complete. Per
+ARCH-003's roadmap, the next discovery-evidence sprint is SMB OS
+Discovery + SMB Security Mode + the SMB2 dialect field — filed as
+**FEAT-003H** (ARCH-003 provisionally referred to this work as
+"FEAT-003G" before FEAT-003G was claimed by the HTTP Auth Realm sprint).
+
+See `docs/reports/` for recent investigation and implementation history.
 
 ---
 
