@@ -2,7 +2,7 @@ import unittest
 
 from networkmapper.classification.rule_result import RuleResult
 from networkmapper.classification.rules.sonicwall_firewall_rule import SonicWallFirewallRule
-from networkmapper.core.models import Device, DeviceType, ServiceEvidence, ServiceEvidence
+from networkmapper.core.models import Device, DeviceType, ServiceEvidence
 
 
 class SonicWallFirewallRuleTest(unittest.TestCase):
