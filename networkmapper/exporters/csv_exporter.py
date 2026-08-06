@@ -34,7 +34,9 @@ class CsvExporter:
                         device.ip_address or "",
                         device.hostname or "",
                         device.vendor or "",
-                        device.device_type.name if device.device_type else "",
+                        # .value (e.g. "server"), not .name ("SERVER") — matches
+                        # MarkdownExporter's DeviceType display convention (STAB-001).
+                        device.device_type.value if device.device_type else "",
                         ",".join(device.discovery_sources or []),
                     ]
                 )

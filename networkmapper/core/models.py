@@ -32,6 +32,11 @@ class ServiceEvidence:
         service: The service name identified on the port, if known.
         product: The product name identified on the port, if known.
         version: The product version identified on the port, if known.
+            Typically a bare version number (e.g. "2.4.41") rather than
+            free text, so unlike `product` it carries little vendor- or
+            model-identifying signal. Treated as diagnostic/informational
+            evidence rather than a classification input for that reason
+            (see TEST-003); not currently read by any classification rule.
         http_title: The HTML page title observed on the port, if known.
         tls_subject: The TLS certificate subject observed on the port, if known.
         tls_issuer: The TLS certificate issuer observed on the port, if known.

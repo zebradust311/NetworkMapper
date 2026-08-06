@@ -77,6 +77,7 @@ class ProjectSerializerTest(unittest.TestCase):
             Device(
                 ip_address="10.0.0.30",
                 hostname="dc-01",
+                mac_address="AA:BB:CC:DD:EE:01",
                 vendor="Unknown",
                 operating_system="Windows Server 2019 Standard 17763",
                 computer_name="DC01",
@@ -95,6 +96,7 @@ class ProjectSerializerTest(unittest.TestCase):
         loaded_device = loaded_project.network_graph.get_device("10.0.0.30")
 
         self.assertIsNotNone(loaded_device)
+        self.assertEqual(loaded_device.mac_address, "AA:BB:CC:DD:EE:01")
         self.assertEqual(loaded_device.operating_system, "Windows Server 2019 Standard 17763")
         self.assertEqual(loaded_device.computer_name, "DC01")
         self.assertEqual(loaded_device.domain, "corp.local")

@@ -38,6 +38,7 @@ class BenchmarkRunnerTest(unittest.TestCase):
                         {
                             "ip_address": "192.168.50.10",
                             "hostname": "host-01",
+                            "mac_address": "AA:BB:CC:DD:EE:FF",
                             "vendor": "Cisco",
                             "services": [
                                 {"port": 22, "protocol": "tcp", "service": "ssh"},
@@ -53,6 +54,7 @@ class BenchmarkRunnerTest(unittest.TestCase):
             self.assertEqual(len(devices), 1)
             self.assertEqual(devices[0].ip_address, "192.168.50.10")
             self.assertEqual(devices[0].hostname, "host-01")
+            self.assertEqual(devices[0].mac_address, "AA:BB:CC:DD:EE:FF")
             self.assertEqual(devices[0].vendor, "Cisco")
             self.assertEqual(
                 devices[0].services,

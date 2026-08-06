@@ -4,7 +4,7 @@ import unittest
 from datetime import datetime
 from pathlib import Path
 
-from networkmapper.core.models import Device
+from networkmapper.core.models import Device, DeviceType
 from networkmapper.core.network_graph import NetworkGraph
 from networkmapper.exporters.csv_exporter import CsvExporter
 from networkmapper.project.models import Project
@@ -18,7 +18,7 @@ class CsvExporterTest(unittest.TestCase):
                 ip_address="192.168.1.10",
                 hostname="DC-01",
                 vendor="Cisco",
-                device_type="server",
+                device_type=DeviceType.SERVER,
                 discovery_sources=["nmap", "snmp"],
             )
         )
@@ -27,7 +27,7 @@ class CsvExporterTest(unittest.TestCase):
                 ip_address="192.168.1.11",
                 hostname=None,
                 vendor=None,
-                device_type="unknown",
+                device_type=DeviceType.UNKNOWN,
                 discovery_sources=[],
             )
         )
