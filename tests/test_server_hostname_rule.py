@@ -120,6 +120,30 @@ class ServerHostnameRuleTest(unittest.TestCase):
             "Hostname 'hyperv-node-02' did not match known server naming patterns.",
         )
 
+    def test_rdp_sourced_build_number_does_not_corroborate_server_match(self):
+        """FEAT-003I: rdp-ntlm-info's Product_Version (e.g. "10.0.14393") is a
+        bare OS build number, not a full caption like smb-os-discovery's "OS:"
+        line — it contains no "server" keyword, so a device identified only
+        via RDP (no SMB) gets a hostname-only match with no OS corroboration
+        text. This documents that gap rather than leaving it to be
+        rediscovered as a surprise."""
+        device = Device(
+            ip_address="192.168.1.56",
+            hostname="SRV-FILE02",
+            vendor="Unknown",
+            operating_system="10.0.14393",
+        )
+
+        result = ServerHostnameRule().classify(device)
+
+        self.assertIsInstance(result, RuleResult)
+        self.assertTrue(result.matched)
+        self.assertEqual(result.suggested_device_type, DeviceType.SERVER)
+        self.assertEqual(
+            result.reason,
+            "Hostname 'SRV-FILE02' matched known server naming pattern.",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

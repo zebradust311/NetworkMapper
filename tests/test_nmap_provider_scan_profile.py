@@ -59,7 +59,7 @@ class NmapProviderScanProfileTest(unittest.TestCase):
                 call(
                     hosts="172.16.100.10 172.16.100.11",
                     arguments=(
-                        "-Pn -sV --version-light --script http-title,ssl-cert,vmware-version,http-auth,smb-os-discovery,smb-security-mode -p "
+                        "-Pn -sV --version-light --script http-title,ssl-cert,vmware-version,http-auth,rdp-ntlm-info,smb-os-discovery,smb-security-mode -p "
                         "22,53,80,161,443,445,515,631,9100,3389,5060,5061,8080,8443,902,903"
                     ),
                 ),
@@ -160,7 +160,7 @@ class NmapProviderScanProfileTest(unittest.TestCase):
                 }
 
             if arguments == (
-                "-Pn -sV --version-light --script http-title,ssl-cert,vmware-version,http-auth,smb-os-discovery,smb-security-mode -p "
+                "-Pn -sV --version-light --script http-title,ssl-cert,vmware-version,http-auth,rdp-ntlm-info,smb-os-discovery,smb-security-mode -p "
                 "22,53,80,161,443,445,515,631,9100,3389,5060,5061,8080,8443,902,903"
             ):
                 return {
@@ -213,7 +213,7 @@ class NmapProviderScanProfileTest(unittest.TestCase):
                 }
 
             if arguments == (
-                "-Pn -sV --version-light --script http-title,ssl-cert,vmware-version,http-auth,smb-os-discovery,smb-security-mode -p "
+                "-Pn -sV --version-light --script http-title,ssl-cert,vmware-version,http-auth,rdp-ntlm-info,smb-os-discovery,smb-security-mode -p "
                 "22,53,80,161,443,445,515,631,9100,3389,5060,5061,8080,8443,902,903"
             ):
                 return {
@@ -266,7 +266,7 @@ class NmapProviderScanProfileTest(unittest.TestCase):
                 }
 
             if arguments == (
-                "-Pn -sV --version-light --script http-title,ssl-cert,vmware-version,http-auth,smb-os-discovery,smb-security-mode -p "
+                "-Pn -sV --version-light --script http-title,ssl-cert,vmware-version,http-auth,rdp-ntlm-info,smb-os-discovery,smb-security-mode -p "
                 "22,53,80,161,443,445,515,631,9100,3389,5060,5061,8080,8443,902,903"
             ):
                 return {
@@ -533,6 +533,162 @@ class NmapProviderScanProfileTest(unittest.TestCase):
         self.assertIsNone(device.computer_name)
         self.assertIsNone(device.domain)
         self.assertIsNone(device.smb_signing)
+
+    @patch("networkmapper.discovery.nmap_provider.nmap.PortScanner")
+    def test_standard_enrichment_captures_rdp_identity_when_smb_absent(
+        self, port_scanner_mock
+    ):
+        scanner = port_scanner_mock.return_value
+
+        def scan_side_effect(*, hosts, arguments):
+            if arguments == "-sn":
+                return {"scan": {"172.16.100.59": {"hostnames": [{"name": "srv-file01"}]}}}
+
+            return {
+                "scan": {
+                    "172.16.100.59": {
+                        "tcp": {
+                            3389: {
+                                "state": "open",
+                                "name": "ms-wbt-server",
+                                "script": {
+                                    "rdp-ntlm-info": (
+                                        "\n"
+                                        "  Target_Name: W2016\n"
+                                        "  NetBIOS_Domain_Name: W2016\n"
+                                        "  NetBIOS_Computer_Name: W16GA-SRV01\n"
+                                        "  DNS_Domain_Name: W2016.lab\n"
+                                        "  DNS_Computer_Name: W16GA-SRV01.W2016.lab\n"
+                                        "  DNS_Tree_Name: W2016.lab\n"
+                                        "  Product_Version: 10.0.14393\n"
+                                        "  System_Time: 2026-01-01T10:00:00+00:00"
+                                    ),
+                                },
+                            },
+                        },
+                    }
+                }
+            }
+
+        scanner.scan.side_effect = scan_side_effect
+
+        provider = NmapProvider("172.16.100.0/24", scan_profile=ScanProfile.STANDARD)
+        devices = provider.discover()
+
+        device = devices[0]
+        self.assertEqual(device.operating_system, "10.0.14393")
+        self.assertEqual(device.computer_name, "W16GA-SRV01")
+        self.assertEqual(device.domain, "W2016")
+        self.assertIsNone(device.smb_signing)
+
+    @patch("networkmapper.discovery.nmap_provider.nmap.PortScanner")
+    def test_standard_enrichment_prefers_smb_identity_over_rdp_when_both_present(
+        self, port_scanner_mock
+    ):
+        scanner = port_scanner_mock.return_value
+
+        def scan_side_effect(*, hosts, arguments):
+            if arguments == "-sn":
+                return {"scan": {"172.16.100.60": {"hostnames": [{"name": "dc-02"}]}}}
+
+            return {
+                "scan": {
+                    "172.16.100.60": {
+                        "tcp": {
+                            445: {"state": "open", "name": "microsoft-ds"},
+                            3389: {
+                                "state": "open",
+                                "name": "ms-wbt-server",
+                                "script": {
+                                    "rdp-ntlm-info": (
+                                        "\n"
+                                        "  NetBIOS_Domain_Name: RDPDOMAIN\n"
+                                        "  NetBIOS_Computer_Name: RDPNAME\n"
+                                        "  Product_Version: 10.0.14393"
+                                    ),
+                                },
+                            },
+                        },
+                        "hostscript": [
+                            {
+                                "id": "smb-os-discovery",
+                                "output": (
+                                    "\n"
+                                    "  OS: Windows Server 2019 Standard 17763 "
+                                    "(Windows Server 2019 Standard 6.3)\n"
+                                    "  Computer name: DC02\n"
+                                    "  Domain name: corp.local"
+                                ),
+                            },
+                        ],
+                    }
+                }
+            }
+
+        scanner.scan.side_effect = scan_side_effect
+
+        provider = NmapProvider("172.16.100.0/24", scan_profile=ScanProfile.STANDARD)
+        devices = provider.discover()
+
+        device = devices[0]
+        self.assertEqual(
+            device.operating_system,
+            "Windows Server 2019 Standard 17763 (Windows Server 2019 Standard 6.3)",
+        )
+        self.assertEqual(device.computer_name, "DC02")
+        self.assertEqual(device.domain, "corp.local")
+
+    @patch("networkmapper.discovery.nmap_provider.nmap.PortScanner")
+    def test_standard_enrichment_falls_back_to_rdp_field_by_field_when_smb_partial(
+        self, port_scanner_mock
+    ):
+        """SMB/RDP precedence is decided per field, not per source: a host
+        whose smb-os-discovery output only yields an OS string (e.g. Samba
+        blanking its own name) should still take computer_name/domain from
+        RDP rather than leaving them empty."""
+        scanner = port_scanner_mock.return_value
+
+        def scan_side_effect(*, hosts, arguments):
+            if arguments == "-sn":
+                return {"scan": {"172.16.100.61": {"hostnames": [{"name": "nas-01"}]}}}
+
+            return {
+                "scan": {
+                    "172.16.100.61": {
+                        "tcp": {
+                            445: {"state": "open", "name": "microsoft-ds"},
+                            3389: {
+                                "state": "open",
+                                "name": "ms-wbt-server",
+                                "script": {
+                                    "rdp-ntlm-info": (
+                                        "\n"
+                                        "  NetBIOS_Domain_Name: WORKGROUP\n"
+                                        "  NetBIOS_Computer_Name: NAS-01\n"
+                                        "  Product_Version: 10.0.14393"
+                                    ),
+                                },
+                            },
+                        },
+                        "hostscript": [
+                            {
+                                "id": "smb-os-discovery",
+                                "output": "\n  OS: Unix (Samba 4.15.13)",
+                            },
+                        ],
+                    }
+                }
+            }
+
+        scanner.scan.side_effect = scan_side_effect
+
+        provider = NmapProvider("172.16.100.0/24", scan_profile=ScanProfile.STANDARD)
+        devices = provider.discover()
+
+        device = devices[0]
+        self.assertEqual(device.operating_system, "Unix (Samba 4.15.13)")
+        self.assertEqual(device.computer_name, "NAS-01")
+        self.assertEqual(device.domain, "WORKGROUP")
 
     @patch("networkmapper.discovery.nmap_provider.nmap.PortScanner")
     def test_standard_enrichment_captures_http_auth_realm_from_script_output(

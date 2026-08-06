@@ -60,6 +60,17 @@
       "services": [
         {"port": 445, "protocol": "tcp", "service": "microsoft-ds"}
       ]
+    },
+    {
+      "ip_address": "10.20.0.90",
+      "hostname": "srv-file02",
+      "vendor": "Unknown",
+      "operating_system": "10.0.14393",
+      "computer_name": "SRV-FILE02",
+      "domain": "SRV-FILE02",
+      "services": [
+        {"port": 3389, "protocol": "tcp", "service": "ms-wbt-server"}
+      ]
     }
   ]
 }

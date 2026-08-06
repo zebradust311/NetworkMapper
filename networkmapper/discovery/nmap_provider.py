@@ -33,14 +33,17 @@ CLASSIFICATION_PORTS = [
     903,
 ]
 
-# FEAT-003F/FEAT-003G: narrowly-scoped NSE scripts, each targeting ports
-# already in CLASSIFICATION_PORTS with data already exchanged during the
-# existing -sV probe, TLS handshake, or a single unauthenticated HTTP
-# request. http-title, ssl-cert, and http-auth run against any HTTP/HTTPS
-# port already being scanned; vmware-version's own portrule limits it to
-# ports -sV already identifies as VMware-related, so no per-host gating
-# is needed here.
-STANDARD_ENRICHMENT_SCRIPTS = ["http-title", "ssl-cert", "vmware-version", "http-auth"]
+# FEAT-003F/FEAT-003G/FEAT-003I: narrowly-scoped NSE scripts, each
+# targeting ports already in CLASSIFICATION_PORTS with data already
+# exchanged during the existing -sV probe, TLS handshake, or a single
+# unauthenticated request. http-title, ssl-cert, and http-auth run
+# against any HTTP/HTTPS port already being scanned; vmware-version's
+# own portrule limits it to ports -sV already identifies as
+# VMware-related; rdp-ntlm-info targets port 3389 (already scanned) and,
+# like http-auth, discloses information during an incomplete
+# authentication handshake without completing a login — no credentials
+# are used and no authentication succeeds.
+STANDARD_ENRICHMENT_SCRIPTS = ["http-title", "ssl-cert", "vmware-version", "http-auth", "rdp-ntlm-info"]
 
 # FEAT-003H: smb-os-discovery and smb-security-mode are "hostrule" NSE
 # scripts — they negotiate a session against the SMB port already in
@@ -121,10 +124,31 @@ class NmapProvider(DiscoveryProvider):
             device = devices_by_ip[ip_address]
             device.services = self._extract_services(host_data)
 
+            # FEAT-003I: smb-os-discovery and rdp-ntlm-info can both
+            # populate operating_system/computer_name/domain for the same
+            # device (ARCH-003 Section 2.2 flagged this precedence
+            # question; FEAT-003H deferred the decision here). SMB wins,
+            # decided per field rather than per source (a host whose SMB
+            # output only yields one of the three fields still takes the
+            # other two from RDP rather than leaving them empty). SMB is
+            # preferred wherever both are present because smb-os-discovery
+            # reports a full OS caption (e.g. "Windows Server 2019
+            # Standard 17763") while rdp-ntlm-info's Product_Version is a
+            # bare build number (e.g. "10.0.14393") with no edition/vendor
+            # text — strictly less informative for a human reading the
+            # report or for keyword-based classification corroboration
+            # (see ServerHostnameRule's SERVER_OPERATING_SYSTEM_KEYWORDS,
+            # which a bare build number will never match). RDP only fills
+            # in fields SMB left empty, which is exactly the scenario
+            # ARCH-003 identified as RDP's value: SMB firewalled or
+            # disabled while RDP remains reachable.
             smb_identity = self._extract_smb_identity(host_data)
-            device.operating_system = smb_identity["operating_system"]
-            device.computer_name = smb_identity["computer_name"]
-            device.domain = smb_identity["domain"]
+            rdp_identity = self._extract_rdp_identity(host_data)
+            device.operating_system = (
+                smb_identity["operating_system"] or rdp_identity["operating_system"]
+            )
+            device.computer_name = smb_identity["computer_name"] or rdp_identity["computer_name"]
+            device.domain = smb_identity["domain"] or rdp_identity["domain"]
             device.smb_signing = smb_identity["smb_signing"]
 
         return list(devices_by_ip.values())
@@ -269,7 +293,8 @@ class NmapProvider(DiscoveryProvider):
         multi-line NSE script output whose lines follow a "Label: value"
         convention. Originally written for ssl-cert (FEAT-003F); reused for
         smb-os-discovery/smb-security-mode host-script output (FEAT-003H)
-        since both follow the same convention."""
+        and rdp-ntlm-info port-script output (FEAT-003I) since all follow
+        the same convention."""
         if not script_output:
             return None
 
@@ -309,4 +334,23 @@ class NmapProvider(DiscoveryProvider):
             "computer_name": self._extract_labeled_field(os_discovery_output, "Computer name"),
             "domain": domain,
             "smb_signing": self._extract_labeled_field(security_mode_output, "message_signing"),
+        }
+
+    def _extract_rdp_identity(self, host_data: dict) -> dict[str, str | None]:
+        """Extract device-level RDP identity evidence from rdp-ntlm-info output.
+
+        Unlike smb-os-discovery/smb-security-mode, rdp-ntlm-info is a
+        "portrule" script scoped to port 3389 — its output lives in the
+        normal per-port script dict (the same place http-title/ssl-cert
+        live), not host_data["hostscript"]. It still produces
+        Device-level identity facts (not ServiceEvidence), same as SMB,
+        because NetBIOS computer/domain name and OS build describe the
+        host rather than the RDP service itself.
+        """
+        rdp_output = host_data.get("tcp", {}).get(3389, {}).get("script", {}).get("rdp-ntlm-info")
+
+        return {
+            "operating_system": self._extract_labeled_field(rdp_output, "Product_Version"),
+            "computer_name": self._extract_labeled_field(rdp_output, "NetBIOS_Computer_Name"),
+            "domain": self._extract_labeled_field(rdp_output, "NetBIOS_Domain_Name"),
         }

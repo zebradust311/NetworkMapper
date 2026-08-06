@@ -31,6 +31,10 @@
     {
       "ip_address": "10.20.0.80",
       "device_type": "SERVER"
+    },
+    {
+      "ip_address": "10.20.0.90",
+      "device_type": "SERVER"
     }
   ]
 }

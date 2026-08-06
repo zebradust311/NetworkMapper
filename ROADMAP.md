@@ -317,8 +317,20 @@ description of it as a source of SMB2 dialect evidence was a factual
 error, corrected during FEAT-003H implementation; the script reports
 only server date/time, which has no classification consumer.
 
-Per ARCH-003's roadmap, the next discovery-evidence candidate is RDP
-NTLM Info, tentatively **FEAT-003I**.
+FEAT-003I (RDP NTLM Identity Discovery, ARCH-003 Tier 3) is complete.
+`rdp-ntlm-info` populates the same `Device.operating_system`/
+`computer_name`/`domain` fields SMB discovery already populates
+(FEAT-003H), with SMB preferred field-by-field when both sources are
+present — RDP only fills in fields SMB left empty. No classification
+rule changes were needed: `ServerHostnameRule`/`HypervisorHostnameRule`
+already corroborate on `Device.operating_system` generically, regardless
+of which discovery path produced it.
+
+Per ARCH-003's roadmap, this completes Tiers 1–3 (the passive
+HTTP/TLS/SMB/RDP identity work). Tier 4 (SNMP `sysDescr`/`sysObjectID`)
+is the next candidate but is blocked on confirming and fixing the `-sU`
+UDP scanning gap first (see ARCH-003 Section 2.7) — not yet actionable
+as its own clean sprint.
 
 See `docs/reports/` for recent investigation and implementation history.
 

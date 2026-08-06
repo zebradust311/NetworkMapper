@@ -98,7 +98,7 @@ NmapProvider currently supports profile-driven scanning and returns Device objec
 - hostname
 - MAC address
 - vendor
-- device-level identity evidence, where available (operating system, computer name, domain/workgroup, SMB signing posture — obtained via unauthenticated SMB negotiation on port 445, per ADR-009)
+- device-level identity evidence, where available (operating system, computer name, domain/workgroup, SMB signing posture). Operating system, computer name, and domain can each be produced by two independent, unauthenticated sources — SMB negotiation on port 445 and RDP NTLM negotiation on port 3389 — with SMB preferred when both are present, since it reports a full OS caption where RDP reports only a bare build number. SMB signing posture has no RDP equivalent. Per ADR-009.
 - correlated per-service evidence (port, protocol, service name, product, version, and, where available, self-identifying evidence such as HTTP page title, TLS certificate subject/issuer, and HTTP authentication realm, per ADR-009)
 - discovery sources
 
