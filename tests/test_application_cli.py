@@ -159,15 +159,58 @@ class ApplicationCliTest(unittest.TestCase):
         self.assertIn("FAST profile:", result["stdout"])
         self.assertIn("Service enrichment disabled by design.", result["stdout"])
 
-    def test_deep_profile_prints_currently_identical_to_fast_message(self):
-        result = self._run_application(
-            ["networkmapper", "--scan-profile", "deep"],
-            run_diagnostics=_default_run_diagnostics(ScanProfile.DEEP),
+    def test_deep_profile_prints_expanded_capabilities_and_message(self):
+        run_diagnostics = RunDiagnostics(
+            scan_profile=ScanProfile.DEEP,
+            hosts_discovered=1,
+            enrichment_enabled=True,
+            enrichment_arguments=(
+                "-Pn -sV --version-all --script http-title --top-ports 1000 "
+                "--max-retries 6 --host-timeout 15m"
+            ),
+            phases=[
+                ScanPhase(name="Host Discovery", arguments="-sn", elapsed_seconds=1.0),
+                ScanPhase(
+                    name="Service Enrichment",
+                    arguments=(
+                        "-Pn -sV --version-all --script http-title --top-ports 1000 "
+                        "--max-retries 6 --host-timeout 15m"
+                    ),
+                    elapsed_seconds=20.0,
+                ),
+            ],
+            expanded_capabilities=[
+                "Expanded TCP port coverage: top 1000 ports (STANDARD scans a curated 16-port set).",
+                "Version detection intensity: --version-all, maximum (STANDARD uses --version-light).",
+                "Additional enrichment script: sip-methods (STANDARD's script set plus this).",
+                "Retry/timeout patience: --max-retries 6 --host-timeout 15m (STANDARD uses Nmap's built-in defaults).",
+            ],
         )
 
-        self.assertIn("Scan Profile: DEEP", result["stdout"])
-        self.assertIn("DEEP profile:", result["stdout"])
-        self.assertIn("Currently identical to FAST", result["stdout"])
+        result = self._run_application(
+            ["networkmapper", "--scan-profile", "deep"],
+            run_diagnostics=run_diagnostics,
+        )
+
+        stdout = result["stdout"]
+        self.assertIn("Scan Profile: DEEP", stdout)
+        self.assertIn("Enrichment Enabled: Yes", stdout)
+        self.assertIn("DEEP profile:", stdout)
+        self.assertIn("top 1000 TCP", stdout)
+        self.assertIn("unauthenticated", stdout)
+        self.assertIn("Additional Capabilities Enabled:", stdout)
+        self.assertIn("- Expanded TCP port coverage: top 1000 ports", stdout)
+        self.assertIn("- Version detection intensity: --version-all, maximum", stdout)
+        self.assertIn("- Additional enrichment script: sip-methods", stdout)
+        self.assertIn("- Retry/timeout patience: --max-retries 6 --host-timeout 15m", stdout)
+
+    def test_fast_profile_omits_additional_capabilities_section(self):
+        result = self._run_application(
+            ["networkmapper", "--scan-profile", "fast"],
+            run_diagnostics=_default_run_diagnostics(ScanProfile.FAST),
+        )
+
+        self.assertNotIn("Additional Capabilities Enabled", result["stdout"])
 
     def test_standard_profile_prints_phases_and_enrichment_arguments(self):
         run_diagnostics = RunDiagnostics(

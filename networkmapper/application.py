@@ -143,6 +143,11 @@ class Application:
         if run_diagnostics.enrichment_arguments:
             print(f"Enrichment Arguments: {run_diagnostics.enrichment_arguments}")
 
+        if run_diagnostics.expanded_capabilities:
+            print("\nAdditional Capabilities Enabled:")
+            for capability in run_diagnostics.expanded_capabilities:
+                print(f"- {capability}")
+
         print("\nPhases Executed:")
         for phase in run_diagnostics.phases:
             if phase.elapsed_seconds is not None:

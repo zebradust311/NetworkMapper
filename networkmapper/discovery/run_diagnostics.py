@@ -23,9 +23,12 @@ PROFILE_MESSAGES: dict[ScanProfile, str] = {
     ),
     ScanProfile.DEEP: (
         "DEEP profile:\n"
-        "Currently identical to FAST (no differentiated DEEP behavior is "
-        "implemented yet).\n"
-        "Host discovery only. Service enrichment disabled by design."
+        "Host discovery, then expanded service enrichment: top 1000 TCP "
+        "ports, maximum version-detection intensity, one additional safe "
+        "NSE script (sip-methods), and increased retry/timeout patience.\n"
+        "Higher runtime and network visibility than STANDARD. Still "
+        "unauthenticated — per ARCH-010, intended for a focused scope "
+        "(a subnet, a device cluster), not a full enterprise sweep."
     ),
 }
 
@@ -98,6 +101,10 @@ class RunDiagnostics:
         host_diagnostics: Per-host diagnostics, keyed by IP address. Empty
             when enrichment did not run (profile-disabled or zero hosts
             discovered).
+        expanded_capabilities: Human-readable descriptions of what this
+            profile does beyond STANDARD's baseline (FEAT-004). Empty for
+            FAST/STANDARD; populated for DEEP so an operator can see what
+            "expanded" concretely means without reading `NmapProvider`.
     """
 
     scan_profile: ScanProfile
@@ -106,6 +113,7 @@ class RunDiagnostics:
     enrichment_arguments: str | None = None
     phases: list[ScanPhase] = field(default_factory=list)
     host_diagnostics: dict[str, HostDiagnostics] = field(default_factory=dict)
+    expanded_capabilities: list[str] = field(default_factory=list)
 
 
 def diagnose_host(

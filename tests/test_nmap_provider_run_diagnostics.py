@@ -29,6 +29,7 @@ class NmapProviderRunDiagnosticsTest(unittest.TestCase):
         self.assertEqual(diagnostics.phases[0].arguments, "-sn")
         self.assertEqual(diagnostics.phases[0].elapsed_seconds, 1.5)
         self.assertEqual(diagnostics.host_diagnostics, {})
+        self.assertEqual(diagnostics.expanded_capabilities, [])
 
     @patch("networkmapper.discovery.nmap_provider.nmap.PortScanner")
     def test_missing_scanstats_leaves_elapsed_seconds_none(self, port_scanner_mock):
@@ -110,18 +111,31 @@ class NmapProviderRunDiagnosticsTest(unittest.TestCase):
         dark_host = diagnostics.host_diagnostics["172.16.100.21"]
         self.assertFalse(dark_host.enriched)
         self.assertIn("No curated ports open.", dark_host.missing_evidence_reasons)
+        self.assertEqual(diagnostics.expanded_capabilities, [])
 
     @patch("networkmapper.discovery.nmap_provider.nmap.PortScanner")
-    def test_deep_profile_records_enrichment_disabled_same_as_fast(self, port_scanner_mock):
+    def test_deep_profile_records_enrichment_enabled_with_expanded_capabilities(
+        self, port_scanner_mock
+    ):
+        """FEAT-004: DEEP no longer behaves like FAST — it performs the
+        same two-phase enrichment STANDARD does, extended through
+        configuration (ARCH-010), and reports what was extended."""
         scanner = port_scanner_mock.return_value
-        scanner.scan.return_value = {"scan": {}}
+        scanner.scan.side_effect = [
+            {"scan": {"172.16.100.40": {"hostnames": [{"name": "host-40"}]}}},
+            {"scan": {}},
+        ]
 
         provider = NmapProvider("172.16.100.0/24", scan_profile=ScanProfile.DEEP)
         provider.discover()
 
         diagnostics = provider.run_diagnostics
         self.assertEqual(diagnostics.scan_profile, ScanProfile.DEEP)
-        self.assertFalse(diagnostics.enrichment_enabled)
+        self.assertTrue(diagnostics.enrichment_enabled)
+        self.assertEqual(len(diagnostics.phases), 2)
+        self.assertEqual(diagnostics.phases[1].name, "Service Enrichment")
+        self.assertTrue(diagnostics.expanded_capabilities)
+        self.assertIn("172.16.100.40", diagnostics.host_diagnostics)
 
 
 if __name__ == "__main__":

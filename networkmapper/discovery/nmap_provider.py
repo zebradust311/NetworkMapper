@@ -61,6 +61,31 @@ STANDARD_ENRICHMENT_SCRIPTS = ["http-title", "ssl-cert", "vmware-version", "http
 # by http-title/ssl-cert/http-auth/vmware-version.
 STANDARD_HOST_ENRICHMENT_SCRIPTS = ["smb-os-discovery", "smb-security-mode"]
 
+# ARCH-010 Candidate 2: DEEP's one approved "safe"-category NSE script
+# addition beyond STANDARD's set — a pilot, not a commitment (ARCH-003
+# could not verify sip-methods' real-world response reliability without a
+# live device). Everything else ARCH-010 evaluated for DEEP (OS
+# fingerprinting, UDP/SNMP, LLDP/CDP, ssh-hostkey, any intrusive/vuln
+# script) was explicitly excluded from DEEP v1 by architecture review.
+DEEP_ADDITIONAL_ENRICHMENT_SCRIPTS = ["sip-methods"]
+
+# ARCH-010 Candidate 1: nmap's own "top N ports by observed frequency"
+# ranking, read directly from its bundled nmap-services database rather
+# than a bespoke port list. Verified directly against nmap-services
+# (not assumed) that all of CLASSIFICATION_PORTS, including 902/903, and
+# ARCH-010 Candidate 6's VMware CIM/WBEM ports (5988/5989) already fall
+# within Nmap's top 1000 — so DEEP's port coverage is a strict superset
+# of STANDARD's without needing any separate, explicit port additions.
+DEEP_TOP_PORTS = 1000
+
+# ARCH-010 Candidates 9/10: explicit, deliberate retry/timeout patience
+# increase over STANDARD's unspecified (Nmap default-template) behavior.
+# Chosen as reasonable engineering judgment, not a benchmarked optimum —
+# per ARCH-010's own "qualitative, not measured" framing for timing
+# tradeoffs — and easy to retune later without any architecture impact.
+DEEP_MAX_RETRIES = 6
+DEEP_HOST_TIMEOUT = "15m"
+
 
 class NmapProvider(DiscoveryProvider):
     """Discover network hosts using profile-driven Nmap scan settings."""
@@ -79,15 +104,16 @@ class NmapProvider(DiscoveryProvider):
     def discover(self) -> list[Device]:
         """Run an Nmap scan based on the selected profile and return devices."""
 
-        if self._scan_profile == ScanProfile.STANDARD:
-            return self._discover_with_standard_enrichment()
+        if self._scan_profile in (ScanProfile.STANDARD, ScanProfile.DEEP):
+            return self._discover_with_enrichment()
 
         return self._discover_single_pass()
 
     def _discover_single_pass(self) -> list[Device]:
-        """Run a single scan and build device objects from scan results."""
+        """Run a single, host-discovery-only scan (FAST) and build device
+        objects from scan results."""
 
-        arguments = self._scan_arguments()
+        arguments = "-sn"
         scan_result = self._scanner.scan(
             hosts=self._subnet_cidr,
             arguments=arguments,
@@ -114,8 +140,16 @@ class NmapProvider(DiscoveryProvider):
 
         return devices
 
-    def _discover_with_standard_enrichment(self) -> list[Device]:
-        """Run host discovery first, then merge enrichment evidence by IP."""
+    def _discover_with_enrichment(self) -> list[Device]:
+        """Run host discovery first, then merge enrichment evidence by IP.
+
+        Shared by STANDARD and DEEP (FEAT-004): both use this same
+        two-phase shape (ADR-001) and the same extraction/merge logic
+        below. Only the enrichment argument string differs between them,
+        via `_enrichment_arguments()` — DEEP is expressed as STANDARD's
+        arguments extended through configuration, not a parallel
+        implementation.
+        """
         discovery_phase = ScanPhase(name="Host Discovery", arguments="-sn")
         discovery_result = self._scanner.scan(
             hosts=self._subnet_cidr,
@@ -128,7 +162,8 @@ class NmapProvider(DiscoveryProvider):
         for ip_address, host_data in discovery_result.get("scan", {}).items():
             devices_by_ip[ip_address] = self._build_device(ip_address, host_data)
 
-        enrichment_arguments = self._standard_enrichment_arguments()
+        enrichment_arguments = self._enrichment_arguments()
+        expanded_capabilities = self._expanded_capabilities()
 
         if not devices_by_ip:
             self.run_diagnostics = RunDiagnostics(
@@ -137,6 +172,7 @@ class NmapProvider(DiscoveryProvider):
                 enrichment_enabled=True,
                 enrichment_arguments=enrichment_arguments,
                 phases=[discovery_phase],
+                expanded_capabilities=expanded_capabilities,
             )
             return []
 
@@ -197,6 +233,7 @@ class NmapProvider(DiscoveryProvider):
             enrichment_arguments=enrichment_arguments,
             phases=[discovery_phase, enrichment_phase],
             host_diagnostics=host_diagnostics,
+            expanded_capabilities=expanded_capabilities,
         )
 
         return list(devices_by_ip.values())
@@ -223,14 +260,17 @@ class NmapProvider(DiscoveryProvider):
             discovery_sources=["nmap"],
         )
 
-    def _scan_arguments(self) -> str:
-        """Translate the configured scan profile to Nmap command arguments."""
-        profile_arguments = {
-            ScanProfile.FAST: "-sn",
-            ScanProfile.DEEP: "-sn",
-        }
+    def _enrichment_arguments(self) -> str:
+        """Return the enrichment argument string for the configured profile.
 
-        return profile_arguments[self._scan_profile]
+        DEEP is expressed as STANDARD's arguments extended through
+        configuration (FEAT-004), not a separate implementation — this is
+        the single dispatch point between the two.
+        """
+        if self._scan_profile == ScanProfile.DEEP:
+            return self._deep_enrichment_arguments()
+
+        return self._standard_enrichment_arguments()
 
     def _standard_enrichment_arguments(self) -> str:
         """Return the curated service-detection arguments for STANDARD enrichment.
@@ -244,6 +284,50 @@ class NmapProvider(DiscoveryProvider):
         classification_ports = ",".join(str(port) for port in CLASSIFICATION_PORTS)
         scripts = ",".join(STANDARD_ENRICHMENT_SCRIPTS + STANDARD_HOST_ENRICHMENT_SCRIPTS)
         return f"-Pn -sV --version-light --script {scripts} -p {classification_ports}"
+
+    def _deep_enrichment_arguments(self) -> str:
+        """Return DEEP's expanded service-detection arguments (FEAT-004/ARCH-010).
+
+        Extends `_standard_enrichment_arguments()` along the axes ARCH-010
+        approved for v1: wider port coverage (`--top-ports`, replacing the
+        curated `-p` list), maximum version-detection intensity
+        (`--version-all` in place of `--version-light`), one additional
+        safe-category NSE script (`sip-methods`), and increased retry/
+        host-timeout patience. OS fingerprinting, UDP/SNMP, LLDP/CDP,
+        `ssh-hostkey`, and any intrusive/vuln-category script are
+        deliberately absent — excluded from DEEP v1 by architecture
+        review, not omissions.
+        """
+        scripts = ",".join(
+            STANDARD_ENRICHMENT_SCRIPTS
+            + STANDARD_HOST_ENRICHMENT_SCRIPTS
+            + DEEP_ADDITIONAL_ENRICHMENT_SCRIPTS
+        )
+        return (
+            f"-Pn -sV --version-all --script {scripts} "
+            f"--top-ports {DEEP_TOP_PORTS} "
+            f"--max-retries {DEEP_MAX_RETRIES} --host-timeout {DEEP_HOST_TIMEOUT}"
+        )
+
+    def _expanded_capabilities(self) -> list[str]:
+        """Return operator-facing descriptions of DEEP's capabilities beyond
+        STANDARD's baseline (FEAT-004 observability requirement). Empty for
+        every other profile."""
+        if self._scan_profile != ScanProfile.DEEP:
+            return []
+
+        return [
+            f"Expanded TCP port coverage: top {DEEP_TOP_PORTS} ports "
+            f"(STANDARD scans a curated {len(CLASSIFICATION_PORTS)}-port set).",
+            "Version detection intensity: --version-all, maximum "
+            "(STANDARD uses --version-light).",
+            "Additional enrichment script: "
+            f"{', '.join(DEEP_ADDITIONAL_ENRICHMENT_SCRIPTS)} "
+            "(STANDARD's script set plus this).",
+            f"Retry/timeout patience: --max-retries {DEEP_MAX_RETRIES} "
+            f"--host-timeout {DEEP_HOST_TIMEOUT} "
+            "(STANDARD uses Nmap's built-in defaults).",
+        ]
 
     def _extract_hostname(self, host_data: dict) -> str | None:
         """Extract the primary hostname from Nmap host data when available."""

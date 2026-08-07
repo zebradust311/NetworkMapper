@@ -20,11 +20,13 @@ class ProfileMessageTest(unittest.TestCase):
         self.assertIn("Host discovery only.", message)
         self.assertIn("Service enrichment disabled by design.", message)
 
-    def test_deep_message_states_it_is_currently_identical_to_fast(self):
+    def test_deep_message_describes_expanded_capabilities(self):
         message = profile_message(ScanProfile.DEEP)
 
-        self.assertIn("Currently identical to FAST", message)
-        self.assertIn("Service enrichment disabled by design.", message)
+        self.assertIn("top 1000", message)
+        self.assertIn("sip-methods", message)
+        self.assertIn("unauthenticated", message)
+        self.assertNotIn("Service enrichment disabled by design.", message)
 
     def test_standard_message_lists_enrichment_scripts(self):
         message = profile_message(ScanProfile.STANDARD)
