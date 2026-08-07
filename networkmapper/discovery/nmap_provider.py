@@ -4,6 +4,12 @@ import nmap
 
 from networkmapper.core.models import Device, ServiceEvidence
 from networkmapper.discovery.provider import DiscoveryProvider
+from networkmapper.discovery.run_diagnostics import (
+    HostDiagnostics,
+    RunDiagnostics,
+    ScanPhase,
+    diagnose_host,
+)
 from networkmapper.discovery.scan_profile import ScanProfile
 
 
@@ -68,6 +74,7 @@ class NmapProvider(DiscoveryProvider):
         self._subnet_cidr = subnet_cidr
         self._scan_profile = scan_profile
         self._scanner = nmap.PortScanner()
+        self.run_diagnostics: RunDiagnostics | None = None
 
     def discover(self) -> list[Device]:
         """Run an Nmap scan based on the selected profile and return devices."""
@@ -80,9 +87,10 @@ class NmapProvider(DiscoveryProvider):
     def _discover_single_pass(self) -> list[Device]:
         """Run a single scan and build device objects from scan results."""
 
+        arguments = self._scan_arguments()
         scan_result = self._scanner.scan(
             hosts=self._subnet_cidr,
-            arguments=self._scan_arguments(),
+            arguments=arguments,
         )
 
         devices: list[Device] = []
@@ -90,38 +98,65 @@ class NmapProvider(DiscoveryProvider):
         for ip_address, host_data in scan_result.get("scan", {}).items():
             devices.append(self._build_device(ip_address, host_data))
 
+        self.run_diagnostics = RunDiagnostics(
+            scan_profile=self._scan_profile,
+            hosts_discovered=len(devices),
+            enrichment_enabled=False,
+            enrichment_arguments=None,
+            phases=[
+                ScanPhase(
+                    name="Host Discovery",
+                    arguments=arguments,
+                    elapsed_seconds=self._extract_elapsed_seconds(scan_result),
+                )
+            ],
+        )
+
         return devices
 
     def _discover_with_standard_enrichment(self) -> list[Device]:
         """Run host discovery first, then merge enrichment evidence by IP."""
+        discovery_phase = ScanPhase(name="Host Discovery", arguments="-sn")
         discovery_result = self._scanner.scan(
             hosts=self._subnet_cidr,
-            arguments="-sn",
+            arguments=discovery_phase.arguments,
         )
+        discovery_phase.elapsed_seconds = self._extract_elapsed_seconds(discovery_result)
 
         devices_by_ip: dict[str, Device] = {}
 
         for ip_address, host_data in discovery_result.get("scan", {}).items():
             devices_by_ip[ip_address] = self._build_device(ip_address, host_data)
 
+        enrichment_arguments = self._standard_enrichment_arguments()
+
         if not devices_by_ip:
+            self.run_diagnostics = RunDiagnostics(
+                scan_profile=self._scan_profile,
+                hosts_discovered=0,
+                enrichment_enabled=True,
+                enrichment_arguments=enrichment_arguments,
+                phases=[discovery_phase],
+            )
             return []
 
         enrichment_hosts = " ".join(devices_by_ip.keys())
-        enrichment_arguments = self._standard_enrichment_arguments()
 
         enrichment_result = self._scanner.scan(
             hosts=enrichment_hosts,
             arguments=enrichment_arguments,
         )
+        enrichment_phase = ScanPhase(
+            name="Service Enrichment",
+            arguments=enrichment_arguments,
+            elapsed_seconds=self._extract_elapsed_seconds(enrichment_result),
+        )
 
         enriched_hosts = enrichment_result.get("scan", {})
+        host_diagnostics: dict[str, HostDiagnostics] = {}
 
-        for ip_address, host_data in enriched_hosts.items():
-            if ip_address not in devices_by_ip:
-                continue
-
-            device = devices_by_ip[ip_address]
+        for ip_address, device in devices_by_ip.items():
+            host_data = enriched_hosts.get(ip_address, {})
             device.services = self._extract_services(host_data)
 
             # FEAT-003I: smb-os-discovery and rdp-ntlm-info can both
@@ -151,7 +186,31 @@ class NmapProvider(DiscoveryProvider):
             device.domain = smb_identity["domain"] or rdp_identity["domain"]
             device.smb_signing = smb_identity["smb_signing"]
 
+            host_diagnostics[ip_address] = diagnose_host(
+                device.services, smb_identity, rdp_identity
+            )
+
+        self.run_diagnostics = RunDiagnostics(
+            scan_profile=self._scan_profile,
+            hosts_discovered=len(devices_by_ip),
+            enrichment_enabled=True,
+            enrichment_arguments=enrichment_arguments,
+            phases=[discovery_phase, enrichment_phase],
+            host_diagnostics=host_diagnostics,
+        )
+
         return list(devices_by_ip.values())
+
+    def _extract_elapsed_seconds(self, scan_result: dict) -> float | None:
+        """Return a scan phase's reported elapsed time in seconds, if available."""
+        elapsed = scan_result.get("nmap", {}).get("scanstats", {}).get("elapsed")
+        if elapsed is None:
+            return None
+
+        try:
+            return float(elapsed)
+        except (TypeError, ValueError):
+            return None
 
     def _build_device(self, ip_address: str, host_data: dict) -> Device:
         """Build a device instance from host data without enrichment evidence."""

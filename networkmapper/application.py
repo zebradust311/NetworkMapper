@@ -10,11 +10,13 @@ from pathlib import Path
 from networkmapper.developer.classification_workbench import ClassificationWorkbench
 from networkmapper.discovery.discovery_engine import DiscoveryEngine
 from networkmapper.discovery.nmap_provider import NmapProvider
+from networkmapper.discovery.run_diagnostics import RunDiagnostics, profile_message
 from networkmapper.discovery.scan_profile import ScanProfile
 from networkmapper.project.models import Project
 from networkmapper.project.serializer import ProjectSerializer
 from networkmapper.exporters.csv_exporter import CsvExporter
 from networkmapper.exporters.markdown_exporter import MarkdownExporter
+from networkmapper.reporting.discovery_summary import DiscoverySummary
 
 
 class Application:
@@ -39,6 +41,10 @@ class Application:
         engine = DiscoveryEngine([provider])
 
         graph = engine.discover()
+
+        if provider.run_diagnostics is not None:
+            self._print_discovery_diagnostics(scan_profile, provider.run_diagnostics)
+
         before_save_count = graph.device_count()
         print("\nClassification Summary")
         print("-" * 40)
@@ -117,6 +123,64 @@ class Application:
             raise RuntimeError(
                 "Loaded project device count does not match saved project."
             )
+
+    def _print_discovery_diagnostics(
+        self,
+        scan_profile: ScanProfile,
+        run_diagnostics: RunDiagnostics,
+    ) -> None:
+        """Print run-level discovery diagnostics: selected profile, phases
+        executed, enrichment configuration, aggregate evidence-coverage
+        statistics, and per-host reasons for hosts where enrichment
+        produced no evidence at all. Observability only — this prints
+        information already captured during discovery; it collects
+        nothing new and changes no discovery behavior."""
+        print("Discovery Diagnostics")
+        print("-" * 40)
+        print(f"Scan Profile: {scan_profile.value.upper()}")
+        print(f"Hosts Discovered: {run_diagnostics.hosts_discovered}")
+        print(f"Enrichment Enabled: {'Yes' if run_diagnostics.enrichment_enabled else 'No'}")
+        if run_diagnostics.enrichment_arguments:
+            print(f"Enrichment Arguments: {run_diagnostics.enrichment_arguments}")
+
+        print("\nPhases Executed:")
+        for phase in run_diagnostics.phases:
+            if phase.elapsed_seconds is not None:
+                elapsed_display = f"{phase.elapsed_seconds:.2f}s"
+            else:
+                elapsed_display = "unknown"
+            print(f"- {phase.name} ({phase.arguments}) — {elapsed_display}")
+
+        print()
+        print(profile_message(scan_profile))
+        print()
+
+        summary = DiscoverySummary.from_run_diagnostics(run_diagnostics)
+        print("Discovery Summary")
+        print("-" * 40)
+        print(f"Hosts Discovered            : {summary.hosts_discovered}")
+        print(f"Hosts Enriched              : {summary.hosts_enriched}")
+        print(f"Hosts with Service Evidence : {summary.hosts_with_service_evidence}")
+        print(f"Hosts with SMB Identity     : {summary.hosts_with_smb_identity}")
+        print(f"Hosts with RDP Identity     : {summary.hosts_with_rdp_identity}")
+        print(f"Hosts with HTTP Titles      : {summary.hosts_with_http_titles}")
+        print(f"Hosts with TLS Certificates : {summary.hosts_with_tls_certificates}")
+        print(f"Hosts with HTTP Auth Realms : {summary.hosts_with_http_auth_realms}")
+        print()
+
+        dark_hosts = {
+            ip_address: diagnostics
+            for ip_address, diagnostics in run_diagnostics.host_diagnostics.items()
+            if not diagnostics.enriched
+        }
+        if dark_hosts:
+            print("Per-Host Diagnostics (no enrichment evidence collected)")
+            print("-" * 40)
+            for ip_address, diagnostics in dark_hosts.items():
+                print(f"{ip_address}:")
+                for reason in diagnostics.missing_evidence_reasons:
+                    print(f"  - {reason}")
+            print()
 
     def _parse_scan_profile(self, value: str) -> ScanProfile:
         """Parse CLI scan profile value into a ScanProfile enum."""
