@@ -5,6 +5,7 @@ Main application controller for NetworkMapper.
 
 import argparse
 import sys
+from datetime import datetime
 from pathlib import Path
 
 from networkmapper.developer.classification_workbench import ClassificationWorkbench
@@ -17,6 +18,7 @@ from networkmapper.project.serializer import ProjectSerializer
 from networkmapper.exporters.csv_exporter import CsvExporter
 from networkmapper.exporters.markdown_exporter import MarkdownExporter
 from networkmapper.reporting.discovery_summary import DiscoverySummary
+from networkmapper.reporting.report_run import RunMetadata, build_report_run_paths
 
 
 class Application:
@@ -90,18 +92,27 @@ class Application:
             )
             print(f"✓ Classification Workbench exported to {workbench_path}")
 
+        run_metadata = RunMetadata(
+            generated_at=datetime.now(),
+            scan_profile=scan_profile,
+            customer_name=project.customer_name,
+            device_count=before_save_count,
+        )
+        report_paths = build_report_run_paths("output", run_metadata)
+
         CsvExporter().export(
             project,
-            "output/Test Network.csv",
+            str(report_paths.csv_path),
         )
 
         MarkdownExporter().export(
             project,
-            "output/Test Network.md"
+            str(report_paths.markdown_path),
+            run_metadata=run_metadata,
         )
 
-        print("✓ CSV exported to output/Test Network.csv")
-        print("✓ Markdown exported to output/Test Network.md")
+        print(f"✓ CSV exported to {report_paths.csv_path}")
+        print(f"✓ Markdown exported to {report_paths.markdown_path}")
 
         ProjectSerializer.save(project, "output/Test Network.nmproj")
 

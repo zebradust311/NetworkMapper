@@ -3,11 +3,28 @@ import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import ANY, patch
 
 from networkmapper.application import Application
 from networkmapper.discovery.run_diagnostics import HostDiagnostics, RunDiagnostics, ScanPhase
 from networkmapper.discovery.scan_profile import ScanProfile
+from networkmapper.reporting.report_run import ReportRunPaths
+
+
+def _fake_report_run_paths() -> ReportRunPaths:
+    """A stand-in ReportRunPaths that avoids touching the real filesystem.
+
+    build_report_run_paths() creates a real directory as a side effect
+    (REPORT-002); tests that don't explicitly isolate a temp working
+    directory must mock it out, the same way CsvExporter/MarkdownExporter
+    are already mocked below, so test runs don't litter the repo's real
+    output/ directory.
+    """
+    return ReportRunPaths(
+        run_directory=Path("output/fake-run"),
+        markdown_path=Path("output/fake-run/report.md"),
+        csv_path=Path("output/fake-run/devices.csv"),
+    )
 
 
 def _default_run_diagnostics(scan_profile: ScanProfile) -> RunDiagnostics:
@@ -33,13 +50,16 @@ class ApplicationCliTest(unittest.TestCase):
             "networkmapper.application.ProjectSerializer"
         ) as serializer_mock, patch(
             "networkmapper.application.ClassificationWorkbench"
-        ) as workbench_mock, patch("sys.argv", argv):
+        ) as workbench_mock, patch(
+            "networkmapper.application.build_report_run_paths"
+        ) as report_run_paths_mock, patch("sys.argv", argv):
             graph = type("Graph", (), {"device_count": lambda self: 1, "all_devices": lambda self: []})()
             discovery_engine_mock.return_value.discover.return_value = graph
             serializer_mock.load.return_value.network_graph.device_count.return_value = 1
             provider_mock.return_value.run_diagnostics = run_diagnostics or _default_run_diagnostics(
                 ScanProfile.FAST
             )
+            report_run_paths_mock.return_value = _fake_report_run_paths()
 
             stdout = io.StringIO()
             stderr = io.StringIO()
@@ -51,6 +71,7 @@ class ApplicationCliTest(unittest.TestCase):
             "csv_exporter_mock": csv_exporter_mock,
             "markdown_exporter_mock": markdown_exporter_mock,
             "workbench_mock": workbench_mock,
+            "report_run_paths_mock": report_run_paths_mock,
             "stdout": stdout.getvalue(),
             "stderr": stderr.getvalue(),
         }
@@ -68,6 +89,27 @@ class ApplicationCliTest(unittest.TestCase):
             "172.16.100.0/24",
             scan_profile=ScanProfile.FAST,
         )
+
+    def test_report_artifacts_are_written_to_a_unique_run_directory(self):
+        result = self._run_application(["networkmapper", "--scan-profile", "standard"])
+
+        report_run_paths_mock = result["report_run_paths_mock"]
+        report_run_paths_mock.assert_called_once()
+        output_root, run_metadata = report_run_paths_mock.call_args.args
+        self.assertEqual(output_root, "output")
+        self.assertEqual(run_metadata.scan_profile, ScanProfile.STANDARD)
+        self.assertEqual(run_metadata.customer_name, "Test Network")
+        self.assertEqual(run_metadata.device_count, 1)
+
+        fake_paths = _fake_report_run_paths()
+        result["csv_exporter_mock"].return_value.export.assert_called_once_with(
+            ANY, str(fake_paths.csv_path)
+        )
+        result["markdown_exporter_mock"].return_value.export.assert_called_once_with(
+            ANY, str(fake_paths.markdown_path), run_metadata=run_metadata
+        )
+        self.assertIn(f"✓ CSV exported to {fake_paths.csv_path}", result["stdout"])
+        self.assertIn(f"✓ Markdown exported to {fake_paths.markdown_path}", result["stdout"])
 
     def test_scan_profile_fast_is_supported(self):
         result = self._run_application(["networkmapper", "--scan-profile", "fast"])
@@ -121,7 +163,9 @@ class ApplicationCliTest(unittest.TestCase):
                     "networkmapper.application.ProjectSerializer"
                 ) as serializer_mock, patch(
                     "networkmapper.application.ClassificationWorkbench"
-                ) as workbench_mock:
+                ) as workbench_mock, patch(
+                    "networkmapper.application.build_report_run_paths"
+                ) as report_run_paths_mock:
                     graph = type("Graph", (), {"device_count": lambda self: 1, "all_devices": lambda self: []})()
                     discovery_engine_mock.return_value.discover.return_value = graph
                     serializer_mock.load.return_value.network_graph.device_count.return_value = 1
@@ -129,6 +173,7 @@ class ApplicationCliTest(unittest.TestCase):
                     provider_mock.return_value.run_diagnostics = _default_run_diagnostics(
                         ScanProfile.FAST
                     )
+                    report_run_paths_mock.return_value = _fake_report_run_paths()
 
                     with patch("sys.argv", ["networkmapper", "--workbench"]):
                         with redirect_stdout(io.StringIO()) as stdout:

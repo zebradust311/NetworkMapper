@@ -6,16 +6,18 @@ from unittest.mock import patch
 
 from networkmapper.classification.device_classifier import DeviceClassifier
 from networkmapper.core.models import Device, DeviceType, ServiceEvidence
+from networkmapper.discovery.scan_profile import ScanProfile
 from networkmapper.exporters.markdown_exporter import MarkdownExporter
 from networkmapper.project.models import Project
 from networkmapper.reporting.project_summary import ProjectSummary
+from networkmapper.reporting.report_run import RunMetadata
 
 
 class MarkdownExporterTest(unittest.TestCase):
-    def _export(self, project: Project) -> str:
+    def _export(self, project: Project, *, run_metadata: RunMetadata | None = None) -> str:
         with tempfile.TemporaryDirectory() as temp_dir:
             output_path = str(Path(temp_dir) / "project.md")
-            MarkdownExporter().export(project, output_path)
+            MarkdownExporter().export(project, output_path, run_metadata=run_metadata)
             return Path(output_path).read_text(encoding="utf-8")
 
     def _device_section(self, markdown: str, heading: str) -> str:
@@ -332,6 +334,66 @@ class MarkdownExporterTest(unittest.TestCase):
 
         self.assertIn("No vendor data collected.", appendices)
         self.assertIn("No service data collected.", appendices)
+
+    def test_run_metadata_section_omitted_when_not_provided(self):
+        markdown = self._export(self._project())
+
+        self.assertNotIn("# Run Metadata", markdown)
+
+    def test_run_metadata_section_renders_when_provided(self):
+        run_metadata = RunMetadata(
+            generated_at=datetime(2026, 8, 10, 13, 57, 42),
+            scan_profile=ScanProfile.STANDARD,
+            customer_name="Acme",
+            device_count=7,
+            version="0.1.0",
+        )
+
+        markdown = self._export(self._project(), run_metadata=run_metadata)
+        section = markdown[: markdown.index("# Customer")]
+
+        self.assertIn("# Run Metadata", section)
+        self.assertIn("- Report Generated: 2026-08-10 13:57:42", section)
+        self.assertIn("- Scan Profile: STANDARD", section)
+        self.assertIn("- Customer Name: Acme", section)
+        self.assertIn("- Device Count: 7", section)
+        self.assertIn("- NetworkMapper Version: 0.1.0", section)
+
+    def test_run_metadata_shows_unknown_version_when_version_is_none(self):
+        run_metadata = RunMetadata(
+            generated_at=datetime(2026, 8, 10, 13, 57, 42),
+            scan_profile=ScanProfile.FAST,
+            customer_name="Acme",
+            device_count=0,
+            version=None,
+        )
+
+        markdown = self._export(self._project(), run_metadata=run_metadata)
+        section = markdown[: markdown.index("# Customer")]
+
+        self.assertIn("- NetworkMapper Version: Unknown", section)
+
+    def test_existing_report_content_is_unchanged_by_added_metadata(self):
+        """REPORT-002: adding the Run Metadata section must not shift or
+        alter any existing section's content, only prepend to the document."""
+        project = self._project()
+        classifier = DeviceClassifier()
+        project.network_graph.add_device(
+            classifier.classify(
+                Device(ip_address="10.0.0.80", hostname="dc-05", vendor="Unknown")
+            )
+        )
+
+        without_metadata = self._export(project)
+        run_metadata = RunMetadata(
+            generated_at=datetime(2026, 8, 10, 13, 57, 42),
+            scan_profile=ScanProfile.STANDARD,
+            customer_name="Acme",
+            device_count=1,
+        )
+        with_metadata = self._export(project, run_metadata=run_metadata)
+
+        self.assertTrue(with_metadata.endswith(without_metadata))
 
 
 if __name__ == "__main__":

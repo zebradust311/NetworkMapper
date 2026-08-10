@@ -9,6 +9,7 @@ from networkmapper.classification.rule_result import RuleResult
 from networkmapper.core.models import Device, DeviceType, ServiceEvidence
 from networkmapper.project.models import Project
 from networkmapper.reporting.project_summary import ProjectSummary
+from networkmapper.reporting.report_run import RunMetadata
 
 
 class MarkdownExporter:
@@ -21,19 +22,50 @@ class MarkdownExporter:
     doesn't already exist on `Device`/`ServiceEvidence`/`RuleResult`.
     """
 
-    def export(self, project: Project, output_path: str) -> None:
+    def export(
+        self,
+        project: Project,
+        output_path: str,
+        *,
+        run_metadata: RunMetadata | None = None,
+    ) -> None:
         """Write a Markdown report for a project to the given output path.
 
         Args:
             project: The project snapshot to export.
             output_path: The output file path for the Markdown report.
+            run_metadata: REPORT-002 run metadata (generation timestamp,
+                scan profile, customer name, device count, version) to
+                embed at the top of the report so it can stand alone.
+                Optional and keyword-only so existing callers that export
+                without a run in progress (e.g. ad hoc exports, tests)
+                keep working unchanged; the metadata section is simply
+                omitted when not supplied.
         """
         summary = ProjectSummary.from_project(project)
         classifier = DeviceClassifier()
-        markdown_lines = self._render_markdown(project, summary, classifier)
+        markdown_lines: list[str] = []
+        if run_metadata is not None:
+            markdown_lines.extend(self._render_run_metadata(run_metadata))
+            markdown_lines.append("")
+        markdown_lines.extend(self._render_markdown(project, summary, classifier))
 
         with open(output_path, "w", encoding="utf-8") as markdown_file:
             markdown_file.write("\n".join(markdown_lines) + "\n")
+
+    def _render_run_metadata(self, run_metadata: RunMetadata) -> list[str]:
+        """Render the standalone run-identity block: generation timestamp,
+        scan profile, customer name, device count, and tool version."""
+        lines = ["# Run Metadata", ""]
+        lines.append(
+            f"- Report Generated: {run_metadata.generated_at:%Y-%m-%d %H:%M:%S}"
+        )
+        lines.append(f"- Scan Profile: {run_metadata.scan_profile.value.upper()}")
+        lines.append(f"- Customer Name: {run_metadata.customer_name}")
+        lines.append(f"- Device Count: {run_metadata.device_count}")
+        lines.append(f"- NetworkMapper Version: {run_metadata.version or 'Unknown'}")
+
+        return lines
 
     def _render_markdown(
         self,
