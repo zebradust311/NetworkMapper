@@ -81,6 +81,68 @@ class DeviceClassifierTest(unittest.TestCase):
 
         self.assertEqual(result.device_type, DeviceType.PHONE)
 
+    def test_edgeswitch_http_title_classifies_as_switch_not_unknown(self):
+        device = Device(
+            ip_address="192.168.1.63",
+            hostname="edge-01",
+            vendor="Ubiquiti",
+            services=[
+                ServiceEvidence(port=80, protocol="tcp", http_title="Ubiquiti EdgeSwitch"),
+            ],
+        )
+
+        result = DeviceClassifier().classify(device)
+
+        self.assertEqual(result.device_type, DeviceType.SWITCH)
+
+    def test_hp_procurve_switch_identifier_beats_printer_vendor_match(self):
+        device = Device(
+            ip_address="192.168.1.64",
+            hostname="hp-sw-core-01",
+            vendor="HP",
+            services=[
+                ServiceEvidence(
+                    port=80,
+                    protocol="tcp",
+                    http_title="ProCurve Switch 2530-24G",
+                ),
+            ],
+        )
+
+        result = DeviceClassifier().classify(device)
+
+        self.assertEqual(result.device_type, DeviceType.SWITCH)
+
+    def test_hp_printer_without_switch_identifier_still_classifies_as_printer(self):
+        device = Device(
+            ip_address="192.168.1.65",
+            hostname="print-hp-01",
+            vendor="HP",
+            services=[
+                ServiceEvidence(
+                    port=631,
+                    protocol="tcp",
+                    service="ipp",
+                    product="HP LaserJet 4250",
+                ),
+            ],
+        )
+
+        result = DeviceClassifier().classify(device)
+
+        self.assertEqual(result.device_type, DeviceType.PRINTER)
+
+    def test_cisco_ip_phone_still_classifies_as_phone_not_switch(self):
+        device = Device(
+            ip_address="192.168.1.66",
+            hostname="phone-02",
+            vendor="Cisco IP Phone",
+        )
+
+        result = DeviceClassifier().classify(device)
+
+        self.assertEqual(result.device_type, DeviceType.PHONE)
+
 
 class EvidenceHelpersTest(unittest.TestCase):
     def test_normalize_vendor_strip_defaults_to_true(self):

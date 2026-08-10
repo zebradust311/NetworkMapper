@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from networkmapper.classification.classification_rule import ClassificationRule
 from networkmapper.classification.evidence_helpers import (
+    first_matching_identifier,
     first_matching_port,
     first_matching_product,
     first_matching_service,
@@ -31,12 +32,25 @@ SWITCH_MANAGEMENT_SERVICES = {"ssh", "telnet", "snmp"}
 # existing hostname-plus-management-signal gate is unchanged.
 SWITCH_PRODUCT_KEYWORDS = {"cisco"}
 
+# Model/product identity strings that name a switch explicitly, surfaced via
+# Nmap's product detection or the http-title/ssl-cert NSE scripts (FEAT-003D/
+# FEAT-003F). This is an independent match trigger, not corroboration only,
+# because an explicit switch identity is at least as strong as the bare
+# vendor match above -- the same match-tier precedent PrinterVendorRule
+# established for its own identifier tier. RULE-002 added this tier because
+# HP ProCurve switches self-identify as "ProCurve" in their management UI
+# title/product string, and Ubiquiti EdgeSwitch devices self-identify as
+# "EdgeSwitch" the same way, but neither vendor string alone is an
+# unambiguous switch indicator (HP also makes printers; Ubiquiti also makes
+# access points), so a plain vendor keyword can't safely cover them.
+SWITCH_IDENTIFIER_KEYWORDS = {"procurve", "edgeswitch"}
 
-class CiscoSwitchRule(ClassificationRule):
-    """Match Cisco vendors as switch devices."""
+
+class SwitchVendorRule(ClassificationRule):
+    """Match vendors and product identifiers that indicate a network switch."""
 
     def classify(self, device: Device) -> RuleResult:
-        """Return a rule result for Cisco switch vendor matching evidence."""
+        """Return a rule result for switch vendor/identifier matching evidence."""
         raw_vendor = device.vendor
         raw_hostname = device.hostname
         vendor = normalize_vendor(raw_vendor, strip=False)
@@ -45,6 +59,16 @@ class CiscoSwitchRule(ClassificationRule):
                 matched=True,
                 confidence_contribution=0,
                 reason=f"Vendor {raw_vendor!r} matched known switch vendor.",
+                suggested_device_type=DeviceType.SWITCH,
+            )
+
+        matched_identifier = first_matching_identifier(device.services, SWITCH_IDENTIFIER_KEYWORDS)
+        if matched_identifier is not None:
+            label, value = matched_identifier
+            return RuleResult(
+                matched=True,
+                confidence_contribution=0,
+                reason=f"Detected {label} {value!r} matched known switch identifier.",
                 suggested_device_type=DeviceType.SWITCH,
             )
 

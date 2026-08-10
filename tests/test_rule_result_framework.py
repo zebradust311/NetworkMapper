@@ -3,7 +3,7 @@ import unittest
 from networkmapper.classification.classification_rule import ClassificationRule
 from networkmapper.classification.device_classifier import DeviceClassifier
 from networkmapper.classification.rule_result import RuleResult
-from networkmapper.classification.rules.cisco_switch_rule import CiscoSwitchRule
+from networkmapper.classification.rules.switch_vendor_rule import SwitchVendorRule
 from networkmapper.classification.rules.printer_vendor_rule import PrinterVendorRule
 from networkmapper.core.models import Device, DeviceType
 
@@ -89,7 +89,7 @@ class RuleResultFrameworkTest(unittest.TestCase):
 
     def test_migrated_rule_result_is_collected_and_used(self):
         classifier = DeviceClassifier()
-        classifier._rules = [CiscoSwitchRule()]
+        classifier._rules = [SwitchVendorRule()]
 
         device = Device(ip_address="192.168.1.30", vendor="Cisco")
         result = classifier.classify(device)
@@ -104,7 +104,7 @@ class RuleResultFrameworkTest(unittest.TestCase):
 
     def test_multiple_migrated_rules_classify_identically(self):
         classifier = DeviceClassifier()
-        classifier._rules = [PrinterVendorRule(), CiscoSwitchRule()]
+        classifier._rules = [PrinterVendorRule(), SwitchVendorRule()]
 
         printer_device = Device(ip_address="192.168.1.31", vendor="Brother")
         switch_device = Device(ip_address="192.168.1.32", vendor="Cisco")

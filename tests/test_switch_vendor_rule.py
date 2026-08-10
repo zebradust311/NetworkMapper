@@ -1,11 +1,11 @@
 import unittest
 
 from networkmapper.classification.rule_result import RuleResult
-from networkmapper.classification.rules.cisco_switch_rule import CiscoSwitchRule
+from networkmapper.classification.rules.switch_vendor_rule import SwitchVendorRule
 from networkmapper.core.models import Device, DeviceType, ServiceEvidence
 
 
-class CiscoSwitchRuleTest(unittest.TestCase):
+class SwitchVendorRuleTest(unittest.TestCase):
     def test_matching_vendor_returns_rule_result_with_switch_type(self):
         device = Device(
             ip_address="192.168.1.40",
@@ -13,7 +13,7 @@ class CiscoSwitchRuleTest(unittest.TestCase):
             vendor="Cisco Systems",
         )
 
-        result = CiscoSwitchRule().classify(device)
+        result = SwitchVendorRule().classify(device)
 
         self.assertIsInstance(result, RuleResult)
         self.assertTrue(result.matched)
@@ -27,7 +27,7 @@ class CiscoSwitchRuleTest(unittest.TestCase):
             vendor="cIsCo",
         )
 
-        result = CiscoSwitchRule().classify(device)
+        result = SwitchVendorRule().classify(device)
 
         self.assertIsInstance(result, RuleResult)
         self.assertTrue(result.matched)
@@ -41,7 +41,7 @@ class CiscoSwitchRuleTest(unittest.TestCase):
             vendor="Juniper",
         )
 
-        result = CiscoSwitchRule().classify(device)
+        result = SwitchVendorRule().classify(device)
 
         self.assertIsInstance(result, RuleResult)
         self.assertFalse(result.matched)
@@ -57,7 +57,7 @@ class CiscoSwitchRuleTest(unittest.TestCase):
             services=[ServiceEvidence(port=161, protocol="udp", service="snmp")],
         )
 
-        result = CiscoSwitchRule().classify(device)
+        result = SwitchVendorRule().classify(device)
 
         self.assertIsInstance(result, RuleResult)
         self.assertTrue(result.matched)
@@ -77,7 +77,7 @@ class CiscoSwitchRuleTest(unittest.TestCase):
             ],
         )
 
-        result = CiscoSwitchRule().classify(device)
+        result = SwitchVendorRule().classify(device)
 
         self.assertIsInstance(result, RuleResult)
         self.assertTrue(result.matched)
@@ -99,7 +99,89 @@ class CiscoSwitchRuleTest(unittest.TestCase):
             ],
         )
 
-        result = CiscoSwitchRule().classify(device)
+        result = SwitchVendorRule().classify(device)
+
+        self.assertIsInstance(result, RuleResult)
+        self.assertFalse(result.matched)
+        self.assertIsNone(result.suggested_device_type)
+
+    def test_edgeswitch_http_title_classifies_as_switch_without_vendor_or_hostname(self):
+        device = Device(
+            ip_address="192.168.1.46",
+            hostname=None,
+            vendor="Ubiquiti",
+            services=[
+                ServiceEvidence(port=80, protocol="tcp", http_title="Ubiquiti EdgeSwitch"),
+            ],
+        )
+
+        result = SwitchVendorRule().classify(device)
+
+        self.assertIsInstance(result, RuleResult)
+        self.assertTrue(result.matched)
+        self.assertEqual(result.suggested_device_type, DeviceType.SWITCH)
+        self.assertEqual(
+            result.reason,
+            "Detected HTTP title 'Ubiquiti EdgeSwitch' matched known switch identifier.",
+        )
+
+    def test_procurve_product_classifies_as_switch_despite_hp_vendor(self):
+        device = Device(
+            ip_address="192.168.1.47",
+            hostname="hp-sw-01",
+            vendor="Hewlett-Packard",
+            services=[
+                ServiceEvidence(
+                    port=80,
+                    protocol="tcp",
+                    product="HP ProCurve Switch 2530-24G",
+                ),
+            ],
+        )
+
+        result = SwitchVendorRule().classify(device)
+
+        self.assertIsInstance(result, RuleResult)
+        self.assertTrue(result.matched)
+        self.assertEqual(result.suggested_device_type, DeviceType.SWITCH)
+        self.assertEqual(
+            result.reason,
+            "Detected service product 'HP ProCurve Switch 2530-24G' matched known "
+            "switch identifier.",
+        )
+
+    def test_procurve_http_title_classifies_as_switch_without_hostname_hint(self):
+        device = Device(
+            ip_address="192.168.1.48",
+            hostname="hpswitch01",
+            vendor="HP",
+            services=[
+                ServiceEvidence(
+                    port=443,
+                    protocol="tcp",
+                    http_title="ProCurve Switch 2810-24G",
+                ),
+            ],
+        )
+
+        result = SwitchVendorRule().classify(device)
+
+        self.assertIsInstance(result, RuleResult)
+        self.assertTrue(result.matched)
+        self.assertEqual(result.suggested_device_type, DeviceType.SWITCH)
+        self.assertEqual(
+            result.reason,
+            "Detected HTTP title 'ProCurve Switch 2810-24G' matched known switch identifier.",
+        )
+
+    def test_hp_vendor_without_switch_identifier_does_not_match(self):
+        device = Device(
+            ip_address="192.168.1.49",
+            hostname="printer-01",
+            vendor="HP",
+        )
+
+        result = SwitchVendorRule().classify(device)
 
         self.assertIsInstance(result, RuleResult)
         self.assertFalse(result.matched)

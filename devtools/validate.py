@@ -21,7 +21,7 @@ STANDARD_REGRESSION_TESTS: tuple[str, ...] = (
     "tests.test_classifier",
     "tests.test_rule_result_framework",
     "tests.test_device_classifier_evidence_api",
-    "tests.test_cisco_switch_rule",
+    "tests.test_switch_vendor_rule",
     "tests.test_dell_workstation_rule",
     "tests.test_hypervisor_hostname_rule",
     "tests.test_printer_vendor_rule",
