@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime
+
 import nmap
 
 from networkmapper.core.models import Device, ServiceEvidence
@@ -11,6 +13,13 @@ from networkmapper.discovery.run_diagnostics import (
     diagnose_host,
 )
 from networkmapper.discovery.scan_profile import ScanProfile
+from networkmapper.runtime.events import (
+    ProgressMeasurement,
+    RuntimeEvent,
+    RuntimeEventBus,
+    RuntimeEventKind,
+    RuntimePhase,
+)
 
 
 # 902/903 are VMware's core ESXi host management ports (vmware-authd
@@ -94,11 +103,21 @@ class NmapProvider(DiscoveryProvider):
         self,
         subnet_cidr: str,
         scan_profile: ScanProfile = ScanProfile.FAST,
+        event_bus: RuntimeEventBus | None = None,
     ) -> None:
-        """Initialize the provider for a specific subnet CIDR and profile."""
+        """Initialize the provider for a specific subnet CIDR and profile.
+
+        Args:
+            subnet_cidr: The target subnet to scan.
+            scan_profile: The scan-depth profile to use.
+            event_bus: OBS-002 runtime event bus. Defaults to a fresh,
+                subscriber-less bus, so publishing is always a safe
+                no-op when no caller wires one up.
+        """
         self._subnet_cidr = subnet_cidr
         self._scan_profile = scan_profile
         self._scanner = nmap.PortScanner()
+        self._event_bus = event_bus if event_bus is not None else RuntimeEventBus()
         self.run_diagnostics: RunDiagnostics | None = None
 
     def discover(self) -> list[Device]:
@@ -109,11 +128,35 @@ class NmapProvider(DiscoveryProvider):
 
         return self._discover_single_pass()
 
+    def _publish(
+        self,
+        phase: RuntimePhase,
+        kind: RuntimeEventKind,
+        *,
+        activity: str | None = None,
+        progress: ProgressMeasurement | None = None,
+    ) -> None:
+        """Publish one OBS-002 runtime event for this provider's phases."""
+        self._event_bus.publish(
+            RuntimeEvent(
+                phase=phase,
+                kind=kind,
+                timestamp=datetime.now(),
+                activity=activity,
+                progress=progress,
+            )
+        )
+
     def _discover_single_pass(self) -> list[Device]:
         """Run a single, host-discovery-only scan (FAST) and build device
         objects from scan results."""
 
         arguments = "-sn"
+        self._publish(
+            RuntimePhase.HOST_DISCOVERY,
+            RuntimeEventKind.PHASE_STARTED,
+            activity=f"Scanning {self._subnet_cidr} for live hosts...",
+        )
         scan_result = self._scanner.scan(
             hosts=self._subnet_cidr,
             arguments=arguments,
@@ -123,6 +166,12 @@ class NmapProvider(DiscoveryProvider):
 
         for ip_address, host_data in scan_result.get("scan", {}).items():
             devices.append(self._build_device(ip_address, host_data))
+
+        self._publish(
+            RuntimePhase.HOST_DISCOVERY,
+            RuntimeEventKind.PHASE_COMPLETED,
+            progress=ProgressMeasurement(completed=len(devices), unit_label="Hosts Found"),
+        )
 
         self.run_diagnostics = RunDiagnostics(
             scan_profile=self._scan_profile,
@@ -151,6 +200,11 @@ class NmapProvider(DiscoveryProvider):
         implementation.
         """
         discovery_phase = ScanPhase(name="Host Discovery", arguments="-sn")
+        self._publish(
+            RuntimePhase.HOST_DISCOVERY,
+            RuntimeEventKind.PHASE_STARTED,
+            activity=f"Scanning {self._subnet_cidr} for live hosts...",
+        )
         discovery_result = self._scanner.scan(
             hosts=self._subnet_cidr,
             arguments=discovery_phase.arguments,
@@ -161,6 +215,14 @@ class NmapProvider(DiscoveryProvider):
 
         for ip_address, host_data in discovery_result.get("scan", {}).items():
             devices_by_ip[ip_address] = self._build_device(ip_address, host_data)
+
+        self._publish(
+            RuntimePhase.HOST_DISCOVERY,
+            RuntimeEventKind.PHASE_COMPLETED,
+            progress=ProgressMeasurement(
+                completed=len(devices_by_ip), unit_label="Hosts Found"
+            ),
+        )
 
         enrichment_arguments = self._enrichment_arguments()
         expanded_capabilities = self._expanded_capabilities()
@@ -178,6 +240,11 @@ class NmapProvider(DiscoveryProvider):
 
         enrichment_hosts = " ".join(devices_by_ip.keys())
 
+        self._publish(
+            RuntimePhase.SERVICE_ENRICHMENT,
+            RuntimeEventKind.PHASE_STARTED,
+            activity=f"Enriching {len(devices_by_ip)} discovered host(s)...",
+        )
         enrichment_result = self._scanner.scan(
             hosts=enrichment_hosts,
             arguments=enrichment_arguments,
@@ -190,8 +257,9 @@ class NmapProvider(DiscoveryProvider):
 
         enriched_hosts = enrichment_result.get("scan", {})
         host_diagnostics: dict[str, HostDiagnostics] = {}
+        total_hosts = len(devices_by_ip)
 
-        for ip_address, device in devices_by_ip.items():
+        for index, (ip_address, device) in enumerate(devices_by_ip.items(), start=1):
             host_data = enriched_hosts.get(ip_address, {})
             device.services = self._extract_services(host_data)
 
@@ -225,6 +293,22 @@ class NmapProvider(DiscoveryProvider):
             host_diagnostics[ip_address] = diagnose_host(
                 device.services, smb_identity, rdp_identity
             )
+
+            self._publish(
+                RuntimePhase.SERVICE_ENRICHMENT,
+                RuntimeEventKind.PROGRESS,
+                progress=ProgressMeasurement(
+                    completed=index, total=total_hosts, unit_label="Hosts Completed"
+                ),
+            )
+
+        self._publish(
+            RuntimePhase.SERVICE_ENRICHMENT,
+            RuntimeEventKind.PHASE_COMPLETED,
+            progress=ProgressMeasurement(
+                completed=total_hosts, total=total_hosts, unit_label="Hosts Completed"
+            ),
+        )
 
         self.run_diagnostics = RunDiagnostics(
             scan_profile=self._scan_profile,

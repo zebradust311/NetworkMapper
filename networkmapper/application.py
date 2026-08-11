@@ -19,6 +19,14 @@ from networkmapper.exporters.csv_exporter import CsvExporter
 from networkmapper.exporters.markdown_exporter import MarkdownExporter
 from networkmapper.reporting.discovery_summary import DiscoverySummary
 from networkmapper.reporting.report_run import RunMetadata, build_report_run_paths
+from networkmapper.runtime.cli_renderer import CliRuntimeEventRenderer, render_runtime_summary
+from networkmapper.runtime.events import (
+    RuntimeEvent,
+    RuntimeEventBus,
+    RuntimeEventKind,
+    RuntimePhase,
+)
+from networkmapper.runtime.telemetry import RuntimeTelemetryRecorder
 
 
 class Application:
@@ -30,7 +38,18 @@ class Application:
 
     def run(self) -> None:
         """Run the temporary persistence validation harness."""
+        event_bus = RuntimeEventBus()
+        telemetry = RuntimeTelemetryRecorder()
+        event_bus.subscribe(CliRuntimeEventRenderer().handle_event)
+        event_bus.subscribe(telemetry.handle_event)
+
         print("NetworkMapper is starting...\n")
+        self._publish(
+            event_bus,
+            RuntimePhase.APPLICATION_STARTUP,
+            RuntimeEventKind.PHASE_STARTED,
+            activity="Parsing CLI arguments...",
+        )
 
         parser = argparse.ArgumentParser(add_help=False)
         parser.add_argument("--workbench", action="store_true")
@@ -39,8 +58,17 @@ class Application:
 
         scan_profile = self._parse_scan_profile(args.scan_profile)
 
-        provider = NmapProvider("172.16.100.0/24", scan_profile=scan_profile)
-        engine = DiscoveryEngine([provider])
+        self._publish(
+            event_bus,
+            RuntimePhase.APPLICATION_STARTUP,
+            RuntimeEventKind.PHASE_COMPLETED,
+            activity=f"Scan profile: {scan_profile.value.upper()}",
+        )
+
+        provider = NmapProvider(
+            "172.16.100.0/24", scan_profile=scan_profile, event_bus=event_bus
+        )
+        engine = DiscoveryEngine([provider], event_bus=event_bus)
 
         graph = engine.discover()
 
@@ -92,6 +120,13 @@ class Application:
             )
             print(f"✓ Classification Workbench exported to {workbench_path}")
 
+        self._publish(
+            event_bus,
+            RuntimePhase.REPORT_GENERATION,
+            RuntimeEventKind.PHASE_STARTED,
+            activity="Generating Markdown and CSV reports...",
+        )
+
         run_metadata = RunMetadata(
             generated_at=datetime.now(),
             scan_profile=scan_profile,
@@ -113,6 +148,16 @@ class Application:
 
         print(f"✓ CSV exported to {report_paths.csv_path}")
         print(f"✓ Markdown exported to {report_paths.markdown_path}")
+        self._publish(
+            event_bus, RuntimePhase.REPORT_GENERATION, RuntimeEventKind.PHASE_COMPLETED
+        )
+
+        self._publish(
+            event_bus,
+            RuntimePhase.COMPLETION,
+            RuntimeEventKind.PHASE_STARTED,
+            activity="Finalizing project persistence...",
+        )
 
         ProjectSerializer.save(project, "output/Test Network.nmproj")
 
@@ -134,6 +179,25 @@ class Application:
             raise RuntimeError(
                 "Loaded project device count does not match saved project."
             )
+
+        self._publish(event_bus, RuntimePhase.COMPLETION, RuntimeEventKind.PHASE_COMPLETED)
+        print(render_runtime_summary(telemetry))
+
+    def _publish(
+        self,
+        event_bus: RuntimeEventBus,
+        phase: RuntimePhase,
+        kind: RuntimeEventKind,
+        *,
+        activity: str | None = None,
+    ) -> None:
+        """Publish one OBS-002 runtime event for a phase orchestrated directly
+        by `Application` (Application Startup, Report Generation, Completion).
+        Host Discovery/Service Enrichment and Classification are published by
+        `NmapProvider`/`DiscoveryEngine` themselves against the same bus."""
+        event_bus.publish(
+            RuntimeEvent(phase=phase, kind=kind, timestamp=datetime.now(), activity=activity)
+        )
 
     def _print_discovery_diagnostics(
         self,

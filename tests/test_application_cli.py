@@ -88,6 +88,7 @@ class ApplicationCliTest(unittest.TestCase):
         result["provider_mock"].assert_called_once_with(
             "172.16.100.0/24",
             scan_profile=ScanProfile.FAST,
+            event_bus=ANY,
         )
 
     def test_report_artifacts_are_written_to_a_unique_run_directory(self):
@@ -117,6 +118,7 @@ class ApplicationCliTest(unittest.TestCase):
         result["provider_mock"].assert_called_once_with(
             "172.16.100.0/24",
             scan_profile=ScanProfile.FAST,
+            event_bus=ANY,
         )
 
     def test_scan_profile_standard_is_supported(self):
@@ -125,6 +127,7 @@ class ApplicationCliTest(unittest.TestCase):
         result["provider_mock"].assert_called_once_with(
             "172.16.100.0/24",
             scan_profile=ScanProfile.STANDARD,
+            event_bus=ANY,
         )
 
     def test_scan_profile_deep_is_supported(self):
@@ -133,6 +136,7 @@ class ApplicationCliTest(unittest.TestCase):
         result["provider_mock"].assert_called_once_with(
             "172.16.100.0/24",
             scan_profile=ScanProfile.DEEP,
+            event_bus=ANY,
         )
 
     def test_invalid_scan_profile_exits_with_non_zero_code(self):
@@ -188,6 +192,7 @@ class ApplicationCliTest(unittest.TestCase):
                     provider_mock.assert_called_once_with(
                         "172.16.100.0/24",
                         scan_profile=ScanProfile.FAST,
+                        event_bus=ANY,
                     )
             finally:
                 os.chdir(current_dir)
