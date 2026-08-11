@@ -37,6 +37,7 @@ Everything else is derived from them.
 - Benchmark analytics
 - Engineering documentation
 - Knowledge framework
+- Canonical reporting
 
 ---
 
@@ -213,6 +214,24 @@ Focus shifts from building heuristics to improving them using benchmark data.
 ---
 
 # Phase 8 — Documentation
+
+## Reporting Foundation
+
+- ✅ REPORT-001 Canonical Discovery Report
+
+Establishes the Markdown report as NetworkMapper's canonical
+human-readable output of a discovery and classification run. Documents,
+retroactively, the completed reporting deliverables: Markdown report
+generation, CSV export, Discovery Summary, Classification Summary,
+per-device evidence, discovery diagnostics, and human-readable report
+formatting. See
+[docs/reports/REPORT-001-Evidence-Rich-Engineering-Report.md](docs/reports/REPORT-001-Evidence-Rich-Engineering-Report.md)
+for the implementation detail.
+
+### Planned
+
+- ⬜ REPORT-002 Versioned reports, historical report preservation, and
+  run-to-run comparison support
 
 ## Planned
 
