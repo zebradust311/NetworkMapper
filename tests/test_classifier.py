@@ -143,6 +143,58 @@ class DeviceClassifierTest(unittest.TestCase):
 
         self.assertEqual(result.device_type, DeviceType.PHONE)
 
+    def test_bench_002_netgear_readynas_device_now_classifies_as_server(self):
+        """RULE-003: the exact BENCH-002 netgear-nas-01 device (vendor,
+        hostname, and HTTP auth realm evidence) stayed UNKNOWN across
+        FAST/STANDARD/DEEP before this sprint; it must now resolve."""
+        device = Device(
+            ip_address="172.16.100.20",
+            hostname="netgear-nas-01",
+            vendor="Netgear",
+            services=[
+                ServiceEvidence(port=80, protocol="tcp", http_auth_realm="NETGEAR ReadyNAS"),
+            ],
+        )
+
+        result = DeviceClassifier().classify(device)
+
+        self.assertEqual(result.device_type, DeviceType.SERVER)
+
+    def test_bare_netgear_router_without_nas_identifier_remains_unknown(self):
+        """Guards against NetworkApplianceRule over-reaching on vendor
+        alone: a Netgear device with no NAS-specific identifier evidence
+        must not be swept into SERVER."""
+        device = Device(
+            ip_address="192.168.1.67",
+            hostname="netgear-router-01",
+            vendor="Netgear",
+        )
+
+        result = DeviceClassifier().classify(device)
+
+        self.assertEqual(result.device_type, DeviceType.UNKNOWN)
+
+    def test_bench_002_generic_web_app_title_remains_unknown(self):
+        """BENCH-002's web-app-01 device (a generic internal web app HTTP
+        title with no vendor signal) was deliberately left UNKNOWN, not
+        misclassified into a guessed category -- RULE-003 must not widen
+        NetworkApplianceRule or any other rule to swallow generic titles."""
+        device = Device(
+            ip_address="172.16.100.21",
+            hostname="web-app-01",
+            services=[
+                ServiceEvidence(
+                    port=8090,
+                    protocol="tcp",
+                    http_title="Internal Web App - Login",
+                ),
+            ],
+        )
+
+        result = DeviceClassifier().classify(device)
+
+        self.assertEqual(result.device_type, DeviceType.UNKNOWN)
+
 
 class EvidenceHelpersTest(unittest.TestCase):
     def test_normalize_vendor_strip_defaults_to_true(self):

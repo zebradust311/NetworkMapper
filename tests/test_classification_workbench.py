@@ -277,6 +277,7 @@ class ClassificationWorkbenchTest(unittest.TestCase):
         self.assertIn("Rule Evidence:", report)
         self.assertIn("----------------------------------------", report)
         self.assertIn("Rule: ServerHostnameRule", report)
+        self.assertIn("Rule: NetworkApplianceRule", report)
         self.assertIn("Rule: HypervisorHostnameRule", report)
         self.assertIn("Rule: UbiquitiAccessPointRule", report)
         self.assertIn("Rule: SonicWallFirewallRule", report)

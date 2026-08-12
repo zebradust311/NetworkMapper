@@ -4,6 +4,7 @@ from networkmapper.classification.classification_rule import ClassificationRule
 from networkmapper.classification.rule_result import RuleResult
 from networkmapper.classification.rules.dell_workstation_rule import DellWorkstationRule
 from networkmapper.classification.rules.hypervisor_hostname_rule import HypervisorHostnameRule
+from networkmapper.classification.rules.network_appliance_rule import NetworkApplianceRule
 from networkmapper.classification.rules.printer_vendor_rule import PrinterVendorRule
 from networkmapper.classification.rules.server_hostname_rule import ServerHostnameRule
 from networkmapper.classification.rules.sonicwall_firewall_rule import SonicWallFirewallRule
@@ -29,9 +30,18 @@ class DeviceClassifier:
         SwitchVendorRule so a Cisco IP Phone's more specific vendor match
         continues to win over SwitchVendorRule's bare "cisco" vendor
         substring match.
+
+        NetworkApplianceRule runs immediately after ServerHostnameRule
+        (RULE-003): both suggest SERVER, so there is no precedence
+        conflict to resolve between them, and grouping them keeps the
+        two SERVER-producing rules adjacent. Its identifier keyword
+        ("readynas") doesn't overlap with any other rule's vendor or
+        identifier keywords, so its exact position among the other,
+        differently-typed rules is not safety-relevant.
         """
         self._rules: list[ClassificationRule] = [
             ServerHostnameRule(),
+            NetworkApplianceRule(),
             HypervisorHostnameRule(),
             UbiquitiAccessPointRule(),
             SonicWallFirewallRule(),

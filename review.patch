@@ -1,683 +1,1012 @@
-diff --git a/docs/reports/FEAT-003D-Service-Product-Version-Classification.md b/docs/reports/FEAT-003D-Service-Product-Version-Classification.md
+diff --git a/docs/reports/REPORT-001-Evidence-Rich-Engineering-Report.md b/docs/reports/REPORT-001-Evidence-Rich-Engineering-Report.md
 new file mode 100644
-index 0000000..d35d322
+index 0000000..0ab6919
 --- /dev/null
-+++ b/docs/reports/FEAT-003D-Service-Product-Version-Classification.md
-@@ -0,0 +1,239 @@
++++ b/docs/reports/REPORT-001-Evidence-Rich-Engineering-Report.md
+@@ -0,0 +1,318 @@
 +# Status
 +
-+Implementation Complete
++Investigation Complete
++
++Implementation: Completed
 +
 +Production Code Modified: Yes
 +
-+ADR Required: No
++ADR Required: No — this sprint redesigns how already-collected evidence
++is *rendered*. No field, model, discovery mechanism, or classification
++rule changed.
 +
 +Recommended Next Sprint:
-+FEAT-003E – NSE-Script Discovery Evidence Collection (http-title, ssl-cert,
-+smb-os-discovery), per ADR-009's deferred Future Work — see Recommended
-+Next Sprint below for the reasoning.
++No single sprint is pre-selected. TEST-003's remaining recommendations
++not addressed by this sprint or STAB-001 — benchmark fixture coverage
++for the five unbenchmarked classification-active fields, CSV field
++expansion (this sprint deliberately touched Markdown only, per its own
++"presentation" framing and the absence of any CSV-specific instruction),
++`ClassificationWorkbench` mismatch-evidence coverage, and `NetworkGraph`
++merge semantics — remain open.
++
++---
++
++## DESIGN-001 Reference Note
++
++This sprint's objective is to "implement the engineering report redesign
++described in DESIGN-001." No `DESIGN-001` report, commit, or design
++document exists anywhere in this repository — verified by file search
++and full git history search. Rather than block on a missing prerequisite,
++this sprint's own "Design Principles" and "Report Structure" sections
++are detailed and concrete enough to serve as the specification directly,
++so implementation proceeded from them. Flagging this transparently
++rather than silently assuming DESIGN-001 was implicit; if a separate
++DESIGN-001 document exists outside this repository, this implementation
++should be checked against it.
 +
 +---
 +
 +## Summary
 +
-+Every one of the 8 classification rules was evaluated for whether the
-+`ServiceEvidence.product`/`.version` fields FEAT-003C introduced (and left
-+unconsumed — see FEAT-003C's Known Issues) could improve confidence,
-+specificity, or explainability. Three rules received targeted, evidence-
-+supported changes; five were deliberately left unchanged, each with a
-+documented reason. No discovery, scan-profile, or architecture change was
-+made; ADR-009 required no revision.
++Redesigned `MarkdownExporter` — the only report NetworkMapper generates
++with room for hierarchical, per-device evidence (`CsvExporter`'s flat
++row-per-device format was not touched; nothing in this sprint's
++objective named CSV) — from a four-field device listing into an
++evidence-rich engineering report answering, per device: what is this,
++why was it classified this way, and what evidence supports that.
 +
-+A new generic helper, `first_matching_product()`, was added to
-+`evidence_helpers.py` alongside the existing `first_matching_port`/
-+`first_matching_service`. It performs substring matching (not exact
-+membership), because Nmap product strings are free-text descriptions
-+(e.g. `"VMware ESXi Server httpd"`), unlike the fixed port numbers and
-+service names the existing helpers match against.
++**Executive Summary** is unchanged in content and structure, per this
++sprint's explicit "retain the existing summary section" instruction —
++only extracted into its own render method for readability.
 +
-+**Implemented:**
++**Classification Overview** is new: total UNKNOWN device count, UNKNOWN
++percentage of the project, UNKNOWN devices grouped by vendor, and
++UNKNOWN devices grouped by observed `operating_system` (labeled "where
++known" rather than claiming to "infer" anything not directly observed —
++see Known Limitations for why). All four are arithmetic over data
++already on `Device`; nothing is invented or newly discovered.
 +
-+- **`HypervisorHostnameRule`** — if any service's `product` contains
-+  `"vmware"`, the reason text is enriched with that product string as
-+  additional corroboration. This does not change *when* the rule
-+  matches (the hostname-keyword gate is unchanged); it only strengthens
-+  *why* an already-matching device is explained as a hypervisor. Chosen
-+  because VMware's ESXi/vCenter management httpd is one of the most
-+  reliably product-fingerprinted services in Nmap's default probe
-+  database.
-+- **`CiscoSwitchRule`** — if any service's `product` contains `"cisco"`,
-+  the reason text is enriched the same way, appended only when the
-+  existing hostname-plus-management-signal match already fired. Product
-+  evidence alone (without a port/service signal) does **not** trigger a
-+  match — verified by a new test asserting exactly that. Chosen because
-+  Cisco IOS/IOS-XE SSH daemons are commonly identified by product string
-+  in Nmap's banner-based detection.
-+- **`PrinterVendorRule`** — reuses the *existing*, already-trusted
-+  `SUPPORTED_PRINTER_VENDOR_KEYWORDS` list (previously checked only
-+  against the `vendor` field) against service `product` strings too, as
-+  a new independent match tier between the vendor check and the
-+  networking-protocol fallback. Chosen because Nmap's IPP (port 631)
-+  probe commonly returns the exact printer make/model as the product
-+  string (e.g. `"HP LaserJet 4250"`), which is at least as strong an
-+  identifier as the vendor field, and because reusing an already-
-+  accepted keyword list — rather than introducing a new one — avoids
-+  inventing an unsupported fingerprint.
++**Per-device Identity** now shows `Device Type`, `IP Address`,
++`Hostname`, `Vendor`, `MAC Address`, and `Discovery Sources` always
++(using the existing "Unknown" placeholder convention when absent), and
++`Computer Name`/`Operating System`/`Domain` only when present — per the
++"(if present)" qualifier attached to exactly those three fields in this
++sprint's own field list, and to avoid three near-always-empty lines on
++every non-Windows device.
 +
-+**Deliberately not implemented** (see Rule-by-Rule Evaluation for full
-+reasoning): `ServerHostnameRule`, `DellWorkstationRule`,
-+`UbiquitiAccessPointRule`, `SonicWallFirewallRule`, `VoiceVendorRule`.
++**Per-device Evidence** groups all `ServiceEvidence` fields under each
++service's own entry (`port/protocol/service (product version)`, with
++`HTTP Title`/`TLS Subject`/`TLS Issuer`/`HTTP Authentication Realm` as
++indented sub-bullets when present on that specific service), plus
++device-level `SMB Signing` separately. This follows ADR-009's own
++correlation model — these fields are properties of a specific port, not
++the device as a whole, so grouping them by service (rather than as flat
++top-level bullets) is both the more accurate representation and avoids
++fragmenting one port's evidence across the section. A device with
++neither services nor `smb_signing` shows "No additional evidence
++collected." rather than an empty heading.
 +
-+All three benchmark datasets remain at 100% accuracy — none of the
-+curated fixture devices populate `product`, so no existing classification
-+outcome changed. Full validation (`python -m devtools validate --all`)
-+shows zero regressions; the one error present is the pre-existing,
-+unrelated CSV exporter defect documented in TEST-001 and reconfirmed in
-+FEAT-003C.
++**Per-device Classification** shows `Final Device Type` always, then
++branches: a classified (non-`UNKNOWN`) device shows only the single
++rule that matched (`Matching Rule` + `Reason`) — `DeviceClassifier` is
++first-match-wins, so there is exactly one such rule, and per this
++sprint's "do not list every skipped rule" instruction, the rules
++evaluated before it aren't shown. An `UNKNOWN` device shows every
++evaluated rule's `reason` under "No rule matched. Evaluated rules:" —
++since no rule matched, "why no rule matched" *is* that full breakdown,
++per this sprint's "Unknown Devices" instruction to use existing
++`RuleResult` information. Rule evidence is obtained by re-running
++`DeviceClassifier` against a `replace()`d copy of the device — the same
++pattern `ClassificationWorkbench` already uses, since `RuleResult`s
++aren't persisted on `Device` and must be recomputed to be displayed.
 +
-+---
++**Appendices** are new: Vendor Counts (reuses `ProjectSummary.vendor_counts`,
++already computed), Service Counts (aggregate `service` value counts
++across all devices' `ServiceEvidence`), and Discovery Evidence Coverage
++(a live, per-project version of TEST-003's static coverage matrix —
++"N/total devices" or "N/total services" for each of the ten fields
++added since FEAT-003D). All three are the specific examples this
++sprint's own "Appendices" instruction named.
 +
-+## Rule-by-Rule Evaluation
-+
-+| Rule | Product/version evidence used? | Reasoning |
-+|---|---|---|
-+| `ServerHostnameRule` | No | Pure hostname-keyword rule (`"dc"`, `"cam"`, `"srv"`, `"server"`) with no vendor or service concept at all. "Server" is not a product-identifiable category — no product string would discriminate it. |
-+| `HypervisorHostnameRule` | **Yes** | See Summary. `"vmware"` in `product` is a well-established, reliable Nmap fingerprint family. |
-+| `UbiquitiAccessPointRule` | No | Ubiquiti's web management interface does not reliably expose a `"Ubiquiti"`-branded product string via plain `-sV` (no NSE scripts were added in FEAT-003C or this sprint). Implementing this would mean guessing at a fingerprint not actually verified against Nmap's behavior — explicitly prohibited by this sprint's scope. |
-+| `SonicWallFirewallRule` | No | Genuine uncertainty: I could not verify, with the confidence the "strong, deterministic evidence" bar requires, that Nmap's default `-sV --version-light` probe reliably identifies SonicWall products by name without deeper probe intensity or NSE scripts (neither of which this sprint may add). Per the constraint against inventing unsupported fingerprints, this was left unimplemented rather than guessed at. Listed explicitly here because SonicWall was named as an example in this sprint's scope — the omission is a deliberate evidentiary decision, not an oversight. |
-+| `PrinterVendorRule` | **Yes** | See Summary. IPP product-string detection for exact printer make/model is one of Nmap's best-documented "product" detections for office hardware. |
-+| `ServerHostnameRule` | (listed above) | |
-+| `CiscoSwitchRule` | **Yes** | See Summary. Cisco SSH banner detection is well-established. |
-+| `DellWorkstationRule` | No | No realistic Dell-branded network service exists for a general-purpose Windows workstation for Nmap to fingerprint. Vendor/hostname-keyword matching remains the only viable signal. |
-+| `VoiceVendorRule` | No | SIP service detection in Nmap's default probe set (port 5060/5061) typically returns a generic `"sip"` service name without a reliable phone vendor/model product string absent deeper SIP-specific probing. Left unimplemented for the same reason as SonicWall: insufficient confidence to meet the "strong, deterministic evidence" bar. |
-+
-+**On the sprint's example list** (`VMware products`, `Apache HTTP
-+Server`, `Microsoft IIS`, `JetDirect`, `SonicWall products`, `Cisco
-+service banners`): two examples were deliberately not pursued for reasons
-+distinct from the "insufficient confidence" cases above, worth stating
-+explicitly:
-+
-+- **Apache HTTP Server / Microsoft IIS** — Nmap's product detection for
-+  these is extremely reliable, but neither is a *device-type-specific*
-+  identifier. Both run on servers, printers, hypervisor management
-+  interfaces, routers, and firewalls alike. Reliable detection alone
-+  does not make a signal useful to a *specific* classification rule when
-+  it doesn't discriminate between device types. No rule was extended
-+  with generic web-server product matching for this reason.
-+- **JetDirect** — already effectively handled. Port 9100's JetDirect/
-+  AppSocket protocol is a raw binary protocol with no application-layer
-+  handshake, so Nmap's `-sV` typically cannot populate a `product` field
-+  for it at all; the existing `service` name check (`"jetdirect"` /
-+  `"pdl-datastream"` in `PRINTER_SERVICE_KEYWORDS`) is already the
-+  correct and only realistic signal available over that port. No
-+  additional product-based work was needed or added.
-+
-+---
++No discovery, evidence model, classification logic, benchmark inventory,
++or ADR was touched. No confidence scores were introduced. No evidence
++field beyond what already exists on `Device`/`ServiceEvidence`/
++`RuleResult` appears anywhere in the new report.
 +
 +## Files Changed
 +
-+**Production code**
++**Exporters**
++- `networkmapper/exporters/markdown_exporter.py` — full redesign.
++  Public API unchanged (`MarkdownExporter().export(project, output_path)`),
++  so `networkmapper/application.py` required no changes. Retained
++  helpers: `_group_devices_by_type`, `_render_section_manufacturers`,
++  `_display_value`, `_display_title`, `_plural_title` (all unchanged).
++  New: `_render_classification_overview`, `_render_device_section`,
++  `_render_identity`, `_render_evidence`, `_format_service_summary`,
++  `_format_service_detail`, `_render_classification`, `_evaluate_rules`,
++  `_matching_rule`, `_render_appendices`.
 +
-+- `networkmapper/classification/evidence_helpers.py` — added
-+  `first_matching_product()`.
-+- `networkmapper/classification/rules/hypervisor_hostname_rule.py` —
-+  added `HYPERVISOR_PRODUCT_KEYWORDS`; appends product corroboration to
-+  the reason text when present.
-+- `networkmapper/classification/rules/cisco_switch_rule.py` — added
-+  `SWITCH_PRODUCT_KEYWORDS`; appends product corroboration to the reason
-+  text only when the existing hostname-plus-management-signal match
-+  already fired.
-+- `networkmapper/classification/rules/printer_vendor_rule.py` —
-+  restructured `classify()` into a single linear flow (vendor → product →
-+  networking → no match), removing duplicate branching that existed
-+  before this sprint; added `_find_printer_vendor_product()`.
++**Not changed**
++- `networkmapper/exporters/csv_exporter.py` — out of scope; this
++  sprint's structure and examples are entirely Markdown-shaped
++  (per-device evidence blocks, rule reasoning) and nothing in the
++  objective named CSV.
++- `networkmapper/reporting/project_summary.py` — Classification
++  Overview and Appendix statistics are computed directly in
++  `MarkdownExporter` rather than added to `ProjectSummary`, keeping the
++  existing "Retain the existing summary section" data model untouched
++  and the new computation scoped to where it's used.
++- `networkmapper/classification/` — not touched. `MarkdownExporter`
++  calls `DeviceClassifier.classify()`/`get_last_rule_results()`, both
++  pre-existing public methods; no rule, ordering, or decision logic
++  changed.
++- `networkmapper/developer/classification_workbench.py` — not touched;
++  this sprint's report and the workbench remain two separate tools with
++  overlapping but not identical purposes (workbench: `UNKNOWN`-only,
++  interactive developer debugging; this report: full-project, all
++  devices, customer/engineer-facing document).
++- Benchmark inventories, ADRs — untouched, per explicit constraint.
 +
 +**Tests**
++- `tests/test_markdown_exporter.py` — rewritten. Retains the original
++  structural test (updated to also assert the two new top-level
++  headings exist), adds: Classification Overview with and without
++  UNKNOWN devices, Identity's conditional-field omission/inclusion,
++  Evidence with full per-service detail and the empty-evidence case,
++  Classification for both the classified-device and UNKNOWN-device
++  branches, and both populated and empty Appendices. 10 tests total (up
++  from 1).
 +
-+- `tests/test_hypervisor_hostname_rule.py` — 3 new tests: product
-+  corroboration with a port/service match, product corroboration with
-+  neither, and confirmation that a non-VMware product leaves the reason
-+  unaffected.
-+- `tests/test_cisco_switch_rule.py` — 2 new tests: product corroboration
-+  when the existing management-signal gate is satisfied, and confirmation
-+  that product evidence alone (no port/service) does **not** trigger a
-+  match.
-+- `tests/test_printer_vendor_rule.py` — 3 new tests: product-only match,
-+  product taking precedence over a simultaneous networking-only signal,
-+  and a non-printer product correctly falling back to the existing
-+  networking-signal path.
-+- `tests/test_devtools_validate.py` — updated the fast-validation
-+  test-count pin (`75` → `83`) to reflect the 8 new tests added to files
-+  already inside `STANDARD_REGRESSION_TESTS`. This is a deliberate,
-+  expected update to a literal test-count assertion whose purpose is to
-+  catch *unexpected* changes to the fast classification-only regression
-+  surface — this sprint's change to that count is intended and verified,
-+  not a regression it should have caught.
++## Example Report Sections
 +
-+No production code outside `networkmapper/classification/` was touched.
-+No discovery code, scan profile, benchmark fixture, serializer, or
-+documentation file was modified — none needed a change, since this
-+sprint's evidence source (`ServiceEvidence.product`) already existed in
-+full from FEAT-003C.
++Generated from a synthetic four-device project (one SonicWall-pattern
++firewall, one Hyper-V host, one Windows Server host, one fully-unknown
++device) to demonstrate every new section in one place:
++
++```
++# Classification Overview
++
++- Total UNKNOWN Devices: 1
++- UNKNOWN Devices as % of Total: 25.0%
++
++## UNKNOWN Devices by Vendor
++
++- Generic Manufacturing Co: 1
++
++## UNKNOWN Devices by Operating System (where known)
++
++- Not Determined: 1
++```
++
++```
++### tz-370
++
++**Identity**
++
++- Device Type: Firewall
++- IP Address: 10.20.0.20
++- Hostname: tz-370
++- Vendor: Unknown
++- MAC Address: Unknown
++- Discovery Sources: Unknown
++
++**Evidence**
++
++Services:
++- 443/tcp https
++  - HTTP Title: SonicWALL - Network Security Appliance
++  - TLS Subject: commonName=SonicWALL
++
++**Classification**
++
++Final Device Type: Firewall
++
++Matching Rule: SonicWallFirewallRule
++Reason: Detected HTTP title 'SonicWALL - Network Security Appliance' matched known firewall vendor identifier.
++```
++
++```
++### mystery-box-01
++
++**Identity**
++
++- Device Type: Unknown
++- IP Address: 10.20.0.99
++- Hostname: mystery-box-01
++- Vendor: Generic Manufacturing Co
++- MAC Address: Unknown
++- Discovery Sources: Unknown
++
++**Evidence**
++
++Services:
++- 8080/tcp http
++
++**Classification**
++
++Final Device Type: Unknown
++
++No rule matched. Evaluated rules:
++- ServerHostnameRule: Hostname 'mystery-box-01' did not match known server naming patterns.
++- HypervisorHostnameRule: Hostname 'mystery-box-01' did not match known hypervisor naming conventions.
++- UbiquitiAccessPointRule: Vendor 'Generic Manufacturing Co' and hostname 'mystery-box-01' did not match known wireless infrastructure vendor patterns.
++- SonicWallFirewallRule: Vendor 'Generic Manufacturing Co' is not a known firewall vendor.
++- PrinterVendorRule: Vendor 'Generic Manufacturing Co' is not a known printer vendor and no printer networking protocols were detected.
++- VoiceVendorRule: Vendor 'Generic Manufacturing Co' is not a known voice device vendor.
++- CiscoSwitchRule: Vendor 'Generic Manufacturing Co' is not a known switch vendor.
++- DellWorkstationRule: Vendor 'Generic Manufacturing Co' and hostname 'mystery-box-01' did not match known workstation indicators.
++```
++
++```
++# Appendices
++
++## Vendor Counts
++
++- Generic Manufacturing Co: 1
++- Unknown: 3
++
++## Service Counts
++
++- http: 1
++- https: 1
++
++## Discovery Evidence Coverage
++
++- Operating System: 2/4 devices
++- Computer Name: 2/4 devices
++- Domain: 2/4 devices
++- SMB Signing: 0/4 devices
++- MAC Address: 0/4 devices
++- Product: 0/2 services
++- Version: 0/2 services
++- HTTP Title: 1/2 services
++- TLS Subject: 1/2 services
++- TLS Issuer: 0/2 services
++- HTTP Authentication Realm: 0/2 services
++```
 +
 +## Validation Performed
 +
 +`python -m devtools validate --all`:
 +
-+```
-+Unit Tests: 151 run, 0 failures, 1 error
-+Benchmarks: enterprise PASS (100.0%), homelab PASS (100.0%), small_office PASS (100.0%)
-+Overall Status: FAIL
-+Runtime: 0.59s
-+```
++- Unit tests: **206 run, 0 failures, 0 errors** — clean, continuing
++  from STAB-001's first fully clean run.
++- Benchmarks: enterprise, homelab, small_office all 100.0% accuracy —
++  unchanged, as expected (no classification or discovery logic changed).
++- Fast-path test count pin required no update — `test_markdown_exporter`
++  is not a member of `STANDARD_REGRESSION_TESTS`.
 +
-+The single error is the same pre-existing, unrelated
-+`tests.test_csv_exporter.CsvExporterTest.test_export_writes_expected_csv_rows`
-+defect documented in TEST-001 and reconfirmed in FEAT-003C
-+(`AttributeError: 'str' object has no attribute 'name'` in
-+`csv_exporter.py`, untouched by this sprint).
++## Known Limitations
 +
-+One regression surfaced during validation and was fixed within this
-+sprint, not left as a known issue: `test_devtools_validate.py`'s
-+hardcoded fast-validation test count (`75`) no longer matched reality
-+after this sprint added 8 new tests to already-fast-listed rule test
-+files. This was a expected consequence of intentionally adding tests to
-+already-included files, confirmed by checking that all three modified
-+test files (`test_cisco_switch_rule`, `test_hypervisor_hostname_rule`,
-+`test_printer_vendor_rule`) are already members of
-+`STANDARD_REGRESSION_TESTS` — not evidence of scope creep into the fast
-+path. The pin was updated to `83` accordingly.
++- **"UNKNOWN devices by inferred platform" is implemented as grouping
++  by observed `operating_system`, not a genuinely inferred category.**
++  This sprint's own constraints ("do not invent recommendations,"
++  "summarize observable facts only," "do not invent new evidence")
++  rule out fuzzy platform inference from hostname patterns or similar
++  heuristics — `operating_system` is the only directly-observed,
++  non-invented fact that plausibly maps to "platform." The section is
++  labeled "by Operating System (where known)" rather than "by inferred
++  platform" so the report doesn't overstate what it's actually showing.
++- **Section ordering resolves an internal tension in this sprint's own
++  spec.** The "Design Principles" list the four questions in the order
++  identity → why-classified → evidence-supporting-that → next-steps,
++  which would put Classification before Evidence. The "Report Structure"
++  section explicitly lists per-device headings in the order Identity →
++  Evidence → Classification. This implementation follows the literal,
++  concrete Report Structure ordering (Evidence before Classification)
++  rather than the more abstract Design Principles ordering, on the
++  reasoning that a reader seeing the evidence first is better primed to
++  understand the classification reasoning that follows it. If the
++  reviewer intended the other order, swapping `_render_evidence` and
++  `_render_classification`'s call order in `_render_device_section` is
++  a one-line change.
++- **The fourth Design Principle ("what should an engineer investigate
++  next?") is answered only for `UNKNOWN` devices**, via their full
++  rule-by-rule breakdown. Classified devices have no "next steps"
++  section — there generally isn't a meaningful next step for a device
++  the classifier is confident about, and inventing one would conflict
++  with "do not invent recommendations."
++- **Rule evidence requires re-running `DeviceClassifier` per device**
++  at report-generation time (not cached anywhere on `Device`). For very
++  large projects this is `O(devices × rules)` extra classification
++  work beyond what discovery already did once. Not a concern at any
++  scale this project currently targets, but worth noting if project
++  sizes grow substantially — the same cost `ClassificationWorkbench`
++  already pays per `UNKNOWN` device, now paid per device generally.
++- CSV export was not extended — TEST-003's CSV field-expansion
++  recommendation remains open and unaddressed by this sprint.
 +
-+All three benchmark datasets remain at 100% accuracy, unchanged from
-+before this sprint — none of the curated fixture devices populate
-+`product`, so none of this sprint's new evidence paths fire against
-+existing benchmark data. This was expected and is not, by itself, strong
-+validation that the new rules work; correctness is established by the
-+new unit tests, which construct `ServiceEvidence` entries with `product`
-+set directly.
++## Recommended Next Sprint
 +
-+## Known Issues
-+
-+- **No benchmark case exercises the new product-based evidence paths.**
-+  All three benchmark datasets predate `product` capture and none was
-+  updated, per this sprint's instruction to update fixtures "only when
-+  behavior intentionally changes" — no existing fixture device's
-+  classification outcome changed. Adding a benchmark case that
-+  specifically exercises product-based classification (e.g. a device
-+  identifiable only by product string, with no matching vendor or
-+  hostname) would be a reasonable follow-up but was not required by this
-+  sprint's validation instructions, which named unit tests, not new
-+  benchmark cases, as the required coverage.
-+- **`ServiceEvidence.version` remains fully unconsumed.** This sprint
-+  used `.product` but not `.version` (e.g. distinguishing an outdated
-+  vs. current firmware/software version is a monitoring/risk concern,
-+  not a device-type classification signal, so no rule needed it). This
-+  is a deliberate scope decision, not an oversight — flagged for
-+  visibility rather than as a defect.
-+- **The `"hp"` keyword in `SUPPORTED_PRINTER_VENDOR_KEYWORDS`** is a
-+  short, two-character substring, now also matched against free-text
-+  product strings (previously only against the shorter `vendor` field).
-+  This carries a small false-positive risk against product text
-+  containing an incidental `"hp"` substring (e.g. a hypothetical
-+  service naming itself something containing "...hp..."). This risk is
-+  inherited from the pre-existing, already-accepted keyword list — not
-+  newly introduced — and no realistic false positive was found during
-+  this sprint's evaluation of common service/product strings (Apache
-+  httpd, OpenSSH, lighttpd, SonicWALL, Microsoft-IIS, and vsftpd were all
-+  checked and do not contain `"hp"` as a substring).
-+
-+## Next Recommended Sprint
-+
-+**FEAT-003E — NSE-Script Discovery Evidence Collection**
-+(`http-title`, `ssl-cert`, `smb-os-discovery`), per ADR-009's Future Work
-+and FEAT-003A's original recommendation. This sprint closed the loop on
-+the product/version evidence FEAT-003C already collected from the
-+existing `-sV` scan (per FEAT-003C's own recommended next sprint). The
-+next incremental, well-justified step is on the *discovery* side again:
-+adding a small number of targeted NSE scripts on ports already inside
-+`CLASSIFICATION_PORTS` would surface materially stronger identifiers
-+(e.g. an HTTP title of "SonicWALL Network Security Appliance" or a TLS
-+certificate CN) for exactly the rules this sprint had to skip
-+(`SonicWallFirewallRule`, `UbiquitiAccessPointRule`) due to insufficient
-+confidence in what `-sV` alone provides — those gaps would not need to
-+remain gaps once NSE-derived evidence exists to evaluate. This was
-+explicitly deferred by ADR-009 as future work and is not blocked by
-+anything in this sprint.
-diff --git a/networkmapper/classification/evidence_helpers.py b/networkmapper/classification/evidence_helpers.py
-index 1ef7d62..1a1f899 100644
---- a/networkmapper/classification/evidence_helpers.py
-+++ b/networkmapper/classification/evidence_helpers.py
-@@ -15,6 +15,27 @@ def service_names(services: Sequence[ServiceEvidence]) -> list[str]:
-     return [entry.service for entry in services if entry.service]
++No single item is pre-selected. Open TEST-003/STAB-001 recommendations
++not addressed here: CSV field expansion (if still wanted, now that
++Markdown has a proven per-device evidence rendering pattern to mirror),
++benchmark fixture coverage for `product`/`http_title`/`tls_subject`/
++`tls_issuer`/`http_auth_realm`, `ClassificationWorkbench` coverage for
++misclassified-but-not-`UNKNOWN` devices, and `NetworkGraph` merge
++semantics (still correctly last — no observable effect until a second
++`DiscoveryProvider` exists).
+diff --git a/networkmapper/exporters/markdown_exporter.py b/networkmapper/exporters/markdown_exporter.py
+index fe6d865..f8bb4b4 100644
+--- a/networkmapper/exporters/markdown_exporter.py
++++ b/networkmapper/exporters/markdown_exporter.py
+@@ -1,15 +1,25 @@
+ from __future__ import annotations
+ 
+ from collections import Counter, defaultdict
++from dataclasses import replace
+ from datetime import datetime
+ 
+-from networkmapper.core.models import Device, DeviceType
++from networkmapper.classification.device_classifier import DeviceClassifier
++from networkmapper.classification.rule_result import RuleResult
++from networkmapper.core.models import Device, DeviceType, ServiceEvidence
+ from networkmapper.project.models import Project
+ from networkmapper.reporting.project_summary import ProjectSummary
  
  
-+def first_matching_product(
-+    services: Sequence[ServiceEvidence],
-+    candidate_keywords: Collection[str],
-+) -> str | None:
-+    """Return the first service product string containing any candidate keyword, if any.
+ class MarkdownExporter:
+-    """Export a project snapshot as a Markdown document."""
++    """Export a project snapshot as an evidence-rich engineering Markdown report.
 +
-+    Unlike `first_matching_service`, this performs a substring search rather
-+    than exact membership, because Nmap product strings are free-text
-+    descriptions (e.g. "VMware ESXi Server httpd"), not fixed values.
++    REPORT-001 redesigned this report so an engineer can answer, per device,
++    "what is this, why was it classified this way, and what evidence
++    supports that" without reading source code. Presentation only: no
++    field, evidence, or classification logic is introduced here that
++    doesn't already exist on `Device`/`ServiceEvidence`/`RuleResult`.
 +    """
-+    for entry in services:
-+        if not entry.product:
-+            continue
-+
-+        product_lower = entry.product.lower()
-+        if any(keyword in product_lower for keyword in candidate_keywords):
-+            return entry.product
-+
-+    return None
-+
-+
- def normalize_vendor(vendor: str | None, *, strip: bool = True) -> str:
-     """Normalize vendor text for deterministic matching."""
-     normalized = vendor or ""
-diff --git a/networkmapper/classification/rules/cisco_switch_rule.py b/networkmapper/classification/rules/cisco_switch_rule.py
-index 2407af1..175c312 100644
---- a/networkmapper/classification/rules/cisco_switch_rule.py
-+++ b/networkmapper/classification/rules/cisco_switch_rule.py
-@@ -3,6 +3,7 @@ from __future__ import annotations
- from networkmapper.classification.classification_rule import ClassificationRule
- from networkmapper.classification.evidence_helpers import (
-     first_matching_port,
-+    first_matching_product,
-     first_matching_service,
-     format_hostname_evidence_reason,
-     normalize_hostname,
-@@ -24,6 +25,12 @@ SWITCH_HOSTNAME_HINTS = (
- SWITCH_MANAGEMENT_PORTS = {22, 23, 161}
- SWITCH_MANAGEMENT_SERVICES = {"ssh", "telnet", "snmp"}
  
-+# Cisco IOS/IOS-XE SSH daemons are commonly identified distinctly by Nmap's
-+# banner-based service detection (e.g. "Cisco SSH"). Treated as additional
-+# corroboration text only, never as an independent match trigger, so the
-+# existing hostname-plus-management-signal gate is unchanged.
-+SWITCH_PRODUCT_KEYWORDS = {"cisco"}
+     def export(self, project: Project, output_path: str) -> None:
+         """Write a Markdown report for a project to the given output path.
+@@ -19,13 +29,38 @@ class MarkdownExporter:
+             output_path: The output file path for the Markdown report.
+         """
+         summary = ProjectSummary.from_project(project)
+-        markdown_lines = self._render_markdown(project, summary)
++        classifier = DeviceClassifier()
++        markdown_lines = self._render_markdown(project, summary, classifier)
+ 
+         with open(output_path, "w", encoding="utf-8") as markdown_file:
+             markdown_file.write("\n".join(markdown_lines) + "\n")
+ 
+-    def _render_markdown(self, project: Project, summary: ProjectSummary) -> list[str]:
+-        """Render a project summary and inventory into Markdown lines."""
++    def _render_markdown(
++        self,
++        project: Project,
++        summary: ProjectSummary,
++        classifier: DeviceClassifier,
++    ) -> list[str]:
++        """Render the full report: summary, classification overview,
++        per-device inventory, then appendices — in that order, so an
++        engineer sees identity/evidence/reasoning before aggregate stats."""
++        lines: list[str] = []
++        lines.extend(self._render_executive_summary(summary))
++        lines.append("")
++        lines.extend(self._render_classification_overview(project))
++        lines.append("")
++        lines.extend(self._render_device_inventory(project, classifier))
++        lines.append("")
++        lines.extend(self._render_appendices(project, summary))
 +
- 
- class CiscoSwitchRule(ClassificationRule):
-     """Match Cisco vendors as switch devices."""
-@@ -51,19 +58,27 @@ class CiscoSwitchRule(ClassificationRule):
-             SWITCH_MANAGEMENT_SERVICES,
-             return_lower=True,
-         )
-+        matched_product = first_matching_product(device.services, SWITCH_PRODUCT_KEYWORDS)
-         hostname_looks_like_switch = any(hint in hostname for hint in SWITCH_HOSTNAME_HINTS)
-         has_management_signal = matched_port is not None or matched_service is not None
- 
-         if hostname_looks_like_switch and has_management_signal:
-+            reason = format_hostname_evidence_reason(
-+                raw_hostname,
-+                matched_port,
-+                matched_service,
-+                "switch management",
-+            )
-+            if matched_product is not None:
-+                reason += (
-+                    f" Detected service product {matched_product!r} matched known "
-+                    "Cisco product identifier."
-+                )
++        return lines
 +
-             return RuleResult(
-                 matched=True,
-                 confidence_contribution=0,
--                reason=format_hostname_evidence_reason(
--                    raw_hostname,
--                    matched_port,
--                    matched_service,
--                    "switch management",
--                ),
-+                reason=reason,
-                 suggested_device_type=DeviceType.SWITCH,
-             )
- 
-diff --git a/networkmapper/classification/rules/hypervisor_hostname_rule.py b/networkmapper/classification/rules/hypervisor_hostname_rule.py
-index 89713cc..65e1983 100644
---- a/networkmapper/classification/rules/hypervisor_hostname_rule.py
-+++ b/networkmapper/classification/rules/hypervisor_hostname_rule.py
-@@ -3,6 +3,7 @@ from __future__ import annotations
- from networkmapper.classification.classification_rule import ClassificationRule
- from networkmapper.classification.evidence_helpers import (
-     first_matching_port,
-+    first_matching_product,
-     first_matching_service,
-     format_hostname_evidence_reason,
-     normalize_hostname,
-@@ -36,6 +37,13 @@ HYPERVISOR_HOSTNAME_KEYWORDS = (
- HYPERVISOR_CORROBORATING_PORTS = {443, 3389}
- HYPERVISOR_CORROBORATING_SERVICES = {"https", "ms-wbt-server"}
- 
-+# Nmap's default service-probe database reliably identifies VMware's ESXi
-+# and vCenter management httpd by product string (e.g. "VMware ESXi Server
-+# httpd"), unlike the generic port/service signals above. This is treated
-+# as additional corroboration text only, never as an independent match
-+# trigger, since HYPERVISOR_HOSTNAME_KEYWORDS remains the sole match gate.
-+HYPERVISOR_PRODUCT_KEYWORDS = {"vmware"}
++    # ------------------------------------------------------------------
++    # Executive Summary (retained from the prior report, unchanged content)
++    # ------------------------------------------------------------------
 +
- 
- class HypervisorHostnameRule(ClassificationRule):
-     """Match hostnames that indicate a hypervisor, such as those containing 'esxi' or 'vcenter'."""
-@@ -61,6 +69,7 @@ class HypervisorHostnameRule(ClassificationRule):
-             HYPERVISOR_CORROBORATING_SERVICES,
-             return_lower=True,
-         )
-+        matched_product = first_matching_product(device.services, HYPERVISOR_PRODUCT_KEYWORDS)
- 
-         if matched_port is not None or matched_service is not None:
-             reason = format_hostname_evidence_reason(
-@@ -72,6 +81,12 @@ class HypervisorHostnameRule(ClassificationRule):
-         else:
-             reason = f"Hostname {raw_hostname!r} matched known hypervisor naming convention."
- 
-+        if matched_product is not None:
-+            reason += (
-+                f" Detected service product {matched_product!r} matched known "
-+                "hypervisor product identifier."
-+            )
++    def _render_executive_summary(self, summary: ProjectSummary) -> list[str]:
++        """Render the Customer and Executive Summary sections."""
+         lines: list[str] = []
+         lines.append("# Customer")
+         lines.append("")
+@@ -44,9 +79,64 @@ class MarkdownExporter:
+             key=lambda item: item[0].value,
+         ):
+             lines.append(f"- {self._display_title(device_type)}: {count}")
 +
-         return RuleResult(
-             matched=True,
-             confidence_contribution=0,
-diff --git a/networkmapper/classification/rules/printer_vendor_rule.py b/networkmapper/classification/rules/printer_vendor_rule.py
-index 6c56f2f..915b0b8 100644
---- a/networkmapper/classification/rules/printer_vendor_rule.py
-+++ b/networkmapper/classification/rules/printer_vendor_rule.py
-@@ -3,6 +3,7 @@ from __future__ import annotations
- from networkmapper.classification.classification_rule import ClassificationRule
- from networkmapper.classification.evidence_helpers import (
-     first_matching_port,
-+    first_matching_product,
-     first_matching_service,
-     normalize_vendor,
-     service_names,
-@@ -50,31 +51,24 @@ class PrinterVendorRule(ClassificationRule):
-         """Return a rule result for printer vendor matching evidence."""
-         raw_vendor = device.vendor
-         vendor = normalize_vendor(raw_vendor, strip=True)
--        if not vendor:
--            matched_port, matched_service = self._find_printer_networking(device)
--            if matched_port is not None or matched_service is not None:
--                return RuleResult(
--                    matched=True,
--                    confidence_contribution=0,
--                    reason=self._format_networking_reason(matched_port, matched_service),
--                    suggested_device_type=DeviceType.PRINTER,
++        return lines
++
++    # ------------------------------------------------------------------
++    # Classification Overview (new, REPORT-001)
++    # ------------------------------------------------------------------
++
++    def _render_classification_overview(self, project: Project) -> list[str]:
++        """Summarize UNKNOWN-device statistics already derivable from the
++        project's own data — no new discovery, no invented recommendations."""
++        lines: list[str] = ["# Classification Overview", ""]
++
++        all_devices = project.network_graph.all_devices()
++        unknown_devices = [
++            device for device in all_devices if device.device_type == DeviceType.UNKNOWN
++        ]
++
++        if not unknown_devices:
++            lines.append("No UNKNOWN devices.")
++            return lines
++
++        total = len(all_devices)
++        unknown_percentage = (len(unknown_devices) / total) * 100 if total else 0.0
++
++        lines.append(f"- Total UNKNOWN Devices: {len(unknown_devices)}")
++        lines.append(f"- UNKNOWN Devices as % of Total: {unknown_percentage:.1f}%")
++        lines.append("")
++
++        lines.append("## UNKNOWN Devices by Vendor")
++        lines.append("")
++        vendor_counts = Counter(
++            self._display_value(device.vendor) for device in unknown_devices
++        )
++        for vendor, count in sorted(vendor_counts.items()):
++            lines.append(f"- {vendor}: {count}")
+         lines.append("")
+-        lines.append("# Device Inventory")
++
++        lines.append("## UNKNOWN Devices by Operating System (where known)")
+         lines.append("")
++        os_counts = Counter(
++            device.operating_system or "Not Determined" for device in unknown_devices
++        )
++        for operating_system, count in sorted(os_counts.items()):
++            lines.append(f"- {operating_system}: {count}")
++
++        return lines
++
++    # ------------------------------------------------------------------
++    # Per-device inventory: Identity, Evidence, Classification
++    # ------------------------------------------------------------------
++
++    def _render_device_inventory(
++        self,
++        project: Project,
++        classifier: DeviceClassifier,
++    ) -> list[str]:
++        """Render the redesigned per-device inventory, grouped by device type."""
++        lines: list[str] = ["# Device Inventory", ""]
+ 
+         inventory = self._group_devices_by_type(project)
+         for device_type, devices in sorted(
+@@ -61,19 +151,232 @@ class MarkdownExporter:
+             lines.append("---")
+             lines.append("")
+             for device in devices:
+-                lines.append(
+-                    f"### {self._display_title(device.hostname or device.ip_address or 'Unknown')}"
 -                )
- 
-+        if vendor and any(keyword in vendor for keyword in SUPPORTED_PRINTER_VENDOR_KEYWORDS):
-             return RuleResult(
--                matched=False,
-+                matched=True,
-                 confidence_contribution=0,
--                reason=(
--                    f"Vendor {raw_vendor!r} is not a known printer vendor and "
--                    "no printer networking protocols were detected."
--                ),
--                suggested_device_type=None,
-+                reason=f"Vendor {raw_vendor!r} matched known printer vendor.",
-+                suggested_device_type=DeviceType.PRINTER,
-             )
- 
--        if any(keyword in vendor for keyword in SUPPORTED_PRINTER_VENDOR_KEYWORDS):
-+        matched_product = self._find_printer_vendor_product(device)
-+        if matched_product is not None:
-             return RuleResult(
-                 matched=True,
-                 confidence_contribution=0,
--                reason=f"Vendor {raw_vendor!r} matched known printer vendor.",
-+                reason=(
-+                    f"Detected service product {matched_product!r} matched known "
-+                    "printer vendor identifier."
-+                ),
-                 suggested_device_type=DeviceType.PRINTER,
-             )
- 
-@@ -97,6 +91,17 @@ class PrinterVendorRule(ClassificationRule):
-             suggested_device_type=None,
-         )
- 
-+    def _find_printer_vendor_product(self, device: Device) -> str | None:
-+        """Return a service product string that names a known printer vendor, if any.
+-                lines.append(f"- IP Address: {self._display_value(device.ip_address)}")
+-                lines.append(f"- Hostname: {self._display_value(device.hostname)}")
+-                lines.append(f"- Vendor: {self._display_value(device.vendor)}")
+-                lines.append(
+-                    f"- Discovery Sources: {self._display_value(','.join(device.discovery_sources or []))}"
+-                )
++                lines.extend(self._render_device_section(device, classifier))
 +
-+        Nmap's IPP (port 631) service probe commonly returns the exact
-+        printer make/model as the product string (e.g. "HP LaserJet
-+        4250"), which is at least as strong an identifier as the vendor
-+        field and reuses the same trusted vendor keyword list rather than
-+        introducing a new fingerprint.
++        return lines
++
++    def _render_device_section(
++        self,
++        device: Device,
++        classifier: DeviceClassifier,
++    ) -> list[str]:
++        """Render one device's Identity, Evidence, and Classification blocks."""
++        lines: list[str] = []
++        lines.append(
++            f"### {self._display_title(device.hostname or device.ip_address or 'Unknown')}"
++        )
++        lines.append("")
++        lines.extend(self._render_identity(device))
++        lines.append("")
++        lines.extend(self._render_evidence(device))
++        lines.append("")
++        lines.extend(self._render_classification(device, classifier))
++        lines.append("")
++
++        return lines
++
++    def _render_identity(self, device: Device) -> list[str]:
++        """Render the Identity block: always-shown facts first, then the
++        three SMB/RDP-sourced fields only when present."""
++        lines = ["**Identity**", ""]
++        lines.append(f"- Device Type: {self._display_title(device.device_type)}")
++        lines.append(f"- IP Address: {self._display_value(device.ip_address)}")
++        lines.append(f"- Hostname: {self._display_value(device.hostname)}")
++        if device.computer_name:
++            lines.append(f"- Computer Name: {device.computer_name}")
++        if device.operating_system:
++            lines.append(f"- Operating System: {device.operating_system}")
++        if device.domain:
++            lines.append(f"- Domain: {device.domain}")
++        lines.append(f"- Vendor: {self._display_value(device.vendor)}")
++        lines.append(f"- MAC Address: {self._display_value(device.mac_address)}")
++        lines.append(
++            f"- Discovery Sources: {self._display_value(','.join(device.discovery_sources or []))}"
++        )
++
++        return lines
++
++    def _render_evidence(self, device: Device) -> list[str]:
++        """Render the Evidence block: per-service evidence grouped together
++        (per ADR-009, HTTP/TLS/auth-realm evidence is correlated to a
++        specific port, not device-wide), plus device-level SMB signing.
++        Omits fields with no collected value rather than showing "Unknown"
++        — an empty evidence line isn't evidence."""
++        lines = ["**Evidence**", ""]
++        has_content = False
++
++        if device.services:
++            has_content = True
++            lines.append("Services:")
++            for entry in device.services:
++                lines.append(f"- {self._format_service_summary(entry)}")
++                lines.extend(self._format_service_detail(entry))
++            if device.smb_signing:
+                 lines.append("")
+ 
++        if device.smb_signing:
++            has_content = True
++            lines.append(f"SMB Signing: {device.smb_signing}")
++
++        if not has_content:
++            lines.append("No additional evidence collected.")
++
++        return lines
++
++    def _format_service_summary(self, entry: ServiceEvidence) -> str:
++        """Render one service's port/protocol/service/product/version line."""
++        line = f"{entry.port}/{entry.protocol}"
++        if entry.service:
++            line += f" {entry.service}"
++        if entry.product:
++            product_display = entry.product
++            if entry.version:
++                product_display += f" {entry.version}"
++            line += f" ({product_display})"
++
++        return line
++
++    def _format_service_detail(self, entry: ServiceEvidence) -> list[str]:
++        """Render one service's identifier-tier evidence as indented sub-bullets."""
++        lines: list[str] = []
++        if entry.http_title:
++            lines.append(f"  - HTTP Title: {entry.http_title}")
++        if entry.tls_subject:
++            lines.append(f"  - TLS Subject: {entry.tls_subject}")
++        if entry.tls_issuer:
++            lines.append(f"  - TLS Issuer: {entry.tls_issuer}")
++        if entry.http_auth_realm:
++            lines.append(f"  - HTTP Authentication Realm: {entry.http_auth_realm}")
++
++        return lines
++
++    def _render_classification(
++        self,
++        device: Device,
++        classifier: DeviceClassifier,
++    ) -> list[str]:
++        """Render the Classification block: the single matching rule for a
++        classified device (concise, per REPORT-001 — do not list every
++        skipped rule), or every evaluated rule's reason for an UNKNOWN
++        device (there is no single winner to report, so "why no rule
++        matched" is the full breakdown)."""
++        lines = ["**Classification**", ""]
++        lines.append(f"Final Device Type: {self._display_title(device.device_type)}")
++        lines.append("")
++
++        rule_results, rule_names = self._evaluate_rules(device, classifier)
++
++        if device.device_type == DeviceType.UNKNOWN:
++            lines.append("No rule matched. Evaluated rules:")
++            for rule_name, result in zip(rule_names, rule_results):
++                lines.append(f"- {rule_name}: {result.reason}")
++            return lines
++
++        matching_rule_name, matching_result = self._matching_rule(rule_names, rule_results)
++        if matching_result is not None:
++            lines.append(f"Matching Rule: {matching_rule_name}")
++            lines.append(f"Reason: {matching_result.reason}")
++
++        return lines
++
++    def _evaluate_rules(
++        self,
++        device: Device,
++        classifier: DeviceClassifier,
++    ) -> tuple[tuple[RuleResult, ...], list[str]]:
++        """Classify a copy of the device and return the rule results and
++        rule names evaluated for it, without mutating the original device
++        or the project's stored classification."""
++        classifier.classify(replace(device))
++        rule_results = classifier.get_last_rule_results()
++        rule_names = [rule.__class__.__name__ for rule in classifier._rules]
++
++        return rule_results, rule_names[: len(rule_results)]
++
++    def _matching_rule(
++        self,
++        rule_names: list[str],
++        rule_results: tuple[RuleResult, ...],
++    ) -> tuple[str | None, RuleResult | None]:
++        """Return the name and result of the rule that matched, if any.
++
++        DeviceClassifier is first-match-wins and stops evaluating as soon
++        as a rule matches, so the last evaluated result is the matching
++        one whenever the device isn't UNKNOWN.
 +        """
-+        return first_matching_product(device.services, SUPPORTED_PRINTER_VENDOR_KEYWORDS)
++        if not rule_results:
++            return None, None
 +
-     def _find_printer_networking(self, device: Device) -> tuple[int | None, str | None]:
-         matched_port = first_matching_port(
-             service_ports(device.services),
-diff --git a/tests/test_cisco_switch_rule.py b/tests/test_cisco_switch_rule.py
-index 95f3e5f..c79f1af 100644
---- a/tests/test_cisco_switch_rule.py
-+++ b/tests/test_cisco_switch_rule.py
-@@ -67,6 +67,44 @@ class CiscoSwitchRuleTest(unittest.TestCase):
-             "Hostname 'switch-core-01' with open port 161 and service 'snmp' matched known switch management evidence.",
++        last_result = rule_results[-1]
++        if not last_result.matched:
++            return None, None
++
++        return rule_names[-1], last_result
++
++    # ------------------------------------------------------------------
++    # Appendices (new, REPORT-001)
++    # ------------------------------------------------------------------
++
++    def _render_appendices(self, project: Project, summary: ProjectSummary) -> list[str]:
++        """Render summary tables of already-known information: vendor
++        counts, service counts, and discovery evidence coverage."""
++        lines: list[str] = ["# Appendices", ""]
++
++        lines.append("## Vendor Counts")
++        lines.append("")
++        if not summary.vendor_counts:
++            lines.append("No vendor data collected.")
++        else:
++            for vendor, count in sorted(summary.vendor_counts.items()):
++                lines.append(f"- {vendor}: {count}")
++        lines.append("")
++
++        all_devices = project.network_graph.all_devices()
++        all_services = [entry for device in all_devices for entry in device.services]
++
++        lines.append("## Service Counts")
++        lines.append("")
++        service_counts = Counter(
++            entry.service for entry in all_services if entry.service
++        )
++        if not service_counts:
++            lines.append("No service data collected.")
++        else:
++            for service, count in sorted(service_counts.items()):
++                lines.append(f"- {service}: {count}")
++        lines.append("")
++
++        lines.append("## Discovery Evidence Coverage")
++        lines.append("")
++        total_devices = len(all_devices)
++        total_services = len(all_services)
++        device_field_counts = {
++            "Operating System": sum(1 for d in all_devices if d.operating_system),
++            "Computer Name": sum(1 for d in all_devices if d.computer_name),
++            "Domain": sum(1 for d in all_devices if d.domain),
++            "SMB Signing": sum(1 for d in all_devices if d.smb_signing),
++            "MAC Address": sum(1 for d in all_devices if d.mac_address),
++        }
++        for label, count in device_field_counts.items():
++            lines.append(f"- {label}: {count}/{total_devices} devices")
++
++        service_field_counts = {
++            "Product": sum(1 for e in all_services if e.product),
++            "Version": sum(1 for e in all_services if e.version),
++            "HTTP Title": sum(1 for e in all_services if e.http_title),
++            "TLS Subject": sum(1 for e in all_services if e.tls_subject),
++            "TLS Issuer": sum(1 for e in all_services if e.tls_issuer),
++            "HTTP Authentication Realm": sum(1 for e in all_services if e.http_auth_realm),
++        }
++        for label, count in service_field_counts.items():
++            lines.append(f"- {label}: {count}/{total_services} services")
++
+         return lines
+ 
++    # ------------------------------------------------------------------
++    # Shared helpers (retained from the prior report)
++    # ------------------------------------------------------------------
++
+     def _group_devices_by_type(self, project: Project) -> dict[DeviceType, list[Device]]:
+         """Group inventory devices by their device type for Markdown rendering."""
+         grouped_devices: dict[DeviceType, list[Device]] = defaultdict(list)
+diff --git a/tests/test_markdown_exporter.py b/tests/test_markdown_exporter.py
+index 55fe8ab..1e8ca1a 100644
+--- a/tests/test_markdown_exporter.py
++++ b/tests/test_markdown_exporter.py
+@@ -4,20 +4,39 @@ from datetime import datetime
+ from pathlib import Path
+ from unittest.mock import patch
+ 
+-from networkmapper.core.models import Device, DeviceType
++from networkmapper.classification.device_classifier import DeviceClassifier
++from networkmapper.core.models import Device, DeviceType, ServiceEvidence
+ from networkmapper.exporters.markdown_exporter import MarkdownExporter
+ from networkmapper.project.models import Project
+ from networkmapper.reporting.project_summary import ProjectSummary
+ 
+ 
+ class MarkdownExporterTest(unittest.TestCase):
+-    def test_export_creates_markdown_and_groups_devices_by_type(self):
+-        project = Project(
++    def _export(self, project: Project) -> str:
++        with tempfile.TemporaryDirectory() as temp_dir:
++            output_path = str(Path(temp_dir) / "project.md")
++            MarkdownExporter().export(project, output_path)
++            return Path(output_path).read_text(encoding="utf-8")
++
++    def _device_section(self, markdown: str, heading: str) -> str:
++        """Return the markdown slice for one device's "### {heading}" block,
++        from its heading up to (but not including) the next "### " heading
++        or end of document — independent of section/group ordering."""
++        start = markdown.index(f"### {heading}")
++        next_heading = markdown.find("### ", start + 1)
++        end = next_heading if next_heading != -1 else len(markdown)
++        return markdown[start:end]
++
++    def _project(self) -> Project:
++        return Project(
+             customer_name="Acme",
+             created_date=datetime(2026, 1, 1, 12, 0, 0),
+             modified_date=datetime(2026, 1, 2, 12, 0, 0),
          )
  
-+    def test_switch_hostname_with_management_signal_and_cisco_product_enriches_reason(self):
-+        device = Device(
-+            ip_address="192.168.1.44",
-+            hostname="switch-core-02",
-+            vendor="Unknown",
-+            services=[
-+                ServiceEvidence(port=22, protocol="tcp", service="ssh", product="Cisco SSH"),
-+            ],
++    def test_export_creates_markdown_and_groups_devices_by_type(self):
++        project = self._project()
++
+         project.network_graph.add_device(
+             Device(
+                 ip_address="192.168.1.10",
+@@ -65,17 +84,14 @@ class MarkdownExporterTest(unittest.TestCase):
+             discovered_networks=[],
+         )
+ 
+-        with tempfile.TemporaryDirectory() as temp_dir:
+-            output_path = str(Path(temp_dir) / "project.md")
+-            with patch.object(ProjectSummary, "from_project", return_value=fake_summary):
+-                MarkdownExporter().export(project, output_path)
+-
+-            self.assertTrue(Path(output_path).exists())
+-            markdown = Path(output_path).read_text(encoding="utf-8")
++        with patch.object(ProjectSummary, "from_project", return_value=fake_summary):
++            markdown = self._export(project)
+ 
+         self.assertIn("# Customer", markdown)
+         self.assertIn("# Executive Summary", markdown)
++        self.assertIn("# Classification Overview", markdown)
+         self.assertIn("# Device Inventory", markdown)
++        self.assertIn("# Appendices", markdown)
+         self.assertIn("## Servers", markdown)
+         self.assertIn("## Workstations", markdown)
+         self.assertIn("Total Devices", markdown)
+@@ -87,6 +103,236 @@ class MarkdownExporterTest(unittest.TestCase):
+         self.assertIn("### DC1", markdown)
+         self.assertIn("### Printer-01", markdown)
+ 
++    def test_classification_overview_reports_no_unknown_devices(self):
++        project = self._project()
++        classifier = DeviceClassifier()
++        project.network_graph.add_device(
++            classifier.classify(
++                Device(ip_address="10.0.0.5", hostname="dc-01", vendor="Unknown")
++            )
 +        )
 +
-+        result = CiscoSwitchRule().classify(device)
++        markdown = self._export(project)
 +
-+        self.assertIsInstance(result, RuleResult)
-+        self.assertTrue(result.matched)
-+        self.assertEqual(result.suggested_device_type, DeviceType.SWITCH)
-+        self.assertEqual(
-+            result.reason,
-+            "Hostname 'switch-core-02' with open port 22 and service 'ssh' matched "
-+            "known switch management evidence. Detected service product 'Cisco SSH' "
-+            "matched known Cisco product identifier.",
++        overview = markdown[
++            markdown.index("# Classification Overview") : markdown.index("# Device Inventory")
++        ]
++        self.assertIn("No UNKNOWN devices.", overview)
++
++    def test_classification_overview_summarizes_unknown_devices(self):
++        project = self._project()
++        classifier = DeviceClassifier()
++        project.network_graph.add_device(
++            classifier.classify(
++                Device(
++                    ip_address="10.0.0.6",
++                    hostname="mystery-01",
++                    vendor="Acme Corp",
++                    operating_system="10.0.14393",
++                )
++            )
++        )
++        project.network_graph.add_device(
++            classifier.classify(
++                Device(ip_address="10.0.0.7", hostname="mystery-02", vendor="Acme Corp")
++            )
 +        )
 +
-+    def test_switch_hostname_without_management_signal_does_not_match_on_product_alone(self):
-+        device = Device(
-+            ip_address="192.168.1.45",
-+            hostname="switch-core-03",
-+            vendor="Unknown",
-+            services=[
-+                ServiceEvidence(port=80, protocol="tcp", product="Cisco embedded httpd"),
-+            ],
++        markdown = self._export(project)
++
++        overview = markdown[
++            markdown.index("# Classification Overview") : markdown.index("# Device Inventory")
++        ]
++        self.assertIn("Total UNKNOWN Devices: 2", overview)
++        self.assertIn("UNKNOWN Devices as % of Total: 100.0%", overview)
++        self.assertIn("## UNKNOWN Devices by Vendor", overview)
++        self.assertIn("- Acme Corp: 2", overview)
++        self.assertIn("## UNKNOWN Devices by Operating System (where known)", overview)
++        self.assertIn("- 10.0.14393: 1", overview)
++        self.assertIn("- Not Determined: 1", overview)
++
++    def test_device_identity_omits_smb_fields_when_absent_and_shows_them_when_present(self):
++        project = self._project()
++        classifier = DeviceClassifier()
++        project.network_graph.add_device(
++            classifier.classify(
++                Device(
++                    ip_address="10.0.0.10",
++                    hostname="dc-02",
++                    mac_address="AA:BB:CC:DD:EE:02",
++                    vendor="Unknown",
++                    operating_system="Windows Server 2019 Standard 17763",
++                    computer_name="DC02",
++                    domain="corp.local",
++                )
++            )
++        )
++        project.network_graph.add_device(
++            classifier.classify(
++                Device(ip_address="10.0.0.11", hostname="printer-01", vendor="Brother")
++            )
 +        )
 +
-+        result = CiscoSwitchRule().classify(device)
++        markdown = self._export(project)
++        dc02_section = self._device_section(markdown, "dc-02")
++        printer_section = self._device_section(markdown, "printer-01")
 +
-+        self.assertIsInstance(result, RuleResult)
-+        self.assertFalse(result.matched)
-+        self.assertIsNone(result.suggested_device_type)
++        self.assertIn("- Device Type: Server", dc02_section)
++        self.assertIn("- IP Address: 10.0.0.10", dc02_section)
++        self.assertIn("- Computer Name: DC02", dc02_section)
++        self.assertIn("- Operating System: Windows Server 2019 Standard 17763", dc02_section)
++        self.assertIn("- Domain: corp.local", dc02_section)
++        self.assertIn("- MAC Address: AA:BB:CC:DD:EE:02", dc02_section)
++
++        self.assertNotIn("Computer Name:", printer_section)
++        self.assertNotIn("Operating System:", printer_section)
++        self.assertNotIn("Domain:", printer_section)
++
++    def test_device_evidence_renders_service_and_smb_signing_details(self):
++        project = self._project()
++        classifier = DeviceClassifier()
++        project.network_graph.add_device(
++            classifier.classify(
++                Device(
++                    ip_address="10.0.0.20",
++                    hostname="fw-01",
++                    vendor="Unknown",
++                    smb_signing="disabled (dangerous, but default)",
++                    services=[
++                        ServiceEvidence(
++                            port=443,
++                            protocol="tcp",
++                            service="https",
++                            product="SonicOS",
++                            version="7.0",
++                            http_title="SonicWALL - Network Security Appliance",
++                            tls_subject="commonName=SonicWALL",
++                            tls_issuer="commonName=SonicWALL",
++                            http_auth_realm="SonicWALL",
++                        ),
++                    ],
++                )
++            )
++        )
++
++        markdown = self._export(project)
++        section = markdown[markdown.index("### fw-01") :]
++
++        self.assertIn("**Evidence**", section)
++        self.assertIn("Services:", section)
++        self.assertIn("- 443/tcp https (SonicOS 7.0)", section)
++        self.assertIn("  - HTTP Title: SonicWALL - Network Security Appliance", section)
++        self.assertIn("  - TLS Subject: commonName=SonicWALL", section)
++        self.assertIn("  - TLS Issuer: commonName=SonicWALL", section)
++        self.assertIn("  - HTTP Authentication Realm: SonicWALL", section)
++        self.assertIn("SMB Signing: disabled (dangerous, but default)", section)
++        self.assertNotIn("No additional evidence collected.", section)
++
++    def test_device_evidence_reports_none_collected_when_empty(self):
++        project = self._project()
++        classifier = DeviceClassifier()
++        project.network_graph.add_device(
++            classifier.classify(
++                Device(ip_address="10.0.0.30", hostname="host-30", vendor="Unknown")
++            )
++        )
++
++        markdown = self._export(project)
++        section = markdown[markdown.index("### host-30") :]
++
++        self.assertIn("No additional evidence collected.", section)
++        self.assertNotIn("Services:", section)
++
++    def test_classified_device_shows_only_the_matching_rule(self):
++        project = self._project()
++        classifier = DeviceClassifier()
++        project.network_graph.add_device(
++            classifier.classify(
++                Device(ip_address="10.0.0.40", hostname="dc-03", vendor="Unknown")
++            )
++        )
++
++        markdown = self._export(project)
++        section = markdown[markdown.index("### dc-03") :]
++
++        self.assertIn("**Classification**", section)
++        self.assertIn("Final Device Type: Server", section)
++        self.assertIn("Matching Rule: ServerHostnameRule", section)
++        self.assertIn(
++            "Reason: Hostname 'dc-03' matched known server naming convention.", section
++        )
++        self.assertNotIn("Evaluated rules:", section)
++        self.assertNotIn("HypervisorHostnameRule", section)
++
++    def test_unknown_device_shows_every_evaluated_rules_reason(self):
++        project = self._project()
++        classifier = DeviceClassifier()
++        project.network_graph.add_device(
++            classifier.classify(
++                Device(ip_address="10.0.0.50", hostname="mystery-03", vendor="Unknown")
++            )
++        )
++
++        markdown = self._export(project)
++        section = markdown[markdown.index("### mystery-03") :]
++
++        self.assertIn("Final Device Type: Unknown", section)
++        self.assertIn("No rule matched. Evaluated rules:", section)
++        self.assertIn("- ServerHostnameRule:", section)
++        self.assertIn("- HypervisorHostnameRule:", section)
++        self.assertIn("- DellWorkstationRule:", section)
++        self.assertNotIn("Matching Rule:", section)
++
++    def test_appendices_render_vendor_service_and_coverage_summaries(self):
++        project = self._project()
++        classifier = DeviceClassifier()
++        project.network_graph.add_device(
++            classifier.classify(
++                Device(
++                    ip_address="10.0.0.60",
++                    hostname="dc-04",
++                    vendor="Dell",
++                    operating_system="Windows Server 2019 Standard 17763",
++                    services=[
++                        ServiceEvidence(port=445, protocol="tcp", service="microsoft-ds"),
++                        ServiceEvidence(
++                            port=443,
++                            protocol="tcp",
++                            service="https",
++                            product="Apache httpd",
++                            version="2.4.41",
++                        ),
++                    ],
++                )
++            )
++        )
++
++        markdown = self._export(project)
++        appendices = markdown[markdown.index("# Appendices") :]
++
++        self.assertIn("## Vendor Counts", appendices)
++        self.assertIn("- Dell: 1", appendices)
++        self.assertIn("## Service Counts", appendices)
++        self.assertIn("- https: 1", appendices)
++        self.assertIn("- microsoft-ds: 1", appendices)
++        self.assertIn("## Discovery Evidence Coverage", appendices)
++        self.assertIn("- Operating System: 1/1 devices", appendices)
++        self.assertIn("- Product: 1/2 services", appendices)
++        self.assertIn("- Version: 1/2 services", appendices)
++
++    def test_appendices_handle_empty_vendor_and_service_data(self):
++        project = self._project()
++        classifier = DeviceClassifier()
++        project.network_graph.add_device(
++            classifier.classify(Device(ip_address="10.0.0.70", hostname="host-70"))
++        )
++
++        markdown = self._export(project)
++        appendices = markdown[markdown.index("# Appendices") :]
++
++        self.assertIn("No vendor data collected.", appendices)
++        self.assertIn("No service data collected.", appendices)
 +
  
  if __name__ == "__main__":
      unittest.main()
-\ No newline at end of file
-diff --git a/tests/test_devtools_validate.py b/tests/test_devtools_validate.py
-index 1fc3ffc..757105a 100644
---- a/tests/test_devtools_validate.py
-+++ b/tests/test_devtools_validate.py
-@@ -23,7 +23,7 @@ class FastValidationBackwardCompatibilityTest(unittest.TestCase):
-     def test_run_validation_still_covers_exactly_the_standard_regression_tests(self):
-         result = run_validation()
- 
--        self.assertEqual(result.tests_run, 75)
-+        self.assertEqual(result.tests_run, 83)
-         self.assertTrue(result.passed)
-         self.assertEqual(result.exit_code, 0)
- 
-diff --git a/tests/test_hypervisor_hostname_rule.py b/tests/test_hypervisor_hostname_rule.py
-index 9c98dd7..7fc4f9b 100644
---- a/tests/test_hypervisor_hostname_rule.py
-+++ b/tests/test_hypervisor_hostname_rule.py
-@@ -212,6 +212,72 @@ class HypervisorHostnameRuleTest(unittest.TestCase):
-             "matched known hypervisor evidence.",
-         )
- 
-+    def test_hostname_match_with_vmware_product_enriches_reason(self):
-+        device = Device(
-+            ip_address="192.168.1.72",
-+            hostname="esxi-03",
-+            vendor="Unknown",
-+            services=[
-+                ServiceEvidence(
-+                    port=443,
-+                    protocol="tcp",
-+                    service="https",
-+                    product="VMware ESXi Server httpd",
-+                ),
-+            ],
-+        )
-+
-+        result = HypervisorHostnameRule().classify(device)
-+
-+        self.assertTrue(result.matched)
-+        self.assertEqual(result.suggested_device_type, DeviceType.HYPERVISOR)
-+        self.assertEqual(
-+            result.reason,
-+            "Hostname 'esxi-03' with open port 443 and service 'https' "
-+            "matched known hypervisor evidence. Detected service product "
-+            "'VMware ESXi Server httpd' matched known hypervisor product identifier.",
-+        )
-+
-+    def test_hostname_match_with_vmware_product_and_no_port_or_service_signal(self):
-+        device = Device(
-+            ip_address="192.168.1.73",
-+            hostname="esxi-04",
-+            vendor="Unknown",
-+            services=[
-+                ServiceEvidence(port=8443, protocol="tcp", product="VMware vCenter Server"),
-+            ],
-+        )
-+
-+        result = HypervisorHostnameRule().classify(device)
-+
-+        self.assertTrue(result.matched)
-+        self.assertEqual(result.suggested_device_type, DeviceType.HYPERVISOR)
-+        self.assertEqual(
-+            result.reason,
-+            "Hostname 'esxi-04' matched known hypervisor naming convention. "
-+            "Detected service product 'VMware vCenter Server' matched known "
-+            "hypervisor product identifier.",
-+        )
-+
-+    def test_hostname_match_without_vmware_product_is_unaffected(self):
-+        device = Device(
-+            ip_address="192.168.1.74",
-+            hostname="esxi-05",
-+            vendor="Unknown",
-+            services=[
-+                ServiceEvidence(port=443, protocol="tcp", service="https", product="nginx"),
-+            ],
-+        )
-+
-+        result = HypervisorHostnameRule().classify(device)
-+
-+        self.assertTrue(result.matched)
-+        self.assertEqual(
-+            result.reason,
-+            "Hostname 'esxi-05' with open port 443 and service 'https' "
-+            "matched known hypervisor evidence.",
-+        )
-+
- 
- if __name__ == "__main__":
-     unittest.main()
-\ No newline at end of file
-diff --git a/tests/test_printer_vendor_rule.py b/tests/test_printer_vendor_rule.py
-index 78151f7..81d673d 100644
---- a/tests/test_printer_vendor_rule.py
-+++ b/tests/test_printer_vendor_rule.py
-@@ -147,6 +147,81 @@ class PrinterVendorRuleTest(unittest.TestCase):
-             "Detected IPP service indicates printer networking.",
-         )
- 
-+    def test_printer_product_classifies_without_vendor_or_networking_match(self):
-+        device = Device(
-+            ip_address="192.168.1.18",
-+            vendor=None,
-+            services=[
-+                ServiceEvidence(
-+                    port=631,
-+                    protocol="tcp",
-+                    service="ipp",
-+                    product="HP LaserJet 4250",
-+                ),
-+            ],
-+        )
-+
-+        result = self.rule.classify(device)
-+
-+        self.assertIsInstance(result, RuleResult)
-+        self.assertTrue(result.matched)
-+        self.assertEqual(result.suggested_device_type, DeviceType.PRINTER)
-+        self.assertEqual(
-+            result.reason,
-+            "Detected service product 'HP LaserJet 4250' matched known printer "
-+            "vendor identifier.",
-+        )
-+
-+    def test_printer_product_takes_precedence_over_networking_only_signal(self):
-+        device = Device(
-+            ip_address="192.168.1.19",
-+            vendor="Unknown",
-+            services=[
-+                ServiceEvidence(
-+                    port=9100,
-+                    protocol="tcp",
-+                    service="jetdirect",
-+                    product="Brother HL-L2350DW series",
-+                ),
-+            ],
-+        )
-+
-+        result = self.rule.classify(device)
-+
-+        self.assertIsInstance(result, RuleResult)
-+        self.assertTrue(result.matched)
-+        self.assertEqual(result.suggested_device_type, DeviceType.PRINTER)
-+        self.assertEqual(
-+            result.reason,
-+            "Detected service product 'Brother HL-L2350DW series' matched known "
-+            "printer vendor identifier.",
-+        )
-+
-+    def test_non_printer_product_falls_back_to_networking_signal(self):
-+        device = Device(
-+            ip_address="192.168.1.20",
-+            vendor=None,
-+            services=[
-+                ServiceEvidence(
-+                    port=9100,
-+                    protocol="tcp",
-+                    service="jetdirect",
-+                    product="Generic Print Server",
-+                ),
-+            ],
-+        )
-+
-+        result = self.rule.classify(device)
-+
-+        self.assertIsInstance(result, RuleResult)
-+        self.assertTrue(result.matched)
-+        self.assertEqual(result.suggested_device_type, DeviceType.PRINTER)
-+        self.assertEqual(
-+            result.reason,
-+            "Open TCP port 9100 (JetDirect) indicates printer networking. "
-+            "Detected JETDIRECT service indicates printer networking.",
-+        )
-+
- 
- if __name__ == "__main__":
-     unittest.main()
-\ No newline at end of file
