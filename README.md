@@ -198,16 +198,17 @@ See **ROADMAP.md** for upcoming milestones.
 
 # Planned Features
 
-- Automatic network discovery
-- Nmap-based host detection
-- Device identification
-- Network relationship mapping
+- Full network relationship mapping (beyond today's inventory-level NetworkGraph)
 - Draw.io topology generation
-- Device inventory export
-- Change detection between scans
+- Change detection between runs
 - Professional documentation package generation
-- Offline operation
 - Portable Windows executable
+
+See **ROADMAP.md** for the complete, current backlog. The list above is a
+short summary, not a duplicate source of truth — automatic discovery, Nmap
+host detection, device inventory export, and offline operation already
+appear under **Current Capabilities** above and are intentionally not
+repeated here.
 
 ---
 
@@ -235,6 +236,9 @@ NetworkMapper is designed for:
 | docs/classification-rules.md | Classification rule reference |
 | docs/DEPENDENCIES.md | Project dependencies |
 | docs/field-notes.md | Real-world networking observations |
+| docs/knowledge/ | Knowledge Framework — how field observations mature into benchmarks and classification rules |
+| docs/process/ | Engineering Handbook — sprint lifecycle, roles, stop conditions, validation workflow |
+| docs/reports/ | Investigation and implementation reports (historical) |
 
 ---
 
