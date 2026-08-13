@@ -62,6 +62,7 @@ Vendor Knowledge is corroborated operational experience — deployment character
 
 - [FIELD-OBSERVATIONS.md](./FIELD-OBSERVATIONS.md) — the canonical observation format, with worked examples.
 - [OBSERVATION-TEMPLATE.md](./OBSERVATION-TEMPLATE.md) — a reusable template for recording new observations.
+- [OBSERVATION-REPOSITORY.md](./OBSERVATION-REPOSITORY.md) — the structured JSON repository (`knowledge/observations/`) for raw, per-device field evidence that underlies FIELD-OBSERVATIONS.md's curated patterns.
 - [KNOWLEDGE-LIFECYCLE.md](./KNOWLEDGE-LIFECYCLE.md) — how an observation matures into knowledge, benchmarks, classification, validation, and architecture review.
 - [vendors/README.md](./vendors/README.md) — what Vendor Knowledge is and how it relates to Field Observations.
 - [vendors/VENDOR-TEMPLATE.md](./vendors/VENDOR-TEMPLATE.md) — a reusable template for future vendor documents.

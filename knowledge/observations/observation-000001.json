@@ -1,0 +1,66 @@
+{
+  "schema_version": 1,
+  "observation_id": 1,
+  "status": "VALIDATED",
+  "captured_at": "2026-07-18T09:42:11",
+  "network": {
+    "name": "Riverside Manufacturing"
+  },
+  "scan": {
+    "profile": "standard",
+    "networkmapper_version": "0.4.0"
+  },
+  "device": {
+    "ip": "192.168.10.55",
+    "hostname": "AP9631",
+    "vendor": "APC",
+    "mac_address": "00:C0:B7:4E:19:2A"
+  },
+  "evidence": {
+    "operating_system": null,
+    "computer_name": null,
+    "domain": null,
+    "smb_signing": null,
+    "discovery_sources": [
+      "nmap"
+    ],
+    "services": [
+      {
+        "port": 80,
+        "protocol": "tcp",
+        "service": "http",
+        "product": null,
+        "version": null,
+        "http_title": "APC Network Management Card AOS v6.9.6",
+        "tls_subject": null,
+        "tls_issuer": null,
+        "http_auth_realm": "Network Management Card"
+      },
+      {
+        "port": 443,
+        "protocol": "tcp",
+        "service": "https",
+        "product": null,
+        "version": null,
+        "http_title": null,
+        "tls_subject": "CN=AP9631",
+        "tls_issuer": "CN=AP9631",
+        "http_auth_realm": null
+      }
+    ]
+  },
+  "classification": {
+    "type": "unknown",
+    "reason": "No rule matched.",
+    "matched_rule": null
+  },
+  "technician_notes": "Found in the UPS closet, on the same switch as the rack PDUs. This is an APC Network Management Card - the network interface built into a rack-mount UPS - not a general-purpose server or appliance. Hostname and HTTP title are factory defaults, not customer-assigned.",
+  "review_history": [
+    {
+      "reviewed_at": "2026-07-25T14:00:00",
+      "action": "VALIDATED",
+      "notes": "Confirmed APC network management interface.",
+      "reference": null
+    }
+  ]
+}
