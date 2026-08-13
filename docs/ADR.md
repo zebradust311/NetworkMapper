@@ -491,3 +491,165 @@ Each of the above belongs to FEAT-003C and, per
 [ENGINEERING.md](../ENGINEERING.md), any further architectural questions
 it surfaces should stop and report rather than be resolved silently
 mid-implementation.
+
+---
+
+## ADR-010 — Enrichment Providers Operate on Already-Discovered Devices
+
+**Status:** Accepted
+
+### Context
+
+ARCH-012 (SNMP Provider Architecture) evaluated how to integrate SNMP as
+NetworkMapper's first evidence source that is structurally unlike Nmap.
+ARCH-003/BENCH-002 had already established that SNMP's highest-value
+evidence (`sysDescr`/`sysObjectID`) is only useful as enrichment of hosts
+another source already found — SNMP has no host-discovery role of its
+own.
+
+`DiscoveryProvider`
+([networkmapper/discovery/provider.py](../networkmapper/discovery/provider.py))
+defines exactly one method, `discover(self) -> list[Device]`, with no
+input. Every implementation is expected to be fully self-contained: it
+decides what to scan, scans it, and returns finished `Device` objects.
+`DiscoveryEngine`
+([networkmapper/discovery/discovery_engine.py](../networkmapper/discovery/discovery_engine.py))
+concatenates every provider's returned devices into one flat list before
+classifying and inserting each into `NetworkGraph`. `NetworkGraph.add_device`
+([networkmapper/core/network_graph.py](../networkmapper/core/network_graph.py))
+is a first-write-wins keyed dict.
+
+This composes safely today only because exactly one `DiscoveryProvider`
+(`NmapProvider`) is ever registered. `NmapProvider` itself already
+contains, privately, the exact shape SNMP needs: `_discover_with_enrichment()`
+builds an IP-keyed `devices_by_ip` dict from its own host-discovery
+phase, then writes enrichment evidence (`services`, `operating_system`,
+`computer_name`, `domain`, `smb_signing`) into those same objects by
+IP — a merge pattern scoped privately inside one class rather than a
+capability `DiscoveryEngine` understands. Adding SNMP as a second,
+independent `DiscoveryProvider` would not be safe: a `Device` it
+produced for an IP `NmapProvider` already found would either silently
+overwrite that device's evidence or be silently dropped by
+`NetworkGraph.add_device`, depending on registration order, with no
+merge logic anywhere to prevent either outcome.
+
+### Decision
+
+NetworkMapper distinguishes two provider roles: `DiscoveryProvider`
+(unchanged — finds hosts and returns `Device` objects) and a new
+`EnrichmentProvider`, which receives the already-discovered device set
+and adds evidence to it in place. An `EnrichmentProvider`:
+
+- never introduces a `Device` for an IP not already present in the set
+  it was given, and never removes one — it has no host-discovery role,
+  structurally, not by convention;
+- merges evidence field-by-field, fallback-only — an `EnrichmentProvider`
+  never overwrites a field another source already populated, only fills
+  fields left empty, generalizing the precedent `NmapProvider` already
+  established internally for its SMB/RDP identity merge
+  ([networkmapper/discovery/nmap_provider.py:266-284](../networkmapper/discovery/nmap_provider.py));
+- must never raise out of its enrichment call for an expected per-device
+  failure (a timeout, a malformed response, a missing credential) — a
+  failure for one device must degrade to "no additional evidence for
+  this device" and must not affect any other device or stop the run;
+- is optional purely by construction: it is simply absent from
+  `DiscoveryEngine`'s enrichment-provider list when its prerequisites
+  (e.g. credentials) are not supplied, the same "safe no-op when nothing
+  is wired up" pattern `RuntimeEventBus` already uses for subscribers
+  with no subscribers.
+
+`DiscoveryEngine.discover()` runs every registered `DiscoveryProvider`
+first and deduplicates their combined output by IP, then runs every
+registered `EnrichmentProvider` against that already-built device set,
+then classifies. This is an ordering change to shared orchestration
+code, not a behavior change for the existing single-provider case —
+`NmapProvider` and its internal two-phase enrichment are unaffected.
+
+This decision establishes the representational and orchestration
+principle only. It does not itself implement `EnrichmentProvider`, SNMP,
+or any change to `NmapProvider` — see ARCH-012's Implementation
+Sequence.
+
+### Alternatives Considered
+
+**Extend `DiscoveryProvider.discover()` to accept an optional
+already-discovered device list as input** (e.g. `discover(self,
+known_devices: list[Device] | None = None)`). Rejected: this forces
+every `DiscoveryProvider` implementation, including `NmapProvider`, to
+carry a parameter only some implementations use, and does not by itself
+solve the merge-by-IP problem — a provider given `known_devices` would
+still need to implement the same fallback-merge logic ARCH-012 requires,
+just without a distinct type to signal that this provider's contract is
+fundamentally different from a host-discovery provider's.
+
+**Bundle SNMP into `NmapProvider` itself**, as another argument/script
+addition the way NSE scripts are added today. Rejected: SNMP is a
+different transport and technology (UDP/community-string/SNMP PDU
+encoding via a dedicated client, not an Nmap NSE script), with its own
+credential, timeout, retry, and failure-diagnosis model. Folding it into
+`NmapProvider` would couple two unrelated collection technologies inside
+one class and work against the sprint's explicit goal that
+"SNMP-specific objects must not leak into classification or reporting."
+
+**Do nothing — register SNMP as a second, independent
+`DiscoveryProvider`.** Rejected for the reasons in Context: no merge
+logic exists to prevent silent evidence loss or overwrite when two
+providers produce a `Device` for the same IP.
+
+### Rationale
+
+- This decision does not modify ADR-001 (Two-Phase STANDARD Discovery).
+  It generalizes the same "discovery before enrichment" ordering
+  ADR-001 already established for Nmap's two internal phases to the
+  provider-orchestration level, for enrichment sources external to any
+  single provider.
+- This decision extends, without modifying, ADR-008 (Discovery is
+  Immutable, Interpretation is Adjustable). ADR-008's immutability
+  principle concerns a recorded observation across scans — a rescan
+  creates a new observation rather than silently overwriting a prior
+  one. It does not restrict a single run's own evidence-gathering
+  pipeline from writing into a `Device` incrementally as different
+  sources contribute, which is already how `NmapProvider`'s own two
+  phases behave today.
+- This decision extends, without modifying, ADR-009 (Per-Service
+  Discovery Evidence Is a Correlated Record). ADR-009 settled how
+  per-service evidence is represented once collected; this ADR settles
+  a distinct question — how a source that only enriches, and never
+  discovers, participates in the collection pipeline that produces the
+  `Device` objects ADR-009's records live on.
+- The fallback-only merge rule is not new — it generalizes a pattern
+  `NmapProvider` already uses for SMB/RDP identity evidence to any
+  future `EnrichmentProvider`, rather than each future enrichment source
+  re-deriving or inconsistently resolving the same precedence question.
+
+### Consequences
+
+- `EnrichmentProvider` is a new abstract class alongside
+  `DiscoveryProvider`; `DiscoveryEngine` gains a second, optional
+  provider collection and a second orchestration phase between
+  discovery and classification.
+- `DiscoveryEngine.discover()`'s internal device-collection step now
+  deduplicates by IP before classification, closing a latent gap that
+  existed only in principle until now: today, with a single registered
+  `DiscoveryProvider`, two providers producing a `Device` for the same
+  IP was not a case that could occur.
+- SNMP (ARCH-012) becomes the first concrete `EnrichmentProvider`. Any
+  future non-Nmap evidence source that only adds evidence to
+  already-discovered hosts (rather than finding hosts itself) follows
+  this same pattern rather than each proposing its own merge strategy.
+- Nothing about `DiscoveryProvider`, `NmapProvider`'s scan behavior, or
+  any classification rule changes as a result of this decision.
+
+### Future Work
+
+The following are explicitly deferred and are not authorized by this
+ADR:
+
+- The concrete `EnrichmentProvider` implementation, SNMP or otherwise —
+  scoped to ARCH-012's Implementation Sequence (FEAT-005).
+- Any credential-handling mechanism, telemetry phase, or failure-model
+  detail specific to SNMP — see ARCH-012 for those decisions.
+- Whether `EnrichmentProvider`s should ever run concurrently with each
+  other or with `DiscoveryProvider`s — ARCH-012 recommends serial
+  execution for SNMP's first implementation, deferring concurrency
+  pending measurement.

@@ -183,7 +183,7 @@ Focus shifts from building heuristics to improving them using benchmark data.
 
 ### Discovery Providers
 
-- ⬜ SNMP enrichment
+- ⬜ SNMP enrichment (architected — ARCH-012/ADR-010; implementation not started)
 - ⬜ LLDP discovery
 - ⬜ CDP discovery
 - ⬜ ARP enrichment
@@ -347,9 +347,23 @@ of which discovery path produced it.
 
 Per ARCH-003's roadmap, this completes Tiers 1–3 (the passive
 HTTP/TLS/SMB/RDP identity work). Tier 4 (SNMP `sysDescr`/`sysObjectID`)
-is the next candidate but is blocked on confirming and fixing the `-sU`
-UDP scanning gap first (see ARCH-003 Section 2.7) — not yet actionable
-as its own clean sprint.
+was the next candidate, previously blocked on confirming and fixing the
+`-sU` UDP scanning gap first (see ARCH-003 Section 2.7).
+
+ARCH-012 (SNMP Provider Architecture) is complete and approved. It found
+SNMP needs a provider role the existing `DiscoveryProvider` contract
+can't safely express (enrichment of already-discovered hosts, not host
+discovery), and recommended a new `EnrichmentProvider` abstraction —
+formalized as ADR-010. Scope for the first implementation is
+SNMPv2c-only, the MIB-2 system group (`sysDescr`/`sysObjectID`/`sysName`/
+`sysUpTime`/`sysContact`/`sysLocation`), explicit opt-in (not bundled
+into FAST/STANDARD/DEEP), and runtime-only credentials never persisted
+to reports, projects, or the knowledge repository. SNMPv3 and interface/
+topology evidence are explicitly deferred to later, independently
+reviewed sprints. Next sprint: FEAT-005 (`EnrichmentProvider` +
+`SnmpEnrichmentProvider` per ARCH-012) — see ARCH-012's Open Questions
+for what still needs deciding before implementation starts (notably,
+which SNMP client library to standardize on).
 
 See `docs/reports/` for recent investigation and implementation history.
 
