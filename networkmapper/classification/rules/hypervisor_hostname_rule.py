@@ -45,6 +45,12 @@ HYPERVISOR_CORROBORATING_SERVICES = {"https", "ms-wbt-server"}
 # subject. All of this is treated as additional corroboration text only,
 # never as an independent match trigger, since HYPERVISOR_HOSTNAME_KEYWORDS
 # remains the sole match gate.
+#
+# RULE-004: also checked against SNMP `sysDescr` (via `first_matching_
+# identifier`'s optional `snmp_sys_descr` parameter) -- an ESXi host's SNMP
+# agent commonly reports "VMware ESXi" in its own sysDescr, the same
+# corroboration-only role its product string/HTTP title/TLS
+# subject/HTTP auth realm already play here.
 HYPERVISOR_PRODUCT_KEYWORDS = {"vmware"}
 
 # smb-os-discovery (FEAT-003H) can corroborate a Hyper-V hostname match:
@@ -81,7 +87,11 @@ class HypervisorHostnameRule(ClassificationRule):
             HYPERVISOR_CORROBORATING_SERVICES,
             return_lower=True,
         )
-        matched_identifier = first_matching_identifier(device.services, HYPERVISOR_PRODUCT_KEYWORDS)
+        matched_identifier = first_matching_identifier(
+            device.services,
+            HYPERVISOR_PRODUCT_KEYWORDS,
+            snmp_sys_descr=device.snmp_sys_descr,
+        )
         raw_operating_system = device.operating_system
         operating_system = normalize_operating_system(raw_operating_system)
         matched_operating_system = (

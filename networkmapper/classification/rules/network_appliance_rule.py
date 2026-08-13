@@ -36,6 +36,12 @@ from networkmapper.core.models import Device, DeviceType
 # on. Vendor and hostname are used only as corroboration text once the
 # identifier itself has already matched (below), never as an
 # alternative trigger.
+#
+# RULE-004: also checked against SNMP `sysDescr` (via `first_matching_
+# identifier`'s optional `snmp_sys_descr` parameter) -- a ReadyNAS
+# device's own SNMP self-description plausibly names the same product
+# line its HTTP evidence already does; this is the same identifier
+# evidence BENCH-002 corroborated, just from a second source.
 NETWORK_APPLIANCE_IDENTIFIER_KEYWORDS = {"readynas"}
 
 NETWORK_APPLIANCE_VENDOR_KEYWORDS = {"netgear"}
@@ -58,7 +64,9 @@ class NetworkApplianceRule(ClassificationRule):
     def classify(self, device: Device) -> RuleResult:
         """Return a rule result for NAS/network-appliance identifier matching evidence."""
         matched_identifier = first_matching_identifier(
-            device.services, NETWORK_APPLIANCE_IDENTIFIER_KEYWORDS
+            device.services,
+            NETWORK_APPLIANCE_IDENTIFIER_KEYWORDS,
+            snmp_sys_descr=device.snmp_sys_descr,
         )
 
         if matched_identifier is None:

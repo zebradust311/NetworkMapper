@@ -185,6 +185,54 @@ class SonicWallFirewallRuleTest(unittest.TestCase):
             "firewall vendor identifier.",
         )
 
+    def test_snmp_sys_descr_identifies_firewall_without_vendor_or_hostname_match(self):
+        """RULE-004: SNMP sysDescr participates in the same identifier tier
+        as HTTP title/TLS certificate/HTTP auth realm."""
+        device = Device(
+            ip_address="192.168.1.40",
+            hostname="fw-08",
+            vendor="Unknown",
+            snmp_sys_descr="SonicWALL TZ370 SonicOS 7.0.1",
+        )
+
+        result = SonicWallFirewallRule().classify(device)
+
+        self.assertIsInstance(result, RuleResult)
+        self.assertTrue(result.matched)
+        self.assertEqual(result.suggested_device_type, DeviceType.FIREWALL)
+        self.assertEqual(
+            result.reason,
+            "Detected SNMP sysDescr 'SonicWALL TZ370 SonicOS 7.0.1' matched "
+            "known firewall vendor identifier.",
+        )
+
+    def test_snmp_sys_descr_is_checked_after_service_evidence(self):
+        device = Device(
+            ip_address="192.168.1.41",
+            hostname="fw-09",
+            vendor="Unknown",
+            services=[
+                ServiceEvidence(
+                    port=443,
+                    protocol="tcp",
+                    service="https",
+                    http_title="SonicWALL - Network Security Appliance",
+                ),
+            ],
+            snmp_sys_descr="SonicWALL TZ370 SonicOS 7.0.1",
+        )
+
+        result = SonicWallFirewallRule().classify(device)
+
+        self.assertIsInstance(result, RuleResult)
+        self.assertTrue(result.matched)
+        self.assertEqual(result.suggested_device_type, DeviceType.FIREWALL)
+        self.assertEqual(
+            result.reason,
+            "Detected HTTP title 'SonicWALL - Network Security Appliance' "
+            "matched known firewall vendor identifier.",
+        )
+
     def test_unrelated_http_title_does_not_match(self):
         device = Device(
             ip_address="192.168.1.38",

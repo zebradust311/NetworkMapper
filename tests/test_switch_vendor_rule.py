@@ -174,6 +174,67 @@ class SwitchVendorRuleTest(unittest.TestCase):
             "Detected HTTP title 'ProCurve Switch 2810-24G' matched known switch identifier.",
         )
 
+    def test_procurve_snmp_sys_descr_classifies_as_switch_without_vendor_or_hostname(self):
+        """RULE-004: SNMP sysDescr participates in the same identifier tier
+        as product string/HTTP title, using the existing switch identifier
+        keyword list."""
+        device = Device(
+            ip_address="192.168.1.50",
+            hostname=None,
+            vendor="Hewlett-Packard",
+            snmp_sys_descr="HP ProCurve Switch 2530-24G",
+        )
+
+        result = SwitchVendorRule().classify(device)
+
+        self.assertIsInstance(result, RuleResult)
+        self.assertTrue(result.matched)
+        self.assertEqual(result.suggested_device_type, DeviceType.SWITCH)
+        self.assertEqual(
+            result.reason,
+            "Detected SNMP sysDescr 'HP ProCurve Switch 2530-24G' matched known "
+            "switch identifier.",
+        )
+
+    def test_snmp_sys_descr_is_checked_after_service_evidence(self):
+        """When both a service-derived identifier and SNMP sysDescr are
+        present, the service-derived one is preferred for the reported
+        label, consistent with "SNMP evidence corroborates, it does not
+        override" (RULE-004)."""
+        device = Device(
+            ip_address="192.168.1.51",
+            hostname=None,
+            vendor="Ubiquiti",
+            services=[
+                ServiceEvidence(port=80, protocol="tcp", http_title="Ubiquiti EdgeSwitch"),
+            ],
+            snmp_sys_descr="EdgeSwitch 24-Lite, 6.2.9",
+        )
+
+        result = SwitchVendorRule().classify(device)
+
+        self.assertIsInstance(result, RuleResult)
+        self.assertTrue(result.matched)
+        self.assertEqual(result.suggested_device_type, DeviceType.SWITCH)
+        self.assertEqual(
+            result.reason,
+            "Detected HTTP title 'Ubiquiti EdgeSwitch' matched known switch identifier.",
+        )
+
+    def test_unrelated_snmp_sys_descr_does_not_match(self):
+        device = Device(
+            ip_address="192.168.1.52",
+            hostname="host-01",
+            vendor="Unknown",
+            snmp_sys_descr="Linux host-01 5.15.0 x86_64",
+        )
+
+        result = SwitchVendorRule().classify(device)
+
+        self.assertIsInstance(result, RuleResult)
+        self.assertFalse(result.matched)
+        self.assertIsNone(result.suggested_device_type)
+
     def test_hp_vendor_without_switch_identifier_does_not_match(self):
         device = Device(
             ip_address="192.168.1.49",

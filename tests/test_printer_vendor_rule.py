@@ -245,6 +245,53 @@ class PrinterVendorRuleTest(unittest.TestCase):
             "known printer vendor identifier.",
         )
 
+    def test_snmp_sys_descr_classifies_without_vendor_or_networking_match(self):
+        """RULE-004: SNMP sysDescr participates in the same identifier tier
+        as product string/HTTP title/HTTP auth realm, per ARCH-012's own
+        "HP LaserJet 4250, Firmware..." example sysDescr."""
+        device = Device(
+            ip_address="192.168.1.23",
+            vendor=None,
+            snmp_sys_descr="HP LaserJet 4250, Firmware Version: 08.061.3",
+        )
+
+        result = self.rule.classify(device)
+
+        self.assertIsInstance(result, RuleResult)
+        self.assertTrue(result.matched)
+        self.assertEqual(result.suggested_device_type, DeviceType.PRINTER)
+        self.assertEqual(
+            result.reason,
+            "Detected SNMP sysDescr 'HP LaserJet 4250, Firmware Version: "
+            "08.061.3' matched known printer vendor identifier.",
+        )
+
+    def test_snmp_sys_descr_is_checked_after_service_evidence(self):
+        device = Device(
+            ip_address="192.168.1.24",
+            vendor=None,
+            services=[
+                ServiceEvidence(
+                    port=631,
+                    protocol="tcp",
+                    service="ipp",
+                    product="Brother HL-L2350DW series",
+                ),
+            ],
+            snmp_sys_descr="HP LaserJet 4250, Firmware Version: 08.061.3",
+        )
+
+        result = self.rule.classify(device)
+
+        self.assertIsInstance(result, RuleResult)
+        self.assertTrue(result.matched)
+        self.assertEqual(result.suggested_device_type, DeviceType.PRINTER)
+        self.assertEqual(
+            result.reason,
+            "Detected service product 'Brother HL-L2350DW series' matched known "
+            "printer vendor identifier.",
+        )
+
     def test_non_printer_product_falls_back_to_networking_signal(self):
         device = Device(
             ip_address="192.168.1.20",

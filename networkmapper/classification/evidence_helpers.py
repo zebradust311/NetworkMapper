@@ -67,10 +67,22 @@ def first_containing(
 def first_matching_identifier(
     services: Sequence[ServiceEvidence],
     candidate_keywords: Collection[str],
+    *,
+    snmp_sys_descr: str | None = None,
 ) -> tuple[str, str] | None:
-    """Search product, HTTP title, TLS certificate subject/issuer, and HTTP
-    authentication realm, in that order, for the first value containing any
-    candidate keyword.
+    """Search product, HTTP title, TLS certificate subject/issuer, HTTP
+    authentication realm, and (if supplied) SNMP `sysDescr`, in that order,
+    for the first value containing any candidate keyword.
+
+    `snmp_sys_descr` is optional and checked last, after every Nmap-derived
+    evidence type: per RULE-004's evidence-hierarchy principle, SNMP
+    evidence corroborates rather than takes precedence, so when a service-
+    derived identifier is also present it is preferred for the returned
+    label. Passing `device.snmp_sys_descr` lets a device's SNMP self-
+    description (e.g. "HP LaserJet 4250, Firmware...", "Cisco IOS Software,
+    C2960...", per ARCH-012) participate in the same already-vetted
+    per-rule keyword lists this helper's callers already use, rather than
+    introducing a separate SNMP-specific matching path.
 
     Returns a (label, value) pair naming which evidence type matched, so
     callers can produce an accurate reason string instead of assuming the
@@ -82,6 +94,7 @@ def first_matching_identifier(
         ("TLS certificate subject", service_tls_subjects(services)),
         ("TLS certificate issuer", service_tls_issuers(services)),
         ("HTTP authentication realm", service_http_auth_realms(services)),
+        ("SNMP sysDescr", [snmp_sys_descr]),
     )
     for label, values in checks:
         match = first_containing(values, candidate_keywords)

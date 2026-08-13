@@ -152,6 +152,43 @@ class NetworkApplianceRuleTest(unittest.TestCase):
 
         self.assertFalse(result.matched)
 
+    def test_snmp_sys_descr_alone_classifies_as_server(self):
+        """RULE-004: SNMP sysDescr participates in the same identifier tier
+        as product string/HTTP title/HTTP auth realm."""
+        device = Device(
+            ip_address="172.16.100.28",
+            vendor=None,
+            hostname=None,
+            snmp_sys_descr="ReadyNAS 214, ReadyNASOS 6.10.8",
+        )
+
+        result = self.rule.classify(device)
+
+        self.assertIsInstance(result, RuleResult)
+        self.assertTrue(result.matched)
+        self.assertEqual(result.suggested_device_type, DeviceType.SERVER)
+        self.assertEqual(
+            result.reason,
+            "Detected SNMP sysDescr 'ReadyNAS 214, ReadyNASOS 6.10.8' matched "
+            "known NAS/network appliance identifier.",
+        )
+
+    def test_snmp_sys_descr_is_checked_after_service_evidence(self):
+        device = Device(
+            ip_address="172.16.100.29",
+            services=[ServiceEvidence(port=80, protocol="tcp", http_auth_realm="NETGEAR ReadyNAS")],
+            snmp_sys_descr="ReadyNAS 214, ReadyNASOS 6.10.8",
+        )
+
+        result = self.rule.classify(device)
+
+        self.assertTrue(result.matched)
+        self.assertEqual(
+            result.reason,
+            "Detected HTTP authentication realm 'NETGEAR ReadyNAS' matched known "
+            "NAS/network appliance identifier.",
+        )
+
     def test_no_evidence_at_all_does_not_match(self):
         device = Device(ip_address="172.16.100.27")
 

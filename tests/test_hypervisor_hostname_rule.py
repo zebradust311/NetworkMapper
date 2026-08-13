@@ -364,6 +364,45 @@ class HypervisorHostnameRuleTest(unittest.TestCase):
             "Hostname 'esxi-09' matched known hypervisor naming convention.",
         )
 
+    def test_hostname_match_with_vmware_snmp_sys_descr_enriches_reason(self):
+        """RULE-004: SNMP sysDescr corroborates the same way product
+        string/HTTP title/TLS subject/HTTP auth realm already do -- gated
+        behind the hostname match, never an independent trigger."""
+        device = Device(
+            ip_address="192.168.1.80",
+            hostname="esxi-10",
+            vendor="Unknown",
+            snmp_sys_descr="VMware ESXi 7.0.3 build-19193900",
+        )
+
+        result = HypervisorHostnameRule().classify(device)
+
+        self.assertTrue(result.matched)
+        self.assertEqual(result.suggested_device_type, DeviceType.HYPERVISOR)
+        self.assertEqual(
+            result.reason,
+            "Hostname 'esxi-10' matched known hypervisor naming convention. "
+            "Detected SNMP sysDescr 'VMware ESXi 7.0.3 build-19193900' matched "
+            "known hypervisor product identifier.",
+        )
+
+    def test_vmware_snmp_sys_descr_without_hostname_match_does_not_trigger(self):
+        """SNMP sysDescr is corroboration-only for this rule: it must never
+        independently trigger a HYPERVISOR match without a qualifying
+        hostname, unlike SwitchVendorRule/PrinterVendorRule/
+        SonicWallFirewallRule/NetworkApplianceRule's identifier tier."""
+        device = Device(
+            ip_address="192.168.1.81",
+            hostname="host-02",
+            vendor="Unknown",
+            snmp_sys_descr="VMware ESXi 7.0.3 build-19193900",
+        )
+
+        result = HypervisorHostnameRule().classify(device)
+
+        self.assertFalse(result.matched)
+        self.assertIsNone(result.suggested_device_type)
+
     def test_hostname_match_with_vmware_tls_subject_enriches_reason(self):
         device = Device(
             ip_address="192.168.1.76",

@@ -101,8 +101,19 @@ class PrinterVendorRule(ClassificationRule):
         make/model in their page title (FEAT-003F). Both reuse the same
         trusted vendor keyword list rather than introducing a new
         fingerprint.
+
+        RULE-004: a printer's SNMP `sysDescr` is checked against this same
+        keyword list too (via `first_matching_identifier`'s optional
+        `snmp_sys_descr` parameter). ARCH-012 cites "HP LaserJet 4250,
+        Firmware..." as a realistic printer `sysDescr` -- the same
+        make/model text this rule already trusts from a product string or
+        HTTP title, just reported over SNMP instead.
         """
-        return first_matching_identifier(device.services, SUPPORTED_PRINTER_VENDOR_KEYWORDS)
+        return first_matching_identifier(
+            device.services,
+            SUPPORTED_PRINTER_VENDOR_KEYWORDS,
+            snmp_sys_descr=device.snmp_sys_descr,
+        )
 
     def _find_printer_networking(self, device: Device) -> tuple[int | None, str | None]:
         matched_port = first_matching_port(

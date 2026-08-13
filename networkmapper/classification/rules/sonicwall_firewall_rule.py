@@ -25,6 +25,12 @@ FIREWALL_MANAGEMENT_SERVICES = {"https", "ssl/http"}
 # this is treated as an independent match tier rather than mere
 # corroboration, consistent with PrinterVendorRule's product-tier
 # precedent (FEAT-003D).
+#
+# RULE-004: also checked against SNMP `sysDescr` (via `first_matching_
+# identifier`'s optional `snmp_sys_descr` parameter) -- a SonicWall
+# appliance's own SNMP self-description names its own brand the same way
+# its management UI title/certificate already does, so this is the same
+# identifier evidence, just from a second source.
 FIREWALL_IDENTIFIER_KEYWORDS = {"sonicwall"}
 
 
@@ -44,7 +50,11 @@ class SonicWallFirewallRule(ClassificationRule):
                 suggested_device_type=DeviceType.FIREWALL,
             )
 
-        matched_identifier = first_matching_identifier(device.services, FIREWALL_IDENTIFIER_KEYWORDS)
+        matched_identifier = first_matching_identifier(
+            device.services,
+            FIREWALL_IDENTIFIER_KEYWORDS,
+            snmp_sys_descr=device.snmp_sys_descr,
+        )
         if matched_identifier is not None:
             label, value = matched_identifier
             return RuleResult(

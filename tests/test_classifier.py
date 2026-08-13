@@ -174,6 +174,36 @@ class DeviceClassifierTest(unittest.TestCase):
 
         self.assertEqual(result.device_type, DeviceType.UNKNOWN)
 
+    def test_snmp_only_procurve_sys_descr_classifies_as_switch_not_unknown(self):
+        """RULE-004: a device with no vendor, hostname, or service evidence
+        -- previously UNKNOWN -- now resolves via SNMP sysDescr alone,
+        using the classifier's existing switch identifier keyword list."""
+        device = Device(
+            ip_address="192.168.1.68",
+            hostname=None,
+            vendor=None,
+            snmp_sys_descr="HP ProCurve Switch 2530-24G",
+        )
+
+        result = DeviceClassifier().classify(device)
+
+        self.assertEqual(result.device_type, DeviceType.SWITCH)
+
+    def test_snmp_only_generic_sys_descr_remains_unknown(self):
+        """Guards against over-reach: SNMP evidence that doesn't match any
+        rule's existing, already-vetted keyword list must not manufacture a
+        classification."""
+        device = Device(
+            ip_address="192.168.1.69",
+            hostname=None,
+            vendor=None,
+            snmp_sys_descr="Linux 5.15.0-generic #1 SMP x86_64 GNU/Linux",
+        )
+
+        result = DeviceClassifier().classify(device)
+
+        self.assertEqual(result.device_type, DeviceType.UNKNOWN)
+
     def test_bench_002_generic_web_app_title_remains_unknown(self):
         """BENCH-002's web-app-01 device (a generic internal web app HTTP
         title with no vendor signal) was deliberately left UNKNOWN, not
@@ -311,6 +341,36 @@ class EvidenceHelpersTest(unittest.TestCase):
 
     def test_first_matching_identifier_returns_none_when_no_evidence_matches(self):
         services = [ServiceEvidence(port=80, protocol="tcp", product="nginx", http_title="Welcome")]
+        self.assertIsNone(first_matching_identifier(services, {"sonicwall"}))
+
+    def test_first_matching_identifier_falls_back_to_snmp_sys_descr(self):
+        """RULE-004: SNMP sysDescr is checked last, after every
+        service-derived evidence type, when no service evidence matches."""
+        services = [ServiceEvidence(port=80, protocol="tcp", product="nginx")]
+        self.assertEqual(
+            first_matching_identifier(
+                services,
+                {"sonicwall"},
+                snmp_sys_descr="SonicWALL TZ370 SonicOS 7.0.1",
+            ),
+            ("SNMP sysDescr", "SonicWALL TZ370 SonicOS 7.0.1"),
+        )
+
+    def test_first_matching_identifier_prefers_service_evidence_over_snmp_sys_descr(self):
+        services = [ServiceEvidence(port=443, protocol="tcp", http_title="SonicWALL Login")]
+        self.assertEqual(
+            first_matching_identifier(
+                services,
+                {"sonicwall"},
+                snmp_sys_descr="SonicWALL TZ370 SonicOS 7.0.1",
+            ),
+            ("HTTP title", "SonicWALL Login"),
+        )
+
+    def test_first_matching_identifier_ignores_snmp_sys_descr_when_not_supplied(self):
+        """Default behavior for every pre-existing caller is unchanged: a
+        None snmp_sys_descr (the default) contributes no match."""
+        services = [ServiceEvidence(port=80, protocol="tcp", product="nginx")]
         self.assertIsNone(first_matching_identifier(services, {"sonicwall"}))
 
 

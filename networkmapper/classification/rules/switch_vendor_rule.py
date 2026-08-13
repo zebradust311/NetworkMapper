@@ -43,6 +43,21 @@ SWITCH_PRODUCT_KEYWORDS = {"cisco"}
 # "EdgeSwitch" the same way, but neither vendor string alone is an
 # unambiguous switch indicator (HP also makes printers; Ubiquiti also makes
 # access points), so a plain vendor keyword can't safely cover them.
+#
+# RULE-004: also checked against SNMP `sysDescr` (via `first_matching_
+# identifier`'s optional `snmp_sys_descr` parameter), since both keywords
+# are literal product-line names a switch's own SNMP self-description
+# would plausibly contain (e.g. a ProCurve switch's sysDescr commonly
+# starts with "ProCurve..."). Deliberately not extended with a bare
+# "cisco" keyword here even though ARCH-012 cites "Cisco IOS Software,
+# C2960..." as a realistic sysDescr example: unlike "procurve"/
+# "edgeswitch", "cisco" alone is not switch-specific text (Cisco also
+# makes phones, APs, and firewalls) and VoiceVendorRule does not consume
+# sysDescr for its own phone identification, so a bare substring match
+# here could misclassify a Cisco device of another type before a more
+# specific rule ever sees it. The existing vendor-field "cisco" check
+# below carries the same ambiguity but is pre-existing, evidence-accepted
+# behavior; RULE-004 does not extend that same risk into a second field.
 SWITCH_IDENTIFIER_KEYWORDS = {"procurve", "edgeswitch"}
 
 
@@ -62,7 +77,11 @@ class SwitchVendorRule(ClassificationRule):
                 suggested_device_type=DeviceType.SWITCH,
             )
 
-        matched_identifier = first_matching_identifier(device.services, SWITCH_IDENTIFIER_KEYWORDS)
+        matched_identifier = first_matching_identifier(
+            device.services,
+            SWITCH_IDENTIFIER_KEYWORDS,
+            snmp_sys_descr=device.snmp_sys_descr,
+        )
         if matched_identifier is not None:
             label, value = matched_identifier
             return RuleResult(
