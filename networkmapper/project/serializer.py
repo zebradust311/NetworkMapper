@@ -29,6 +29,11 @@ class ProjectSerializer:
                     "computer_name": device.computer_name,
                     "domain": device.domain,
                     "smb_signing": device.smb_signing,
+                    "snmp_sys_descr": device.snmp_sys_descr,
+                    "snmp_sys_object_id": device.snmp_sys_object_id,
+                    "snmp_sys_uptime": device.snmp_sys_uptime,
+                    "snmp_sys_contact": device.snmp_sys_contact,
+                    "snmp_sys_location": device.snmp_sys_location,
                     "services": [
                         {
                             "port": entry.port,
@@ -76,6 +81,11 @@ class ProjectSerializer:
                 computer_name=device_payload.get("computer_name"),
                 domain=device_payload.get("domain"),
                 smb_signing=device_payload.get("smb_signing"),
+                snmp_sys_descr=device_payload.get("snmp_sys_descr"),
+                snmp_sys_object_id=device_payload.get("snmp_sys_object_id"),
+                snmp_sys_uptime=device_payload.get("snmp_sys_uptime"),
+                snmp_sys_contact=device_payload.get("snmp_sys_contact"),
+                snmp_sys_location=device_payload.get("snmp_sys_location"),
                 services=[
                     ServiceEvidence(
                         port=entry["port"],

@@ -2,6 +2,7 @@ import unittest
 
 from networkmapper.core.models import Device, DeviceType
 from networkmapper.discovery.discovery_engine import DiscoveryEngine
+from networkmapper.discovery.enrichment_provider import EnrichmentProvider
 from networkmapper.discovery.provider import DiscoveryProvider
 from networkmapper.runtime.events import RuntimeEvent, RuntimeEventBus, RuntimeEventKind, RuntimePhase
 
@@ -12,6 +13,23 @@ class _StubProvider(DiscoveryProvider):
 
     def discover(self) -> list[Device]:
         return self._devices
+
+
+class _StubEnrichmentProvider(EnrichmentProvider):
+    def __init__(self, evidence_by_ip: dict[str, str] | None = None, raises: bool = False) -> None:
+        self._evidence_by_ip = evidence_by_ip or {}
+        self._raises = raises
+        self.seen_ips: list[str] = []
+
+    def enrich(self, devices) -> None:
+        if self._raises:
+            raise RuntimeError("enrichment provider defect")
+
+        for device in devices:
+            self.seen_ips.append(device.ip_address)
+            evidence = self._evidence_by_ip.get(device.ip_address)
+            if evidence is not None:
+                device.snmp_sys_descr = evidence
 
 
 class DiscoveryEngineTest(unittest.TestCase):
@@ -91,6 +109,51 @@ class DiscoveryEngineTest(unittest.TestCase):
         graph = engine.discover()
 
         self.assertEqual(list(graph.all_devices()), [])
+
+    def test_duplicate_ip_across_discovery_providers_is_deduplicated(self):
+        engine = DiscoveryEngine(
+            [
+                _StubProvider([Device(ip_address="10.0.0.1", hostname="first")]),
+                _StubProvider([Device(ip_address="10.0.0.1", hostname="second")]),
+            ]
+        )
+
+        graph = engine.discover()
+
+        devices = graph.all_devices()
+        self.assertEqual(len(devices), 1)
+        self.assertEqual(devices[0].hostname, "first")
+
+    def test_enrichment_provider_adds_evidence_before_classification(self):
+        enrichment = _StubEnrichmentProvider({"10.0.0.1": "Linux appliance"})
+        engine = DiscoveryEngine(
+            [_StubProvider([Device(ip_address="10.0.0.1")])],
+            enrichment_providers=[enrichment],
+        )
+
+        graph = engine.discover()
+
+        self.assertEqual(enrichment.seen_ips, ["10.0.0.1"])
+        self.assertEqual(graph.get_device("10.0.0.1").snmp_sys_descr, "Linux appliance")
+
+    def test_absent_enrichment_providers_do_not_change_existing_behavior(self):
+        engine = DiscoveryEngine([_StubProvider([Device(ip_address="10.0.0.1", hostname="dc-01", vendor="Cisco")])])
+
+        graph = engine.discover()
+
+        self.assertEqual(len(graph.all_devices()), 1)
+
+    def test_enrichment_provider_exception_does_not_abort_discovery(self):
+        engine = DiscoveryEngine(
+            [_StubProvider([Device(ip_address="10.0.0.1", hostname="dc-01", vendor="Cisco")])],
+            enrichment_providers=[_StubEnrichmentProvider(raises=True)],
+        )
+
+        graph = engine.discover()
+
+        devices = graph.all_devices()
+        self.assertEqual(len(devices), 1)
+        self.assertEqual(devices[0].device_type, DeviceType.SERVER)
 
 
 if __name__ == "__main__":

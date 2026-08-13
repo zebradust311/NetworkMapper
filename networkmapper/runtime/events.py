@@ -17,6 +17,7 @@ class RuntimePhase(StrEnum):
     APPLICATION_STARTUP = "Application Startup"
     HOST_DISCOVERY = "Host Discovery"
     SERVICE_ENRICHMENT = "Service Enrichment"
+    SNMP_ENRICHMENT = "SNMP Enrichment"
     CLASSIFICATION = "Classification"
     REPORT_GENERATION = "Report Generation"
     COMPLETION = "Completion"

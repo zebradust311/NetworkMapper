@@ -69,6 +69,27 @@ class Device:
         smb_signing: The SMB message-signing posture, if known (e.g. "disabled
             (dangerous, but default)"). Recorded as evidence for future
             security/compliance reporting; not currently used in classification.
+        snmp_sys_descr: The SNMP `sysDescr` value, if known (ARCH-012/ADR-010).
+            A device's free-text self-description (e.g. "Cisco IOS Software,
+            C2960 Software..."). Deliberately not merged into
+            `operating_system`, which means an installed OS caption for
+            general-purpose compute populated only by SMB/RDP identity
+            negotiation — a switch or printer's `sysDescr` is a device
+            description, not an operating system.
+        snmp_sys_object_id: The SNMP `sysObjectID` value, if known
+            (ARCH-012/ADR-010). A vendor-registered enterprise OID
+            identifying the device, stored verbatim as a dotted numeric
+            string. The highest-value SNMP evidence field per
+            ARCH-003/BENCH-002.
+        snmp_sys_uptime: The SNMP `sysUpTime` value, if known
+            (ARCH-012/ADR-010). Informational only; no classification
+            consumer.
+        snmp_sys_contact: The SNMP `sysContact` value, if known
+            (ARCH-012/ADR-010). Administrator-entered free text; no
+            classification consumer.
+        snmp_sys_location: The SNMP `sysLocation` value, if known
+            (ARCH-012/ADR-010). Administrator-entered free text; no
+            classification consumer.
         services: The correlated per-port discovery evidence observed for the device.
         device_type: The inferred device type, if known.
         discovery_sources: The discovery methods or providers that found the device.
@@ -82,6 +103,11 @@ class Device:
     computer_name: Optional[str] = None
     domain: Optional[str] = None
     smb_signing: Optional[str] = None
+    snmp_sys_descr: Optional[str] = None
+    snmp_sys_object_id: Optional[str] = None
+    snmp_sys_uptime: Optional[str] = None
+    snmp_sys_contact: Optional[str] = None
+    snmp_sys_location: Optional[str] = None
     services: list[ServiceEvidence] = field(default_factory=list)
     device_type: DeviceType = DeviceType.UNKNOWN
     discovery_sources: list[str] = field(default_factory=list)

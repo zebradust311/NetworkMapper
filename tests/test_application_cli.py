@@ -1,13 +1,15 @@
 import io
+import os
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest.mock import ANY, patch
 
-from networkmapper.application import Application
+from networkmapper.application import Application, SNMP_COMMUNITY_ENV_VAR
 from networkmapper.discovery.run_diagnostics import HostDiagnostics, RunDiagnostics, ScanPhase
 from networkmapper.discovery.scan_profile import ScanProfile
+from networkmapper.discovery.snmp_diagnostics import SnmpRunDiagnostics
 from networkmapper.reporting.report_run import ReportRunPaths
 
 
@@ -41,10 +43,20 @@ def _default_run_diagnostics(scan_profile: ScanProfile) -> RunDiagnostics:
 
 
 class ApplicationCliTest(unittest.TestCase):
-    def _run_application(self, argv: list[str], run_diagnostics: RunDiagnostics | None = None):
+    def _run_application(
+        self,
+        argv: list[str],
+        run_diagnostics: RunDiagnostics | None = None,
+        snmp_run_diagnostics: SnmpRunDiagnostics | None = None,
+        env: dict[str, str] | None = None,
+    ):
         with patch("networkmapper.application.DiscoveryEngine") as discovery_engine_mock, patch(
             "networkmapper.application.NmapProvider"
-        ) as provider_mock, patch("networkmapper.application.CsvExporter") as csv_exporter_mock, patch(
+        ) as provider_mock, patch(
+            "networkmapper.application.SnmpEnrichmentProvider"
+        ) as snmp_provider_mock, patch(
+            "networkmapper.application.CsvExporter"
+        ) as csv_exporter_mock, patch(
             "networkmapper.application.MarkdownExporter"
         ) as markdown_exporter_mock, patch(
             "networkmapper.application.ProjectSerializer"
@@ -52,13 +64,16 @@ class ApplicationCliTest(unittest.TestCase):
             "networkmapper.application.ClassificationWorkbench"
         ) as workbench_mock, patch(
             "networkmapper.application.build_report_run_paths"
-        ) as report_run_paths_mock, patch("sys.argv", argv):
+        ) as report_run_paths_mock, patch("sys.argv", argv), patch.dict(
+            os.environ, env or {}, clear=False
+        ):
             graph = type("Graph", (), {"device_count": lambda self: 1, "all_devices": lambda self: []})()
             discovery_engine_mock.return_value.discover.return_value = graph
             serializer_mock.load.return_value.network_graph.device_count.return_value = 1
             provider_mock.return_value.run_diagnostics = run_diagnostics or _default_run_diagnostics(
                 ScanProfile.FAST
             )
+            snmp_provider_mock.return_value.run_diagnostics = snmp_run_diagnostics
             report_run_paths_mock.return_value = _fake_report_run_paths()
 
             stdout = io.StringIO()
@@ -68,6 +83,8 @@ class ApplicationCliTest(unittest.TestCase):
 
         return {
             "provider_mock": provider_mock,
+            "snmp_provider_mock": snmp_provider_mock,
+            "discovery_engine_mock": discovery_engine_mock,
             "csv_exporter_mock": csv_exporter_mock,
             "markdown_exporter_mock": markdown_exporter_mock,
             "workbench_mock": workbench_mock,
@@ -380,6 +397,66 @@ class ApplicationCliTest(unittest.TestCase):
         )
 
         self.assertIn("- Host Discovery (-sn) — unknown", result["stdout"])
+
+    def test_snmp_flag_absent_by_default(self):
+        result = self._run_application(["networkmapper"])
+
+        result["snmp_provider_mock"].assert_not_called()
+        engine_call = result["discovery_engine_mock"].call_args
+        self.assertEqual(engine_call.kwargs["enrichment_providers"], ())
+
+    def test_snmp_flag_without_community_env_var_exits_with_non_zero_code(self):
+        with patch("networkmapper.application.DiscoveryEngine"), patch(
+            "networkmapper.application.NmapProvider"
+        ) as provider_mock, patch("sys.argv", ["networkmapper", "--snmp"]), patch.dict(
+            os.environ, {}, clear=False
+        ):
+            os.environ.pop(SNMP_COMMUNITY_ENV_VAR, None)
+            provider_mock.return_value.run_diagnostics = _default_run_diagnostics(ScanProfile.FAST)
+
+            stdout = io.StringIO()
+            stderr = io.StringIO()
+            with redirect_stdout(stdout), redirect_stderr(stderr):
+                with self.assertRaises(SystemExit) as context:
+                    Application().run()
+
+        self.assertNotEqual(context.exception.code, 0)
+        self.assertIn(SNMP_COMMUNITY_ENV_VAR, stderr.getvalue())
+
+    def test_snmp_flag_with_community_env_var_enables_snmp_enrichment(self):
+        result = self._run_application(
+            ["networkmapper", "--snmp"],
+            env={SNMP_COMMUNITY_ENV_VAR: "s3cr3t-community"},
+            snmp_run_diagnostics=SnmpRunDiagnostics(
+                hosts_eligible=2,
+                hosts_queried=2,
+                hosts_responded=1,
+                hosts_timed_out=1,
+                version="v2c",
+            ),
+        )
+
+        result["snmp_provider_mock"].assert_called_once()
+        credentials = result["snmp_provider_mock"].call_args.args[0]
+        self.assertEqual(credentials.community, "s3cr3t-community")
+
+        engine_call = result["discovery_engine_mock"].call_args
+        self.assertEqual(
+            engine_call.kwargs["enrichment_providers"],
+            [result["snmp_provider_mock"].return_value],
+        )
+
+        stdout = result["stdout"]
+        self.assertIn("SNMP Diagnostics", stdout)
+        self.assertIn("Hosts Eligible: 2", stdout)
+        self.assertIn("Hosts Responded: 1", stdout)
+        self.assertIn("Hosts Timed Out: 1", stdout)
+        self.assertNotIn("s3cr3t-community", stdout)
+
+    def test_snmp_flag_absent_prints_no_snmp_diagnostics(self):
+        result = self._run_application(["networkmapper"])
+
+        self.assertNotIn("SNMP Diagnostics", result["stdout"])
 
 
 if __name__ == "__main__":

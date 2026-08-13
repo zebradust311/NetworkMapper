@@ -4,6 +4,7 @@ Main application controller for NetworkMapper.
 
 
 import argparse
+import os
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -13,6 +14,9 @@ from networkmapper.discovery.discovery_engine import DiscoveryEngine
 from networkmapper.discovery.nmap_provider import NmapProvider
 from networkmapper.discovery.run_diagnostics import RunDiagnostics, profile_message
 from networkmapper.discovery.scan_profile import ScanProfile
+from networkmapper.discovery.snmp_credentials import SnmpCredentials, SnmpVersion
+from networkmapper.discovery.snmp_diagnostics import SnmpRunDiagnostics
+from networkmapper.discovery.snmp_provider import SnmpEnrichmentProvider
 from networkmapper.project.models import Project
 from networkmapper.project.serializer import ProjectSerializer
 from networkmapper.exporters.csv_exporter import CsvExporter
@@ -27,6 +31,11 @@ from networkmapper.runtime.events import (
     RuntimePhase,
 )
 from networkmapper.runtime.telemetry import RuntimeTelemetryRecorder
+
+# ARCH-012 Credential Strategy: the community string is supplied via an
+# environment variable, never a CLI argument (shell-history/process-list
+# exposure) and never a config file (nothing here is persisted).
+SNMP_COMMUNITY_ENV_VAR = "NETWORKMAPPER_SNMP_COMMUNITY"
 
 
 class Application:
@@ -54,6 +63,7 @@ class Application:
         parser = argparse.ArgumentParser(add_help=False)
         parser.add_argument("--workbench", action="store_true")
         parser.add_argument("--scan-profile", default="fast")
+        parser.add_argument("--snmp", action="store_true")
         args, _ = parser.parse_known_args()
 
         scan_profile = self._parse_scan_profile(args.scan_profile)
@@ -68,12 +78,26 @@ class Application:
         provider = NmapProvider(
             "172.16.100.0/24", scan_profile=scan_profile, event_bus=event_bus
         )
-        engine = DiscoveryEngine([provider], event_bus=event_bus)
+
+        snmp_provider = None
+        if args.snmp:
+            snmp_provider = SnmpEnrichmentProvider(
+                self._resolve_snmp_credentials(), event_bus=event_bus
+            )
+
+        engine = DiscoveryEngine(
+            [provider],
+            enrichment_providers=[snmp_provider] if snmp_provider is not None else (),
+            event_bus=event_bus,
+        )
 
         graph = engine.discover()
 
         if provider.run_diagnostics is not None:
             self._print_discovery_diagnostics(scan_profile, provider.run_diagnostics)
+
+        if snmp_provider is not None and snmp_provider.run_diagnostics is not None:
+            self._print_snmp_diagnostics(snmp_provider.run_diagnostics)
 
         before_save_count = graph.device_count()
         print("\nClassification Summary")
@@ -261,6 +285,43 @@ class Application:
                 for reason in diagnostics.missing_evidence_reasons:
                     print(f"  - {reason}")
             print()
+
+    def _resolve_snmp_credentials(self) -> SnmpCredentials:
+        """Resolve SNMP credentials from the environment when `--snmp` is passed.
+
+        ARCH-012 Credential Strategy / Failure Model: `--snmp` without a
+        resolvable credential is an operator configuration error, not a
+        per-host SNMP failure — it fails fast at startup rather than
+        silently skipping SNMP enrichment for the whole run.
+        """
+        community = os.environ.get(SNMP_COMMUNITY_ENV_VAR)
+        if not community:
+            print(
+                f"Error: --snmp requires the {SNMP_COMMUNITY_ENV_VAR} "
+                "environment variable to be set.",
+                file=sys.stderr,
+            )
+            raise SystemExit(2)
+
+        return SnmpCredentials(version=SnmpVersion.V2C, community=community)
+
+    def _print_snmp_diagnostics(self, snmp_diagnostics: SnmpRunDiagnostics) -> None:
+        """Print run-level SNMP observability data: hard, directly measured
+        counts only — no fabricated percentages or ETAs (OBS-002)."""
+        print("SNMP Diagnostics")
+        print("-" * 40)
+        print(f"SNMP Version: {snmp_diagnostics.version}")
+        print(f"Hosts Eligible: {snmp_diagnostics.hosts_eligible}")
+        print(f"Hosts Queried: {snmp_diagnostics.hosts_queried}")
+        print(f"Hosts Responded: {snmp_diagnostics.hosts_responded}")
+        print(f"Hosts Timed Out: {snmp_diagnostics.hosts_timed_out}")
+        if snmp_diagnostics.hosts_timed_out:
+            print(
+                "Note: SNMPv2c cannot distinguish an incorrect community "
+                "string from SNMP being disabled or the host being "
+                "unreachable on UDP/161 — all three appear as a timeout."
+            )
+        print()
 
     def _parse_scan_profile(self, value: str) -> ScanProfile:
         """Parse CLI scan profile value into a ScanProfile enum."""

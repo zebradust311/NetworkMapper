@@ -102,6 +102,42 @@ class ProjectSerializerTest(unittest.TestCase):
         self.assertEqual(loaded_device.domain, "corp.local")
         self.assertEqual(loaded_device.smb_signing, "disabled (dangerous, but default)")
 
+    def test_save_and_load_round_trips_snmp_system_group_evidence(self):
+        project = Project(
+            customer_name="Acme",
+            created_date=datetime(2026, 1, 1, 12, 0, 0),
+            modified_date=datetime(2026, 1, 2, 12, 0, 0),
+        )
+        project.network_graph.add_device(
+            Device(
+                ip_address="10.0.0.40",
+                hostname="sw-core-01",
+                vendor="Cisco",
+                snmp_sys_descr="Cisco IOS Software, C2960",
+                snmp_sys_object_id="1.3.6.1.4.1.9.1.516",
+                snmp_sys_uptime="12345",
+                snmp_sys_contact="netops@example.com",
+                snmp_sys_location="Server Room A",
+                device_type=DeviceType.SWITCH,
+                discovery_sources=["nmap", "snmp"],
+            )
+        )
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            file_path = Path(temp_dir) / "project.json"
+            ProjectSerializer.save(project, str(file_path))
+            loaded_project = ProjectSerializer.load(str(file_path))
+
+        loaded_device = loaded_project.network_graph.get_device("10.0.0.40")
+
+        self.assertIsNotNone(loaded_device)
+        self.assertEqual(loaded_device.snmp_sys_descr, "Cisco IOS Software, C2960")
+        self.assertEqual(loaded_device.snmp_sys_object_id, "1.3.6.1.4.1.9.1.516")
+        self.assertEqual(loaded_device.snmp_sys_uptime, "12345")
+        self.assertEqual(loaded_device.snmp_sys_contact, "netops@example.com")
+        self.assertEqual(loaded_device.snmp_sys_location, "Server Room A")
+        self.assertEqual(loaded_device.discovery_sources, ["nmap", "snmp"])
+
     def test_save_and_load_round_trips_device_with_no_services(self):
         project = Project(
             customer_name="Acme",
