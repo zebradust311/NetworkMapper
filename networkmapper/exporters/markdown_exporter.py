@@ -231,9 +231,10 @@ class MarkdownExporter:
     def _render_evidence(self, device: Device) -> list[str]:
         """Render the Evidence block: per-service evidence grouped together
         (per ADR-009, HTTP/TLS/auth-realm evidence is correlated to a
-        specific port, not device-wide), plus device-level SMB signing.
-        Omits fields with no collected value rather than showing "Unknown"
-        — an empty evidence line isn't evidence."""
+        specific port, not device-wide), plus device-level SMB signing and
+        SNMP system-group evidence (REPORT-003). Omits fields with no
+        collected value rather than showing "Unknown" — an empty evidence
+        line isn't evidence."""
         lines = ["**Evidence**", ""]
         has_content = False
 
@@ -250,8 +251,31 @@ class MarkdownExporter:
             has_content = True
             lines.append(f"SMB Signing: {device.smb_signing}")
 
+        snmp_lines = self._format_snmp_evidence(device)
+        if snmp_lines:
+            has_content = True
+            lines.extend(snmp_lines)
+
         if not has_content:
             lines.append("No additional evidence collected.")
+
+        return lines
+
+    def _format_snmp_evidence(self, device: Device) -> list[str]:
+        """Render device-level SNMP system-group evidence (REPORT-003), one
+        line per populated field, using user-facing labels rather than the
+        underlying OID names. `sysObjectID` is deliberately not rendered —
+        it is canonical evidence intended for future knowledge
+        interpretation, not customer presentation (per REPORT-003 scope)."""
+        lines: list[str] = []
+        if device.snmp_sys_descr:
+            lines.append(f"SNMP Description: {device.snmp_sys_descr}")
+        if device.snmp_sys_location:
+            lines.append(f"SNMP Location: {device.snmp_sys_location}")
+        if device.snmp_sys_contact:
+            lines.append(f"SNMP Contact: {device.snmp_sys_contact}")
+        if device.snmp_sys_uptime:
+            lines.append(f"SNMP Uptime: {device.snmp_sys_uptime}")
 
         return lines
 

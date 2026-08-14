@@ -245,6 +245,78 @@ class MarkdownExporterTest(unittest.TestCase):
         self.assertIn("No additional evidence collected.", section)
         self.assertNotIn("Services:", section)
 
+    def test_device_evidence_renders_snmp_fields_when_present(self):
+        """REPORT-003: SNMP evidence already stored on Device is surfaced
+        alongside the device it describes, using user-facing labels
+        rather than OID/protocol-centric names."""
+        project = self._project()
+        classifier = DeviceClassifier()
+        project.network_graph.add_device(
+            classifier.classify(
+                Device(
+                    ip_address="10.0.0.25",
+                    hostname="sw-core-02",
+                    vendor="Unknown",
+                    snmp_sys_descr="Cisco IOS Software, C2960 Software",
+                    snmp_sys_object_id="1.3.6.1.4.1.9.1.516",
+                    snmp_sys_location="Server Room A",
+                    snmp_sys_contact="netops@example.com",
+                    snmp_sys_uptime="391219825",
+                )
+            )
+        )
+
+        markdown = self._export(project)
+        section = self._device_section(markdown, "sw-core-02")
+
+        self.assertIn("SNMP Description: Cisco IOS Software, C2960 Software", section)
+        self.assertIn("SNMP Location: Server Room A", section)
+        self.assertIn("SNMP Contact: netops@example.com", section)
+        self.assertIn("SNMP Uptime: 391219825", section)
+        self.assertNotIn("No additional evidence collected.", section)
+        # sysObjectID is canonical evidence for future knowledge
+        # interpretation, not customer presentation -- must never appear.
+        self.assertNotIn("1.3.6.1.4.1.9.1.516", section)
+        self.assertNotIn("sysObjectID", section)
+        self.assertNotIn("sys_object_id", section)
+
+    def test_device_evidence_renders_only_populated_snmp_fields(self):
+        project = self._project()
+        classifier = DeviceClassifier()
+        project.network_graph.add_device(
+            classifier.classify(
+                Device(
+                    ip_address="10.0.0.26",
+                    hostname="printer-02",
+                    vendor="Unknown",
+                    snmp_sys_descr="HP LaserJet 4250, Firmware Version: 08.061.3",
+                )
+            )
+        )
+
+        markdown = self._export(project)
+        section = self._device_section(markdown, "printer-02")
+
+        self.assertIn("SNMP Description: HP LaserJet 4250, Firmware Version: 08.061.3", section)
+        self.assertNotIn("SNMP Location:", section)
+        self.assertNotIn("SNMP Contact:", section)
+        self.assertNotIn("SNMP Uptime:", section)
+
+    def test_device_without_snmp_evidence_is_unaffected(self):
+        project = self._project()
+        classifier = DeviceClassifier()
+        project.network_graph.add_device(
+            classifier.classify(
+                Device(ip_address="10.0.0.27", hostname="host-27", vendor="Unknown")
+            )
+        )
+
+        markdown = self._export(project)
+        section = self._device_section(markdown, "host-27")
+
+        self.assertIn("No additional evidence collected.", section)
+        self.assertNotIn("SNMP", section)
+
     def test_classified_device_shows_only_the_matching_rule(self):
         project = self._project()
         classifier = DeviceClassifier()

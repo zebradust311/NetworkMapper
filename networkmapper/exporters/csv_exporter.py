@@ -25,6 +25,13 @@ class CsvExporter:
                     "Vendor",
                     "Device Type",
                     "Discovery Sources",
+                    # REPORT-003: appended after the original five columns
+                    # (rather than interleaved) so any existing tooling
+                    # reading these columns by position is unaffected.
+                    "SNMP Description",
+                    "SNMP Location",
+                    "SNMP Contact",
+                    "SNMP Uptime",
                 ]
             )
 
@@ -38,6 +45,10 @@ class CsvExporter:
                         # MarkdownExporter's DeviceType display convention (STAB-001).
                         device.device_type.value if device.device_type else "",
                         ",".join(device.discovery_sources or []),
+                        device.snmp_sys_descr or "",
+                        device.snmp_sys_location or "",
+                        device.snmp_sys_contact or "",
+                        device.snmp_sys_uptime or "",
                     ]
                 )
 
