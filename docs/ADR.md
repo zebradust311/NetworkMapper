@@ -653,3 +653,329 @@ ADR:
   other or with `DiscoveryProvider`s — ARCH-012 recommends serial
   execution for SNMP's first implementation, deferring concurrency
   pending measurement.
+
+---
+
+## ADR-011 — Bounded Canonical Observation Model
+
+**Status:** Accepted
+
+### Context
+
+ARCH-014 (Relationship Evidence Architecture) found that relationship
+resolution requires retained, provider-attributed observations, because
+corroboration cannot be performed once evidence has been collapsed into
+a single merged value — `NetworkGraph.add_device`
+([networkmapper/core/network_graph.py:15-19](../networkmapper/core/network_graph.py))
+has no representation for a relationship at all, and no collapsed
+`Device` field could express one even if it did.
+
+ARCH-015 (Canonical Device Identity Investigation) independently reached
+the same structural conclusion for device identity: no single field is
+unconditionally safe as identity evidence, and resolving identity
+requires the same retained-observation capability — provenance,
+corroboration across independent sources, and an explainable, non-scored
+confidence outcome — that ARCH-014 already required for relationships.
+
+ARCH-016 (Canonical Observation Architecture) evaluated whether this
+convergence implies a universal observation layer throughout
+NetworkMapper, and found it does not. Its conclusion was narrower: a
+generalized observation model is justified for identity resolution and
+relationship resolution specifically. It is not currently justified as a
+replacement for `Device`, classification, reporting, project
+serialization, or any other already-stable, already-validated Phase 2
+subsystem (ARCH-013's own Section 3, "Validated Decisions," is the
+direct evidence those subsystems are working as designed and have no
+demonstrated need for raw observations).
+
+ARCH-016 also found a concrete naming collision that this ADR must
+record explicitly rather than leave implicit:
+`networkmapper.knowledge.models.Observation`
+([networkmapper/knowledge/models.py:120-138](../networkmapper/knowledge/models.py))
+already exists, but is a different concept from the one ARCH-014/
+ARCH-015 require — it is whole-device, episodic (captured only for
+`DeviceType.UNKNOWN` devices, per `should_capture()`,
+[networkmapper/knowledge/capture.py:24-32](../networkmapper/knowledge/capture.py)),
+and built *from* already-collapsed `Device` state after the fact, rather
+than retained *before* interpretation.
+
+Separately, ARCH-016 confirmed directly that `EnrichmentProvider`
+implementations already discard provenance the moment evidence is
+merged: `SnmpEnrichmentProvider._merge()`
+([networkmapper/discovery/snmp_provider.py:146-155](../networkmapper/discovery/snmp_provider.py))
+reads a provider's raw response and writes it directly into `Device` in
+the same step, leaving only a flat, unattributed provider-name list
+(`Device.discovery_sources: list[str]`) as any trace that collection
+occurred at all — no per-field timestamp, method, or independence
+information survives.
+
+This ADR formalizes the bounded architectural boundary ARCH-014,
+ARCH-015, and ARCH-016 converged on, so that any future implementation
+work proceeds against one recorded decision rather than three separate,
+unreconciled investigation reports.
+
+### Decision
+
+NetworkMapper introduces a first-class retained observation concept,
+scoped specifically to the subsystems that require individual,
+provider-attributed evidence:
+
+- canonical identity resolution (ARCH-015);
+- relationship resolution (ARCH-014);
+- future lifecycle/change-detection analysis, where reasoning about
+  historical evidence (not just current state) is required.
+
+The observation layer does **not** replace `Device`. `Device` remains
+the canonical current-state representation used by classification,
+reporting, project serialization, and developer tooling, unless a future
+ADR explicitly changes that boundary.
+
+#### Observation Semantics
+
+A retained observation represents one direct claim produced by an
+evidence source. An observation must conceptually carry enough
+information to answer: what subject was observed; what property or
+relationship was observed; what value or claim was reported; which
+provider produced it; how it was collected; when it was observed; and
+what source/run it belongs to. This ADR does not define a concrete
+class, field list, or persistence format for that record — the exact
+implementation shape is deferred (see Future Work).
+
+#### Immutability
+
+Recorded observations are immutable evidence. A later observation never
+overwrites an earlier one. A later observation may corroborate it,
+contradict it, supersede it for the purpose of current-state
+interpretation, or leave an earlier interpretation stale — but the
+original observation is always preserved. This generalizes ADR-008's
+existing principle ("A recorded observation is immutable. A subsequent
+scan creates a new observation") from `Device`-level discovery to the
+observation layer directly: interpretations may change; observations do
+not.
+
+#### Canonical Device Boundary
+
+`Device` remains the current believed/canonical state of a discovered
+device. The observation layer exists behind the consumers that require
+retained evidence, not in front of every consumer. Existing `Device`
+fields are not required to be reimplemented as observations by this
+decision. Classification continues to operate against canonical `Device`
+state; reporting continues to operate against canonical `Project`/
+`Device` state. This preserves the deterministic, explainable, and
+independently validated Phase 2 architecture (ADR-002, ADR-003, ADR-004;
+ARCH-013 Section 3) rather than placing new requirements on either
+subsystem.
+
+#### Observation Consumers
+
+Direct consumers of retained observations: identity resolution,
+relationship resolution, and future lifecycle/change-detection analysis
+where historical observations are required.
+
+Consumers of canonical state, unaffected by this decision: classification,
+reporting, and existing exporter logic.
+
+Knowledge (KNOW-003) remains an open question and is explicitly
+unchanged by this ADR. `capture_unresolved_device()` and
+`ObservationRepository` continue to operate exactly as they do today.
+This ADR records explicitly that
+`networkmapper.knowledge.models.Observation` represents a different
+concept from the canonical retained observation described here, and
+must not be silently reused as that primitive by a future
+implementation.
+
+#### Existing Observation Naming Collision
+
+`networkmapper.knowledge.models.Observation` is whole-device, episodic,
+currently focused on unresolved (`UNKNOWN`) classification cases, and
+created after `Device` state has already been formed. The canonical
+retained observation concept described by this ADR is per-claim or
+per-relationship, provider-originated, retained *before* interpretation,
+and required independently of classification outcome. These are
+architecturally distinct concepts that happen to share a name. This ADR
+records the collision; it does not resolve the naming question. Whoever
+implements this decision must address it explicitly — by renaming,
+namespacing, or otherwise distinguishing the two — before introducing
+concrete types.
+
+#### Provenance
+
+Per-observation provenance is required. At minimum, the architecture
+must preserve enough context to determine the originating provider, the
+collection method, the observation timestamp, and the source/run
+identity. `Device.discovery_sources`
+([networkmapper/core/models.py:113](../networkmapper/core/models.py)), a
+flat `list[str]` of provider names with no per-field or per-observation
+attribution, is confirmed insufficient for this purpose — it can say
+that a provider contributed *something*, never which specific claim, when,
+or by what method.
+
+#### Observation Independence
+
+Corroboration strength depends on independent evidence, not merely the
+number of matching fields. Two observations that originate from the same
+underlying collection operation must not automatically count as two
+independent confirmations. This ADR does not define the independence
+taxonomy — it establishes only the architectural requirement that
+collection-method provenance must exist so a future resolver can make
+that distinction deterministically, rather than by counting fields
+alone.
+
+#### Corroboration
+
+The observation layer does not assign numeric confidence scores. Future
+identity and relationship resolvers may derive discrete, explainable
+states from retained observations — for example, weak, probable,
+confirmed, corroborated, or conflicting — but those taxonomies belong to
+their own respective future ADRs, not this one. This ADR establishes
+only that retained observations are what makes deterministic,
+explainable corroboration possible at all, consistent with
+NetworkMapper's existing preference for deterministic, explainable
+reasoning over confidence scoring (`RuleResult.confidence_contribution`'s
+long-standing, deliberate non-use is the existing precedent for this
+restraint).
+
+#### Staleness
+
+An observation does not become false merely because it is old. Staleness
+belongs to the interpretation built from observations, not to the
+observation itself — for example, a device identity not reconfirmed by
+any recent scan, or a relationship not re-observed in recent runs, is
+stale as an interpretation while every observation that ever supported
+it remains a true, unaltered historical record. This ADR does not define
+a staleness algorithm.
+
+### Alternatives Considered
+
+**Continue using canonical `Device` fields only (no observation layer).**
+Rejected: identity and relationship corroboration lose the source,
+history, and independence information they require the moment evidence
+is collapsed into a single field — confirmed directly by
+`EnrichmentProvider._merge()`'s existing behavior (Context), which is
+exactly the collapse ARCH-014 and ARCH-015 each found blocks their
+respective resolution work.
+
+**Replace `Device` with a universal observation/event model.** Rejected:
+ARCH-016 found no demonstrated need for classification or reporting to
+consume raw observations instead of canonical state, and replacing a
+proven, independently validated Phase 2 architecture (ARCH-013 Section
+3) with a heavier model everywhere would add complexity without an
+identified consumer to justify it.
+
+**Build separate retained-evidence systems for identity and
+relationships.** Rejected: ARCH-014 and ARCH-015 independently require
+the same underlying provenance and retention semantics (per-observation
+attribution, immutability, independence-aware corroboration, non-scored
+discrete outcomes). Implementing them separately would duplicate
+architecture and risk inconsistent corroboration behavior between the
+two, rather than one foundation both share.
+
+**Reuse the existing Knowledge `Observation` class directly.** Rejected:
+its granularity (whole-device, not per-claim), lifecycle (episodic,
+triggered only by `UNKNOWN` classification), and data-flow position
+(built from already-collapsed `Device` state) do not match the per-claim,
+pre-interpretation observation concept identity and relationship
+resolution require, per ARCH-016's direct comparison.
+
+### Rationale
+
+- This decision extends, without modifying, ADR-008 (Discovery is
+  Immutable, Interpretation is Adjustable). ADR-008 established the
+  evidence/interpretation split for `Device`-level discovery and
+  `device_type`; this ADR generalizes the identical split one layer
+  earlier, for identity and relationship evidence specifically — the
+  same convergence ARCH-014 Section 2, ARCH-015 Section 2, and ARCH-016
+  Section 2 each independently found already follows from ADR-008's own
+  stated principle.
+- This decision does not modify ADR-002 (RuleResult), ADR-003 (First
+  Match Wins Classification), or ADR-004 (Read-Only Evidence API).
+  Classification continues consuming canonical `Device` state exactly as
+  it does today (ARCH-016 Section 6); nothing about rule evaluation,
+  ordering, or the evidence API changes.
+- This decision does not modify ADR-009 (Per-Service Discovery Evidence
+  Is a Correlated Record). `Device`'s existing per-service evidence
+  pattern is unaffected, and no existing `Device` field is required to
+  be migrated into an observation by this decision (Future Work).
+- This decision does not modify ADR-010 (Enrichment Providers Operate on
+  Already-Discovered Devices). Providers continue merging evidence into
+  `Device` fallback-only, exactly as ADR-010 requires; this ADR adds
+  that a provider contributing evidence identity or relationship
+  resolution will consume must also preserve that evidence as a retained
+  observation, a consequence for future provider work rather than a
+  change to `EnrichmentProvider`'s existing contract.
+- This decision is not a first architectural conclusion — it is the
+  formal record of a conclusion three independent investigations (ARCH-014,
+  ARCH-015, ARCH-016) already reached from three different starting
+  points without being asked to reconcile with one another, which this
+  ADR treats as stronger justification than any one investigation's
+  finding alone.
+
+### Consequences
+
+- A shared evidence foundation becomes available for identity resolution
+  and relationship resolution, rather than each being designed against
+  its own independent provenance scheme.
+- Deterministic, explainable corroboration becomes possible for both
+  identity and relationships, consistent with NetworkMapper's existing
+  preference for deterministic reasoning over confidence scoring.
+- Explicit provenance (provider, method, timestamp, source/run) becomes
+  available where none exists today beyond `Device.discovery_sources`'s
+  flat, unattributed list.
+- Future lifecycle/change-detection analysis (e.g., "did this field
+  change between scans") becomes architecturally possible; it is not
+  possible against collapsed canonical state alone, which by
+  construction no longer holds prior values.
+- Building one shared mechanism avoids the alternative this ADR rejects
+  — two independent, duplicated provenance systems, one each for
+  ARCH-014 and ARCH-015's needs.
+- The existing classification and reporting architecture, and its
+  independently validated determinism and stability (ARCH-013 Section
+  3), is preserved unchanged.
+- Model and storage complexity increases: a new retained-observation
+  concept is introduced alongside `Device`, not in place of it.
+- Observation volume may grow substantially once any provider begins
+  producing retained observations for identity or relationship
+  resolution, since retained evidence is no longer collapsed into a
+  single field per provider per device.
+- Persistence strategy is not yet decided by this ADR (see Future Work);
+  this decision establishes the architectural boundary, not its storage
+  representation.
+- The naming collision with `networkmapper.knowledge.models.Observation`
+  must be resolved by whichever future implementation introduces
+  concrete observation types — this ADR records the collision but does
+  not resolve it.
+- Any future provider that contributes evidence to identity or
+  relationship resolution will need to preserve that evidence as a
+  retained observation before or alongside merging it into `Device`, a
+  behavior change scoped to that future provider work — this ADR does
+  not require any existing provider to change today.
+
+### Future Work
+
+The following are explicitly deferred and are not authorized by this
+ADR:
+
+- Concrete observation class names, field lists, and type definitions.
+- Persistence/storage format for retained observations.
+- Observation identifiers and how they are assigned.
+- Any database or event-store design.
+- Any change to `ProjectSerializer` or existing serialization.
+- Retention policies for retained observations.
+- A collection-method taxonomy sufficient to evaluate observation
+  independence (Observation Independence, above).
+- A full independence taxonomy for corroboration weighting.
+- Identity corroboration rules — scoped to a future ADR building
+  directly on ARCH-015.
+- Relationship corroboration rules — scoped to a future ADR building
+  directly on ARCH-014.
+- Topology rendering or interpretation of any kind.
+- Any change to Knowledge/KNOW-003 integration, including whether
+  `networkmapper.knowledge.models.Observation` is renamed, wrapped, or
+  left as-is once the canonical retained observation concept is
+  implemented.
+- Migration of any existing `Device` field into an observation-backed
+  representation.
+
+Each of the above requires its own approved sprint and, per
+[ENGINEERING.md](../ENGINEERING.md), its own updates to `ROADMAP.md`,
+`docs/architecture/`, and `docs/ADR.md`.
