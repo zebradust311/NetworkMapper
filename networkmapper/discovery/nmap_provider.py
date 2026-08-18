@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import uuid
 from datetime import datetime
 
 import nmap
@@ -13,6 +14,8 @@ from networkmapper.discovery.run_diagnostics import (
     diagnose_host,
 )
 from networkmapper.discovery.scan_profile import ScanProfile
+from networkmapper.observations.models import IdentityObservation
+from networkmapper.observations.provenance import ObservationProvenance
 from networkmapper.runtime.events import (
     ProgressMeasurement,
     RuntimeEvent,
@@ -119,14 +122,69 @@ class NmapProvider(DiscoveryProvider):
         self._scanner = nmap.PortScanner()
         self._event_bus = event_bus if event_bus is not None else RuntimeEventBus()
         self.run_diagnostics: RunDiagnostics | None = None
+        self._observations: list[IdentityObservation] = []
+        self._current_run_id: str = ""
+        self._current_observed_at: datetime = datetime.now()
 
     def discover(self) -> list[Device]:
         """Run an Nmap scan based on the selected profile and return devices."""
+        self._observations = []
+        self._current_run_id = uuid.uuid4().hex
+        self._current_observed_at = datetime.now()
 
         if self._scan_profile in (ScanProfile.STANDARD, ScanProfile.DEEP):
             return self._discover_with_enrichment()
 
         return self._discover_single_pass()
+
+    def collect_observations(self) -> list[IdentityObservation]:
+        """Return retained identity observations from the most recent discover() call.
+
+        FEAT-007A/ARCH-017 Stage 2: additive only, scoped to the fields
+        ARCH-015 identified as identity-bearing evidence — hostname,
+        mac_address, computer_name, domain. `vendor` and
+        `operating_system` are deliberately excluded: ARCH-016 Section 9
+        found `vendor` identifies a NIC manufacturer, not a specific
+        unit (the same "identifies the model, not the unit" problem
+        ARCH-015 found for SNMP `sysObjectID`), and ARCH-015 Section 3's
+        Identity Evidence Assessment never classified the OS caption
+        itself as identity-bearing. No provider ordering, correlation,
+        or interpretation occurs here — each observation mirrors a value
+        this same call already computed for `Device`.
+        """
+        return list(self._observations)
+
+    def _emit_identity_observation(
+        self,
+        subject: str,
+        property_name: str,
+        value: str | None,
+        collection_method: str,
+    ) -> None:
+        """Append one retained observation if a value was actually observed.
+
+        Reflects what this provider observed, independent of whether
+        that value ended up written to `Device` — a source's report is
+        retained even when a fallback-only rule elsewhere left it
+        unused, since that is still valid corroborating (or
+        conflicting) evidence a future resolver should see (ADR-012).
+        """
+        if not value:
+            return
+
+        self._observations.append(
+            IdentityObservation(
+                subject=subject,
+                property_name=property_name,
+                value=value,
+                provenance=ObservationProvenance(
+                    provider="nmap",
+                    collection_method=collection_method,
+                    observed_at=self._current_observed_at,
+                    source_run=self._current_run_id,
+                ),
+            )
+        )
 
     def _publish(
         self,
@@ -290,6 +348,24 @@ class NmapProvider(DiscoveryProvider):
             device.domain = smb_identity["domain"] or rdp_identity["domain"]
             device.smb_signing = smb_identity["smb_signing"]
 
+            # Each source's report is retained independently (not just
+            # the fallback-resolved value above) — up to two observations
+            # per property when both SMB and RDP independently reported
+            # one, exactly the multi-source corroboration/conflict case
+            # ADR-012 describes.
+            self._emit_identity_observation(
+                ip_address, "computer_name", smb_identity["computer_name"], "smb-os-discovery"
+            )
+            self._emit_identity_observation(
+                ip_address, "computer_name", rdp_identity["computer_name"], "rdp-ntlm-info"
+            )
+            self._emit_identity_observation(
+                ip_address, "domain", smb_identity["domain"], "smb-os-discovery"
+            )
+            self._emit_identity_observation(
+                ip_address, "domain", rdp_identity["domain"], "rdp-ntlm-info"
+            )
+
             host_diagnostics[ip_address] = diagnose_host(
                 device.services, smb_identity, rdp_identity
             )
@@ -335,10 +411,16 @@ class NmapProvider(DiscoveryProvider):
 
     def _build_device(self, ip_address: str, host_data: dict) -> Device:
         """Build a device instance from host data without enrichment evidence."""
+        hostname = self._extract_hostname(host_data)
+        mac_address = self._extract_mac_address(host_data)
+
+        self._emit_identity_observation(ip_address, "hostname", hostname, "host-discovery")
+        self._emit_identity_observation(ip_address, "mac_address", mac_address, "host-discovery")
+
         return Device(
             ip_address=ip_address,
-            hostname=self._extract_hostname(host_data),
-            mac_address=self._extract_mac_address(host_data),
+            hostname=hostname,
+            mac_address=mac_address,
             vendor=self._extract_vendor(host_data),
             services=[],
             discovery_sources=["nmap"],

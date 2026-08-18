@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Sequence
 
 from networkmapper.core.models import Device
+from networkmapper.observations.models import IdentityObservation, RelationshipObservation
 
 
 class EnrichmentProvider(ABC):
@@ -26,3 +27,12 @@ class EnrichmentProvider(ABC):
         must not stop enrichment of the remaining devices.
         """
         raise NotImplementedError
+
+    def collect_observations(self) -> list[IdentityObservation | RelationshipObservation]:
+        """Return retained observations gathered during the most recent enrich() call.
+
+        FEAT-007A/ARCH-017 Stage 2: additive and optional, the same
+        default as `DiscoveryProvider.collect_observations()`. Never
+        influences `enrich()`'s own effect on any `Device`.
+        """
+        return []

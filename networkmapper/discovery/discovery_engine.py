@@ -8,6 +8,7 @@ from networkmapper.core.models import Device
 from networkmapper.core.network_graph import NetworkGraph
 from networkmapper.discovery.enrichment_provider import EnrichmentProvider
 from networkmapper.discovery.provider import DiscoveryProvider
+from networkmapper.observations.models import IdentityObservation, RelationshipObservation
 from networkmapper.runtime.events import (
     ProgressMeasurement,
     RuntimeEvent,
@@ -45,6 +46,7 @@ class DiscoveryEngine:
         self._enrichment_providers = list(enrichment_providers)
         self._classifier = DeviceClassifier()
         self._event_bus = event_bus if event_bus is not None else RuntimeEventBus()
+        self.observations: list[IdentityObservation | RelationshipObservation] = []
 
     def discover(self) -> NetworkGraph:
         """Run discovery, then enrichment, then classification, and return the graph.
@@ -56,12 +58,21 @@ class DiscoveryEngine:
         phase over the result, published as its own OBS-002
         Classification phase, so a device is only ever classified after
         all discovery and enrichment it depends on has actually finished.
+
+        FEAT-007A/ARCH-017 Stage 2: alongside this unchanged pipeline,
+        `self.observations` collects every retained observation each
+        provider optionally reports via `collect_observations()` — an
+        additive side channel that never influences device construction,
+        enrichment, or classification (Section 4, ARCH-017: the
+        existing pipeline and the observation layer are decoupled).
         """
         graph = NetworkGraph()
+        self.observations = []
 
         devices_by_ip: dict[str, Device] = {}
         for provider in self._providers:
             discovered_devices = provider.discover()
+            self.observations.extend(provider.collect_observations())
             for device in discovered_devices:
                 if isinstance(device, Device):
                     devices_by_ip.setdefault(device.ip_address, device)
@@ -74,9 +85,14 @@ class DiscoveryEngine:
             # safety net for an unexpected one (a provider defect, not a
             # protocol-level failure) — it must degrade to "this provider
             # contributed nothing," never abort discovery for every
-            # other provider and the devices already found.
+            # other provider and the devices already found. Observation
+            # collection shares the same fallback: a provider defect
+            # after enrich() has already mutated devices in place only
+            # loses that provider's observations, never the evidence
+            # already written to Device.
             try:
                 enrichment_provider.enrich(devices)
+                self.observations.extend(enrichment_provider.collect_observations())
             except Exception:
                 pass
 

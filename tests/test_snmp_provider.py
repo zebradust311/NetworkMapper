@@ -143,5 +143,123 @@ class SnmpEnrichmentProviderTest(unittest.TestCase):
         self.assertEqual(received[1].kind, RuntimeEventKind.PHASE_COMPLETED)
 
 
+class SnmpEnrichmentProviderObservationTest(unittest.TestCase):
+    """FEAT-007A/ARCH-017 Stage 2."""
+
+    def test_no_observations_before_enrich_is_called(self):
+        provider = SnmpEnrichmentProvider(_CREDENTIALS, client=_StubSnmpClient({}))
+
+        self.assertEqual(provider.collect_observations(), [])
+
+    def test_sysname_produces_a_hostname_identity_observation(self):
+        device = Device(ip_address="203.0.113.5")
+        client = _StubSnmpClient(
+            {"203.0.113.5": SnmpHostResult(responded=True, fields={"sysName": "sw-core-01"})}
+        )
+        provider = SnmpEnrichmentProvider(_CREDENTIALS, client=client)
+
+        provider.enrich([device])
+
+        observations = provider.collect_observations()
+        self.assertEqual(len(observations), 1)
+        self.assertEqual(observations[0].subject, "203.0.113.5")
+        self.assertEqual(observations[0].property_name, "hostname")
+        self.assertEqual(observations[0].value, "sw-core-01")
+        self.assertEqual(observations[0].provenance.provider, "snmp")
+        self.assertEqual(observations[0].provenance.collection_method, "sysName")
+
+    def test_sysname_observation_is_retained_even_when_the_merge_does_not_use_it(self):
+        # Mirrors test_sysname_never_overwrites_an_existing_hostname:
+        # the fallback-only merge leaves Device.hostname untouched, but
+        # the observation must still exist — SNMP's own report is
+        # retained as corroborating/conflicting evidence regardless of
+        # whether the merge needed it (ADR-012).
+        device = Device(ip_address="203.0.113.5", hostname="dns-resolved-name")
+        client = _StubSnmpClient(
+            {"203.0.113.5": SnmpHostResult(responded=True, fields={"sysName": "snmp-name"})}
+        )
+        provider = SnmpEnrichmentProvider(_CREDENTIALS, client=client)
+
+        provider.enrich([device])
+
+        self.assertEqual(device.hostname, "dns-resolved-name")
+        observations = provider.collect_observations()
+        self.assertEqual(len(observations), 1)
+        self.assertEqual(observations[0].value, "snmp-name")
+
+    def test_sysobjectid_and_other_non_identity_fields_produce_no_observation(self):
+        device = Device(ip_address="203.0.113.5")
+        client = _StubSnmpClient(
+            {
+                "203.0.113.5": SnmpHostResult(
+                    responded=True,
+                    fields={
+                        "sysDescr": "Cisco IOS Software, C2960",
+                        "sysObjectID": "1.3.6.1.4.1.9.1.516",
+                        "sysUpTime": "12345",
+                        "sysContact": "netops@example.com",
+                        "sysLocation": "Server Room A",
+                    },
+                )
+            }
+        )
+        provider = SnmpEnrichmentProvider(_CREDENTIALS, client=client)
+
+        provider.enrich([device])
+
+        self.assertEqual(provider.collect_observations(), [])
+
+    def test_no_observation_when_the_host_times_out(self):
+        device = Device(ip_address="203.0.113.5")
+        client = _StubSnmpClient(
+            {"203.0.113.5": SnmpHostResult(responded=False, failure_reason="timeout")}
+        )
+        provider = SnmpEnrichmentProvider(_CREDENTIALS, client=client)
+
+        provider.enrich([device])
+
+        self.assertEqual(provider.collect_observations(), [])
+
+    def test_multiple_devices_each_produce_their_own_observation(self):
+        devices = [Device(ip_address="203.0.113.1"), Device(ip_address="203.0.113.2")]
+        client = _StubSnmpClient(
+            {
+                "203.0.113.1": SnmpHostResult(responded=True, fields={"sysName": "sw-01"}),
+                "203.0.113.2": SnmpHostResult(responded=True, fields={"sysName": "sw-02"}),
+            }
+        )
+        provider = SnmpEnrichmentProvider(_CREDENTIALS, client=client)
+
+        provider.enrich(devices)
+
+        observations = provider.collect_observations()
+        self.assertEqual({o.subject for o in observations}, {"203.0.113.1", "203.0.113.2"})
+        self.assertEqual({o.value for o in observations}, {"sw-01", "sw-02"})
+
+    def test_observations_reset_between_enrich_calls(self):
+        client = _StubSnmpClient(
+            {"203.0.113.5": SnmpHostResult(responded=True, fields={"sysName": "sw-01"})}
+        )
+        provider = SnmpEnrichmentProvider(_CREDENTIALS, client=client)
+        provider.enrich([Device(ip_address="203.0.113.5")])
+        self.assertEqual(len(provider.collect_observations()), 1)
+
+        provider.enrich([])
+
+        self.assertEqual(provider.collect_observations(), [])
+
+    def test_observations_do_not_affect_device_fields(self):
+        device = Device(ip_address="203.0.113.5", hostname="already-set")
+        client = _StubSnmpClient(
+            {"203.0.113.5": SnmpHostResult(responded=True, fields={"sysName": "snmp-name"})}
+        )
+        provider = SnmpEnrichmentProvider(_CREDENTIALS, client=client)
+
+        provider.enrich([device])
+
+        self.assertEqual(device.hostname, "already-set")
+        self.assertEqual(len(provider.collect_observations()), 1)
+
+
 if __name__ == "__main__":
     unittest.main()

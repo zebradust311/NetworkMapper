@@ -4,6 +4,8 @@ from datetime import datetime
 from pathlib import Path
 
 from networkmapper.core.models import Device, DeviceType, ServiceEvidence
+from networkmapper.observations.models import IdentityObservation
+from networkmapper.observations.provenance import ObservationProvenance
 from networkmapper.project.models import Project
 from networkmapper.project.serializer import ProjectSerializer
 
@@ -157,6 +159,43 @@ class ProjectSerializerTest(unittest.TestCase):
 
         self.assertIsNotNone(loaded_device)
         self.assertEqual(loaded_device.services, [])
+
+    def test_observations_do_not_survive_a_save_and_load_round_trip(self):
+        # FEAT-007A/ARCH-017 Stage 2: observation persistence is
+        # explicitly out of scope (ADR-011) — Project.observations must
+        # be dropped on save/load, not silently serialized.
+        project = Project(
+            customer_name="Acme",
+            created_date=datetime(2026, 1, 1, 12, 0, 0),
+            modified_date=datetime(2026, 1, 2, 12, 0, 0),
+            observations=[
+                IdentityObservation(
+                    subject="10.0.0.20",
+                    property_name="hostname",
+                    value="host-20",
+                    provenance=ObservationProvenance(
+                        provider="nmap",
+                        collection_method="host-discovery",
+                        observed_at=datetime(2026, 1, 1, 12, 0, 0),
+                        source_run="run-001",
+                    ),
+                )
+            ],
+        )
+        project.network_graph.add_device(
+            Device(ip_address="10.0.0.20", hostname="host-20", vendor="Unknown")
+        )
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            file_path = Path(temp_dir) / "project.json"
+            ProjectSerializer.save(project, str(file_path))
+            saved_payload = file_path.read_text(encoding="utf-8")
+            loaded_project = ProjectSerializer.load(str(file_path))
+
+        self.assertNotIn("observations", saved_payload)
+        self.assertEqual(loaded_project.observations, [])
+        # The device itself round-trips exactly as before.
+        self.assertEqual(loaded_project.network_graph.get_device("10.0.0.20").hostname, "host-20")
 
 
 if __name__ == "__main__":

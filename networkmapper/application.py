@@ -133,6 +133,7 @@ class Application:
         project = Project(
             customer_name="Test Network",
             network_graph=graph,
+            observations=engine.observations,
         )
 
         if args.workbench:

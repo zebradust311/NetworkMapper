@@ -1,24 +1,55 @@
 import unittest
+from datetime import datetime
 
 from networkmapper.core.models import Device, DeviceType
 from networkmapper.discovery.discovery_engine import DiscoveryEngine
 from networkmapper.discovery.enrichment_provider import EnrichmentProvider
 from networkmapper.discovery.provider import DiscoveryProvider
+from networkmapper.observations.models import IdentityObservation
+from networkmapper.observations.provenance import ObservationProvenance
 from networkmapper.runtime.events import RuntimeEvent, RuntimeEventBus, RuntimeEventKind, RuntimePhase
 
 
+def _observation(subject: str, value: str, provider: str = "stub") -> IdentityObservation:
+    return IdentityObservation(
+        subject=subject,
+        property_name="hostname",
+        value=value,
+        provenance=ObservationProvenance(
+            provider=provider,
+            collection_method="stub-method",
+            observed_at=datetime(2026, 8, 18, 9, 0, 0),
+            source_run="run-001",
+        ),
+    )
+
+
 class _StubProvider(DiscoveryProvider):
-    def __init__(self, devices: list[Device]) -> None:
+    def __init__(
+        self,
+        devices: list[Device],
+        observations: list[IdentityObservation] | None = None,
+    ) -> None:
         self._devices = devices
+        self._observations = observations or []
 
     def discover(self) -> list[Device]:
         return self._devices
 
+    def collect_observations(self) -> list[IdentityObservation]:
+        return self._observations
+
 
 class _StubEnrichmentProvider(EnrichmentProvider):
-    def __init__(self, evidence_by_ip: dict[str, str] | None = None, raises: bool = False) -> None:
+    def __init__(
+        self,
+        evidence_by_ip: dict[str, str] | None = None,
+        raises: bool = False,
+        observations: list[IdentityObservation] | None = None,
+    ) -> None:
         self._evidence_by_ip = evidence_by_ip or {}
         self._raises = raises
+        self._observations = observations or []
         self.seen_ips: list[str] = []
 
     def enrich(self, devices) -> None:
@@ -30,6 +61,9 @@ class _StubEnrichmentProvider(EnrichmentProvider):
             evidence = self._evidence_by_ip.get(device.ip_address)
             if evidence is not None:
                 device.snmp_sys_descr = evidence
+
+    def collect_observations(self) -> list[IdentityObservation]:
+        return self._observations
 
 
 class DiscoveryEngineTest(unittest.TestCase):
@@ -154,6 +188,126 @@ class DiscoveryEngineTest(unittest.TestCase):
         devices = graph.all_devices()
         self.assertEqual(len(devices), 1)
         self.assertEqual(devices[0].device_type, DeviceType.SERVER)
+
+
+class DiscoveryEngineObservationCollectionTest(unittest.TestCase):
+    """FEAT-007A/ARCH-017 Stage 2."""
+
+    def test_providers_emitting_no_observations_leave_the_list_empty(self):
+        engine = DiscoveryEngine([_StubProvider([Device(ip_address="10.0.0.1")])])
+
+        engine.discover()
+
+        self.assertEqual(engine.observations, [])
+
+    def test_a_provider_that_does_not_override_collect_observations_is_unaffected(self):
+        # The real DiscoveryProvider/EnrichmentProvider default (no
+        # override) must behave exactly like an empty-list stub.
+        class _MinimalProvider(DiscoveryProvider):
+            def discover(self) -> list[Device]:
+                return [Device(ip_address="10.0.0.1")]
+
+        engine = DiscoveryEngine([_MinimalProvider()])
+
+        graph = engine.discover()
+
+        self.assertEqual(engine.observations, [])
+        self.assertEqual(len(graph.all_devices()), 1)
+
+    def test_discovery_engine_collects_observations_from_a_single_provider(self):
+        observation = _observation("10.0.0.1", "dc-01")
+        engine = DiscoveryEngine(
+            [_StubProvider([Device(ip_address="10.0.0.1")], observations=[observation])]
+        )
+
+        engine.discover()
+
+        self.assertEqual(engine.observations, [observation])
+
+    def test_discovery_engine_aggregates_observations_from_multiple_providers(self):
+        first_observation = _observation("10.0.0.1", "dc-01", provider="first")
+        second_observation = _observation("10.0.0.2", "dc-02", provider="second")
+        engine = DiscoveryEngine(
+            [
+                _StubProvider(
+                    [Device(ip_address="10.0.0.1")], observations=[first_observation]
+                ),
+                _StubProvider(
+                    [Device(ip_address="10.0.0.2")], observations=[second_observation]
+                ),
+            ]
+        )
+
+        engine.discover()
+
+        self.assertEqual(engine.observations, [first_observation, second_observation])
+
+    def test_discovery_engine_collects_enrichment_provider_observations_too(self):
+        discovery_observation = _observation("10.0.0.1", "dc-01", provider="discovery")
+        enrichment_observation = _observation("10.0.0.1", "sw-core-01", provider="enrichment")
+        engine = DiscoveryEngine(
+            [
+                _StubProvider(
+                    [Device(ip_address="10.0.0.1")], observations=[discovery_observation]
+                )
+            ],
+            enrichment_providers=[
+                _StubEnrichmentProvider(observations=[enrichment_observation])
+            ],
+        )
+
+        engine.discover()
+
+        self.assertEqual(
+            engine.observations, [discovery_observation, enrichment_observation]
+        )
+
+    def test_a_raising_enrichment_provider_loses_only_its_own_observations(self):
+        discovery_observation = _observation("10.0.0.1", "dc-01")
+        engine = DiscoveryEngine(
+            [
+                _StubProvider(
+                    [Device(ip_address="10.0.0.1")], observations=[discovery_observation]
+                )
+            ],
+            enrichment_providers=[
+                _StubEnrichmentProvider(
+                    raises=True, observations=[_observation("10.0.0.1", "unreachable")]
+                )
+            ],
+        )
+
+        engine.discover()
+
+        self.assertEqual(engine.observations, [discovery_observation])
+
+    def test_observations_do_not_affect_device_construction_or_classification(self):
+        engine = DiscoveryEngine(
+            [
+                _StubProvider(
+                    [Device(ip_address="10.0.0.1", hostname="dc-01", vendor="Cisco")],
+                    observations=[_observation("10.0.0.1", "a-completely-different-name")],
+                )
+            ]
+        )
+
+        graph = engine.discover()
+
+        device = graph.get_device("10.0.0.1")
+        self.assertEqual(device.hostname, "dc-01")
+        self.assertEqual(device.device_type, DeviceType.SERVER)
+
+    def test_observations_reset_between_discover_calls(self):
+        engine = DiscoveryEngine(
+            [_StubProvider([Device(ip_address="10.0.0.1")], observations=[_observation("10.0.0.1", "dc-01")])]
+        )
+        engine.discover()
+        self.assertEqual(len(engine.observations), 1)
+
+        engine._providers = [_StubProvider([Device(ip_address="10.0.0.2")])]
+        engine.discover()
+
+        self.assertEqual(engine.observations, [])
 
 
 if __name__ == "__main__":

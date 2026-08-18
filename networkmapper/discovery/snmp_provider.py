@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import uuid
 from collections.abc import Sequence
 from datetime import datetime
 
@@ -8,6 +9,8 @@ from networkmapper.discovery.enrichment_provider import EnrichmentProvider
 from networkmapper.discovery.snmp_client import PysnmpClient, SnmpClient, SnmpHostResult
 from networkmapper.discovery.snmp_credentials import SnmpCredentials
 from networkmapper.discovery.snmp_diagnostics import SnmpHostDiagnostics, SnmpRunDiagnostics
+from networkmapper.observations.models import IdentityObservation
+from networkmapper.observations.provenance import ObservationProvenance
 from networkmapper.runtime.events import (
     ProgressMeasurement,
     RuntimeEvent,
@@ -35,6 +38,21 @@ _FIELD_TO_DEVICE_ATTRIBUTE = {
     "sysUpTime": "snmp_sys_uptime",
     "sysContact": "snmp_sys_contact",
     "sysLocation": "snmp_sys_location",
+}
+
+# FEAT-007A/ARCH-017 Stage 2: of the system-group fields above, only
+# sysName is identity-bearing evidence per ARCH-015's Identity Evidence
+# Assessment (it maps to the same "hostname" property NmapProvider's own
+# identity observations use, enabling direct multi-provider
+# corroboration — ADR-012's own worked example). sysObjectID is
+# deliberately excluded: ARCH-015/ARCH-016 found it identifies a
+# device's product model, not the individual unit, and must not be
+# mistaken for identity evidence. sysUpTime/sysContact/sysLocation are
+# excluded as out of ARCH-015's identity scope entirely (sysLocation is
+# ARCH-014's closest existing precedent for a future *relationship*
+# fact, not identity, and there is no Site entity yet to relate it to).
+_IDENTITY_FIELD_TO_PROPERTY = {
+    "sysName": "hostname",
 }
 
 
@@ -75,10 +93,14 @@ class SnmpEnrichmentProvider(EnrichmentProvider):
         self._event_bus = event_bus if event_bus is not None else RuntimeEventBus()
         self._client = client if client is not None else PysnmpClient()
         self.run_diagnostics: SnmpRunDiagnostics | None = None
+        self._observations: list[IdentityObservation] = []
 
     def enrich(self, devices: Sequence[Device]) -> None:
         """Query each device's MIB-2 system group and merge evidence in place."""
         total = len(devices)
+        self._observations = []
+        run_id = uuid.uuid4().hex
+        observed_at = datetime.now()
         self._publish(
             RuntimeEventKind.PHASE_STARTED,
             activity=f"Querying {total} host(s) via SNMP...",
@@ -96,6 +118,7 @@ class SnmpEnrichmentProvider(EnrichmentProvider):
                 self._merge(device, result.fields)
                 if "snmp" not in device.discovery_sources:
                     device.discovery_sources.append("snmp")
+                self._collect_identity_observations(device.ip_address, result.fields, run_id, observed_at)
             else:
                 hosts_timed_out += 1
 
@@ -154,6 +177,45 @@ class SnmpEnrichmentProvider(EnrichmentProvider):
             attribute = _FIELD_TO_DEVICE_ATTRIBUTE[field_name]
             if getattr(device, attribute) is None:
                 setattr(device, attribute, value)
+
+    def collect_observations(self) -> list[IdentityObservation]:
+        """Return retained identity observations from the most recent enrich() call."""
+        return list(self._observations)
+
+    def _collect_identity_observations(
+        self,
+        ip_address: str,
+        fields: dict[str, str],
+        run_id: str,
+        observed_at: datetime,
+    ) -> None:
+        """Record what SNMP actually reported for identity-bearing fields.
+
+        Reflects the raw response, independent of `_merge()`'s
+        fallback-only decision — a device whose hostname was already set
+        by Nmap still gets its SNMP-reported `sysName` retained as
+        corroborating (or conflicting) evidence, even though `_merge()`
+        left `Device.hostname` untouched (ADR-012's own worked example:
+        SNMP + DNS + WMI each independently reporting a hostname).
+        """
+        for field_name, property_name in _IDENTITY_FIELD_TO_PROPERTY.items():
+            value = fields.get(field_name)
+            if not value:
+                continue
+
+            self._observations.append(
+                IdentityObservation(
+                    subject=ip_address,
+                    property_name=property_name,
+                    value=value,
+                    provenance=ObservationProvenance(
+                        provider="snmp",
+                        collection_method=field_name,
+                        observed_at=observed_at,
+                        source_run=run_id,
+                    ),
+                )
+            )
 
     def _publish(
         self,
