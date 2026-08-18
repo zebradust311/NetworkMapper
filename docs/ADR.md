@@ -979,3 +979,308 @@ ADR:
 Each of the above requires its own approved sprint and, per
 [ENGINEERING.md](../ENGINEERING.md), its own updates to `ROADMAP.md`,
 `docs/architecture/`, and `docs/ADR.md`.
+
+---
+
+## ADR-012 — Canonical Identity Resolution
+
+**Status:** Accepted
+
+### Context
+
+ADR-011 established retained observations as a bounded architectural
+capability supporting identity resolution and relationship resolution,
+and recorded that canonical identity should be an interpretation derived
+from those observations rather than a field on `Device` itself.
+
+ARCH-015 (Canonical Device Identity Investigation) found, against actual
+identity-bearing fields NetworkMapper collects or has already
+investigated collecting: no universally stable identifier exists across
+all environments (MAC address is reliable for fixed infrastructure but
+routinely randomized on modern client operating systems; hardware serial
+numbers and SMBIOS UUIDs are strong but not guaranteed distinct across
+cloning; directory identifiers such as a Windows machine SID are
+regenerated on reimage even when hostname, domain, and physical hardware
+are unchanged). Identity therefore cannot be reduced to any single
+field, and is itself an interpretation derived from corroborated
+observations, not a fact directly observed.
+
+This ADR formalizes those conclusions into architectural policy
+governing how canonical identity is derived, without defining the
+resolver that will eventually implement it.
+
+### Decision
+
+Canonical device identity is a deterministic interpretation derived from
+retained observations (ADR-011). Identity shall never be established
+solely because a particular field is present or populated. Instead,
+identity results from corroborated observations evaluated under
+architectural rules established here and refined by future,
+narrower ADRs. No single observation is inherently canonical; canonical
+identity is always an interpretation built from the retained observation
+set, never a property copied directly from one field.
+
+#### Identity Principles
+
+- **Identity is evidence-driven.** Identity conclusions are traceable to
+  specific retained observations, never asserted independently of them.
+- **Identity is deterministic.** The same retained observation set
+  produces the same identity interpretation every time it is evaluated.
+- **Identity is explainable.** An identity interpretation must be
+  statable in terms of which observations support it, consistent with
+  `RuleResult.reason`'s existing role for classification (ADR-002).
+- **Identity evolves only when new observations justify change.**
+  Consistent with ADR-008's adjustable-interpretation principle,
+  generalized from `device_type` to identity.
+- **Interpretations may change. Retained observations do not.** Directly
+  restates ADR-011's immutability principle at the identity layer rather
+  than introducing a new one.
+- **Identity must never depend on provider ordering.** Identity
+  resolution must produce the same result regardless of the order in
+  which equivalent observations are processed or arrive. This is a
+  materially different determinism requirement from classification's:
+  `DeviceClassifier` is deterministic *because* rule order is fixed and
+  evaluation always stops at the first match (ADR-003) — determinism
+  through a stable, order-*dependent* sequence. Identity resolution
+  cannot rely on a stable arrival order, because observations may arrive
+  from different providers across different runs in no guaranteed
+  sequence; its determinism must instead come from order-*independence*
+  — the same conclusion regardless of which equivalent observation was
+  processed first. Future resolver design must treat this as a hard
+  constraint, not an incidental property.
+
+#### Identity Evidence
+
+Observations differ in stability. ARCH-015's Identity Evidence
+Assessment evaluated this in detail across Network (IP address, MAC
+address), Operating System (hostname, computer name), Hardware (chassis
+serial, system UUID), Virtualization (hypervisor identifiers), Directory
+(machine identifiers), and Cloud (provider-specific resource
+identifiers) categories, and found stability is frequently conditional
+on device role or lifecycle event rather than fixed per field (Network
+Interface MAC's infrastructure-vs-client split; Hardware UUID's
+normal-operation-vs-cloning split).
+
+This ADR deliberately does not prescribe a precedence hierarchy over
+these categories. ARCH-015 Section 7 illustrated one possible
+resolution shape — an ordered, strongest-evidence-first check, modeled
+on `first_matching_identifier`'s existing pattern
+([networkmapper/classification/evidence_helpers.py:67-104](../networkmapper/classification/evidence_helpers.py))
+— but this ADR treats that as an implementation option for a future
+resolver to evaluate, not a ranking this ADR canonicalizes. Future
+implementations are required to evaluate corroborated observations
+together, not select a winner by absolute field priority alone.
+
+#### Identity Categories
+
+Observations naturally fall into categories reflecting how they should
+be weighed — ARCH-015 Section 4 evaluated candidates including
+immutable, persistent, contextual, transient, and provider-specific, and
+found a two-axis (stability × origin) view more precise than a single
+flat list. This ADR does not freeze either ARCH-015's flat category list
+or its two-axis model as canonical taxonomy — neither has been
+validated against an implementation yet. The architectural decision this
+ADR does make is narrower and does not depend on which taxonomy is
+eventually adopted: **not all observations contribute equally to
+identity**, and any future resolver must account for that difference
+rather than treating every retained observation as equally probative.
+
+#### Corroboration
+
+- Independent observations strengthen identity.
+- Conflicting observations weaken confidence — they must not be
+  silently arbitrated. Consistent with ADR-011's inherited posture (via
+  ARCH-014/ARCH-015) that a conflict is retained and surfaced, never
+  resolved by silently discarding one side.
+- A single observation rarely justifies identity by itself, since no
+  field evaluated by ARCH-015 is unconditionally reliable alone.
+- Identity conclusions must remain explainable in terms of which
+  observations were evaluated and how they corroborated or conflicted.
+- No numeric confidence score is introduced by this ADR. Future
+  implementations may express corroboration as deterministic, discrete
+  states (ARCH-015 Section 7 illustrated a possible shape — weak,
+  probable, confirmed, conflicting — without this ADR adopting it as
+  final), consistent with `RuleResult.confidence_contribution`'s
+  long-standing, deliberate non-use as the existing precedent for
+  preferring determinism over scoring.
+
+#### Asset Identity vs. Instance Identity
+
+ARCH-015 identified a real architectural fork this ADR preserves rather
+than resolves: a motherboard replacement, a VM clone, and a reimaged
+workstation each affect different concepts of identity. A reimaged
+workstation typically keeps its chassis serial (the physical asset is
+unchanged) while its Windows machine SID or machine GUID is regenerated
+(the software instance is new); a motherboard replacement may change a
+board-level identifier while the chassis serial persists. **Asset
+identity** (tracking the physical or virtual-hardware unit) and
+**instance identity** (tracking the running OS/software instance) are
+distinct architectural concerns, and this ADR records that distinction
+explicitly rather than assuming NetworkMapper's canonical identity
+answers only one of them. This ADR does not decide which concept (or
+both) NetworkMapper's canonical identity should track — that decision is
+left to future work (see Deferred Decisions), because it affects
+resolver design directly and none of ARCH-015, ADR-011, or this ADR has
+resolved it.
+
+#### Identity Lifecycle
+
+Identity resolution distinguishes several architecturally different
+moments, none of which this ADR defines an algorithm for:
+
+- **Creation** — an identity interpretation is first formed from an
+  initial retained observation set.
+- **Corroboration** — additional independent observations strengthen an
+  existing identity interpretation without replacing it.
+- **Reinterpretation** — new observations change what an identity
+  interpretation concludes, without altering any retained observation
+  (ADR-008, ADR-011).
+- **Replacement** — evidence indicates the underlying device itself has
+  changed (ARCH-015's Device Replacement case), and a new identity is
+  warranted rather than a revised interpretation of the same one.
+- **Retirement** — an identity interpretation is no longer supported by
+  recent observations (a staleness concern, per ADR-011, belonging to
+  the interpretation layer, not to any observation becoming false).
+
+Identity changes must result from evidence. Identity must not mutate
+arbitrarily — consistent with the determinism and explainability
+principles above.
+
+#### Relationship with Device
+
+`Device` remains the canonical current-state representation, per
+ADR-011's Canonical Device Boundary. Identity interpretation supports
+`Device`; it does not replace it, and `Device` does not become the
+identity engine — identity resolution is a distinct interpretive layer
+consuming retained observations, not logic added to `Device` or
+`NetworkGraph`. This ADR does not redesign either.
+
+#### Relationship with Future ADRs
+
+Relationship resolution (ARCH-014, scoped as future work under ADR-011)
+depends on canonical identities: ARCH-014 Section 7 and ARCH-015 Section
+1 both already found that a relationship between two devices cannot be
+recognized as the same relationship across scans unless its endpoint
+devices can first be recognized as the same devices. Topology, in turn,
+depends on canonical relationships (ARCH-014 Section 2). This ADR
+therefore architecturally precedes, and is a prerequisite for, both a
+future relationship-corroboration ADR and any future topology work.
+
+### Alternatives Considered
+
+**Use one universally stable identifier.** Rejected — ARCH-015
+demonstrated no such identifier exists across all environments: every
+candidate evaluated (MAC, hardware serial, SMBIOS UUID, directory
+identifiers) is stable only under specific conditions of device role,
+collection method, or lifecycle event, never unconditionally.
+
+**Use IP address as canonical identity.** Rejected — IP addresses
+change under ordinary, routine conditions (DHCP lease renewal, static
+reassignment) and do not uniquely identify a long-term asset, which is
+the exact overloaded use of IP address ARCH-014 and ARCH-015 both
+identified as the originating problem this investigation lineage exists
+to correct.
+
+**Use first-provider-wins.** Rejected — identity must remain
+deterministic regardless of provider ordering (Identity Principles,
+above); a first-provider-wins rule would make identity dependent on
+incidental scan/enrichment sequencing, which is not guaranteed stable
+run over run.
+
+**Treat every identity change as a new device.** Rejected — this
+collapses the Identity Lifecycle's distinct Reinterpretation and
+Replacement cases into one, and would treat ordinary, routine evidence
+changes (a hostname rename, an IP renewal, a newly-corroborating
+observation) the same as a genuine hardware replacement, contradicting
+the Identity Lifecycle section's explicit distinction.
+
+**Allow provider-specific identity systems.** Rejected — canonical
+identity must remain provider-independent, consistent with ADR-010's
+existing requirement that `EnrichmentProvider`s not leak
+provider-specific concepts into classification or reporting; a
+provider-specific identity system would reintroduce exactly the kind of
+coupling ADR-010 already ruled out for evidence generally, applied to
+identity specifically. ARCH-015 Section 5 separately found some
+identity-shaped identifiers (a VMware Managed Object Reference, an Azure/
+Entra device ID) are inherently scoped to one management plane and are
+not safe as canonical identity for this same reason.
+
+### Rationale
+
+- This decision extends, without modifying, ADR-008 (Discovery is
+  Immutable, Interpretation is Adjustable). Identity is the same
+  evidence/interpretation split ADR-008 established for `device_type`,
+  applied to identity specifically, per ARCH-015 Section 2's own
+  framing.
+- This decision extends, without modifying, ADR-011 (Bounded Canonical
+  Observation Model). ADR-011 established that identity resolution is
+  one of the two named consumers of retained observations; this ADR is
+  the identity-specific policy ADR-011's own Future Work already
+  anticipated.
+- This decision does not modify ADR-002 (RuleResult), ADR-003 (First
+  Match Wins Classification), or ADR-004 (Read-Only Evidence API).
+  Identity resolution is architecturally distinct from classification —
+  notably, it requires order-*independence* rather than
+  classification's order-*dependent* determinism (Identity Principles,
+  above) — and this ADR does not change how `DeviceClassifier` operates.
+- This decision does not modify ADR-009 (Per-Service Discovery Evidence)
+  or ADR-010 (Enrichment Providers Operate on Already-Discovered
+  Devices). `Device`'s evidence-field pattern and `EnrichmentProvider`'s
+  fallback-only merge are unaffected; this ADR governs how identity is
+  *interpreted* from retained observations, not how evidence is
+  collected or merged into `Device`.
+- Preferring deterministic, discrete, explainable corroboration states
+  over numeric confidence scoring is consistent with
+  `RuleResult.confidence_contribution`'s existing, deliberate,
+  long-standing non-use — the same restraint already validated for
+  classification (ARCH-013 Section 7) applied to identity.
+
+### Consequences
+
+- Identity becomes deterministic and explainable, traceable to specific
+  retained observations rather than to an arbitrarily privileged field.
+- Identity resolution becomes provider-independent, consistent with
+  ADR-010's existing boundary for evidence generally.
+- Relationship resolution (a future ADR building on ARCH-014) becomes
+  possible to sequence correctly, since it now has a formal, prerequisite
+  identity policy to depend on rather than an unresolved open question.
+- Future lifecycle analysis (identity creation, corroboration,
+  reinterpretation, replacement, retirement) has an architectural home
+  to build against.
+- This decision is consistent with, and does not require reopening,
+  ADR-011.
+- Identity becomes an interpretation rather than a field — any future
+  consumer that expects a single, directly-readable identity value on
+  `Device` will need to consume an interpretation instead, a real shift
+  from how every other `Device` field currently behaves.
+- Implementation complexity increases: a future resolver must evaluate
+  corroboration across a retained observation set rather than reading
+  one field.
+- Multiple observations about the same subject may remain unresolved —
+  a Conflicting or Weak interpretation is an explicit, valid outcome,
+  not a failure state requiring forced resolution.
+- Future resolvers require the retained observations ADR-011
+  established; identity resolution cannot be implemented against
+  collapsed `Device` state alone.
+
+### Future Work
+
+The following are explicitly deferred and are not authorized by this
+ADR:
+
+- Concrete identity resolution algorithms.
+- Scoring or weighting mechanisms for corroboration.
+- Observation weighting by category, provider, or collection method.
+- Provider-specific identity heuristics.
+- Persistence strategy for identity interpretations.
+- Any serialization change.
+- UI or reporting presentation of identity.
+- Topology.
+- Relationship resolution implementation (ARCH-014) — this ADR is a
+  named prerequisite for that future work, not an implementation of it.
+- Whether canonical identity tracks asset identity, instance identity,
+  or both (Asset Identity vs. Instance Identity, above).
+
+Each of the above requires its own approved sprint and, per
+[ENGINEERING.md](../ENGINEERING.md), its own updates to `ROADMAP.md`,
+`docs/architecture/`, and `docs/ADR.md`.
