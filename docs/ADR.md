@@ -1284,3 +1284,322 @@ ADR:
 Each of the above requires its own approved sprint and, per
 [ENGINEERING.md](../ENGINEERING.md), its own updates to `ROADMAP.md`,
 `docs/architecture/`, and `docs/ADR.md`.
+
+---
+
+## ADR-013 — Canonical Relationship Resolution
+
+**Status:** Accepted
+
+### Context
+
+ADR-011 established a bounded retained observation model serving
+identity resolution, relationship resolution, and future lifecycle
+analysis. ADR-012 established that canonical device identity is a
+deterministic, order-independent interpretation derived from those
+retained observations, and named itself a prerequisite for relationship
+resolution specifically because a relationship cannot be recognized as
+the same relationship across scans unless its endpoints can first be
+recognized as the same devices.
+
+ARCH-014 (Relationship Evidence Architecture) concluded that topology
+must be built from corroborated relationship evidence rather than
+directly from provider output, found that relationship categories vary
+sharply in how ready they are for corroboration (Service — device hosts
+service — already has a working evidence path via `ServiceEvidence`,
+while Administrative relationships likely need a structurally different,
+human-asserted evidence category rather than provider-observed
+corroboration), and found that some relationship-evidence sources
+produce endpoints that are not device-shaped at all (a subnet, for
+Routing evidence) or relationships that are containment rather than
+peering (a Redfish chassis/component "part of" fact).
+
+This ADR formalizes how canonical relationships are derived from
+retained relationship observations between canonical identities,
+completing the sequence ADR-011 and ADR-012 already established.
+
+### Decision
+
+Canonical relationships are deterministic interpretations derived from
+retained relationship observations. Relationship observations originate
+from evidence providers; canonical relationships are architectural
+interpretations of those observations, never a provider's direct output.
+Providers never create canonical relationships themselves, and no single
+provider owns relationship truth — corroboration across independent
+observations is what produces a canonical relationship, consistent with
+ADR-012's identical posture for identity.
+
+#### Relationship Principles
+
+- **Relationships are evidence-driven.** A canonical relationship is
+  traceable to specific retained relationship observations.
+- **Relationships are deterministic.** The same retained observation set
+  produces the same relationship interpretation every time it is
+  evaluated.
+- **Relationships are explainable.** See Relationship Explainability,
+  below.
+- **Relationships evolve only when new observations justify change.**
+  Consistent with ADR-008's adjustable-interpretation principle.
+- **Interpretations may change. Retained observations do not.** Restates
+  ADR-011's immutability principle at the relationship layer.
+- **Relationship resolution must never depend on provider ordering.**
+  Equivalent evidence presented in different orders must produce
+  identical relationship interpretations — the same order-independence
+  requirement ADR-012 established for identity, not a separately
+  invented one. Relationship resolution inherits this constraint
+  directly because its endpoints are themselves order-independent
+  identity interpretations.
+
+#### Relationship Endpoints
+
+Canonical relationships exist between canonical identities (ADR-012),
+never directly between IP addresses, hostnames, MAC addresses, or other
+provider-specific identifiers. Those observations contribute evidence
+toward an endpoint's identity; they are not themselves valid
+relationship endpoints. This preserves ADR-012's boundary rather than
+reopening it.
+
+This ADR records a specific reconciliation ARCH-014 Section 7 surfaced
+and left open: a relationship *observation* may arrive with an endpoint
+that does not yet resolve to a canonical identity (an LLDP neighbor
+chassis ID for a switch not yet independently discovered; a VMware VM
+not yet corroborated to any `Device`). Consistent with ADR-011's
+observation semantics, such an observation is still retained as
+evidence — a retained observation's subject is not required to already
+be a resolved identity. It does not, however, constitute a **canonical**
+relationship until both endpoints resolve to canonical identities under
+ADR-012. An unresolved-endpoint observation is real, retained evidence
+awaiting a corroborating identity resolution, not a canonical
+relationship in a pending state.
+
+#### Relationship Categories
+
+This ADR formally acknowledges the relationship categories ARCH-014
+identified as naturally emerging from evidence NetworkMapper collects or
+has already evaluated collecting: Physical (connected to), Logical
+(member of VLAN), Routing (routes through), Administrative (managed by),
+Service (hosts service), Virtualization (hosted by), Geographic (located
+at), and Dependency (depends on). It does not freeze an implementation
+taxonomy beyond what ARCH-014 justified — ARCH-014 itself found these
+categories are not equally ready: Service already has a working,
+validated evidence-to-model path via `ServiceEvidence`
+([networkmapper/core/models.py:22-54](../networkmapper/core/models.py)),
+while Administrative relationships were found likely to require a
+structurally different evidence category — human-asserted or imported,
+not provider-observed — rather than the same corroboration mechanics as
+the other, discovery-derived categories. This ADR preserves that
+distinction rather than forcing every category through one identical
+mechanism.
+
+#### Relationship Evidence
+
+Relationship observations may originate from multiple independent
+providers. ARCH-014 evaluated the architectural implications of LLDP,
+CDP, SNMP interface MIBs, bridge MIB, routing tables, ARP, WMI, VMware,
+Redfish, and SSH as future sources, without designing any of them. This
+ADR does not establish provider-specific precedence among them; future
+implementations evaluate corroborated relationship observations as a
+set. This ADR also records, following ARCH-014 Section 4 directly, that
+relationship resolution must not assume every category is symmetric
+device-to-device peering: Routing evidence's far endpoint may be a
+subnet rather than a device, and Redfish evidence is substantially
+containment ("part of") rather than peering. Accommodating more than one
+endpoint shape and more than one relationship shape is a requirement
+this ADR records; how a future resolver accommodates it is not designed
+here.
+
+#### Corroboration
+
+- Independent observations strengthen a relationship interpretation.
+- Conflicting observations weaken it — and must be retained and
+  surfaced, never silently arbitrated, consistent with ADR-011's and
+  ADR-012's identical posture for conflicting evidence.
+- A single observation rarely justifies a permanent canonical
+  relationship by itself.
+- Relationship conclusions must remain explainable.
+- No numeric confidence score is introduced by this ADR. Future
+  implementations may express corroboration as deterministic, discrete
+  states — ARCH-014 Section 5 illustrated a possible shape (confirmed,
+  probable, weak, conflicting) without this ADR adopting it as final,
+  mirroring ADR-012's identical treatment of ARCH-015's illustrative
+  tiers for identity.
+
+#### Relationship Lifecycle
+
+Relationship resolution distinguishes several architecturally different
+moments, none of which this ADR defines an algorithm for: **creation**
+(a relationship interpretation first forms from an initial retained
+observation set), **corroboration** (additional independent observations
+strengthen an existing interpretation), **reinterpretation** (new
+observations change what is concluded, without altering any retained
+observation), **retirement** (a relationship interpretation is no longer
+supported by recent observations — a staleness concern belonging to the
+interpretation layer, not to any observation becoming false, per
+ADR-011), and **replacement** (evidence indicates the underlying
+relationship itself has genuinely ended and a different one has formed,
+rather than the same one merely going unconfirmed). Relationship changes
+must result from evidence; relationships must not mutate arbitrarily.
+
+#### Relationship State
+
+Consistent with the Lifecycle above, this ADR distinguishes
+architectural states such as observed, corroborated, conflicting, stale,
+and retired as **interpretations**, never as provider outputs. A
+provider reports an observation; it never reports a relationship's
+state directly. This ADR does not prescribe how these states are
+computed or represented.
+
+#### Relationship Provenance
+
+A canonical relationship interpretation must preserve enough provenance
+to explain why the relationship exists, which retained observations
+support it, which providers contributed those observations, and when
+each supporting observation was collected. This follows directly from
+ADR-011's provenance requirement for retained observations generally; it
+is not a new requirement invented for relationships.
+
+#### Relationship Explainability
+
+Every canonical relationship should be explainable: a future user or
+developer must be able to answer "why does NetworkMapper believe these
+entities are related?" by reference to specific retained observations —
+never by reference to a provider-specific heuristic that bypassed
+retained evidence. This is the relationship-layer analog of
+`RuleResult.reason`'s existing role in classification (ADR-002) and of
+ADR-012's identical explainability requirement for identity.
+
+#### Relationship Independence
+
+Corroboration depends on independent evidence, not merely matching
+values. Two relationship observations originating from the same
+underlying collection operation (for example, two fields surfaced from
+one SNMP walk) must not automatically count as two independent
+confirmations. This is the same requirement ADR-012 established for
+identity evidence, applied to relationship evidence; the exact
+independence taxonomy is deferred in both cases (see Future Work).
+
+#### Relationship with Future Topology
+
+Topology is a consumer of canonical relationships, not a participant in
+determining them. Topology renders interpreted relationships; it is not
+responsible for relationship truth, and it must not shortcut relationship
+interpretation by reasoning from provider output directly. This
+separation preserves the evidence-first architecture ADR-011 and ADR-012
+already established, extended to the presentation layer relationship
+data will eventually reach.
+
+### Alternatives Considered
+
+**Allow providers to create relationships directly.** Rejected —
+relationship truth must remain provider-independent and deterministic
+(Relationship Principles, above); allowing a provider to assert a
+canonical relationship directly would reintroduce the same
+provider-ownership problem ADR-012's "Allow provider-specific identity
+systems" alternative already rejected for identity.
+
+**Build topology directly from provider output.** Rejected — corroboration,
+provenance, and explainability would all be lost, contradicting
+ARCH-014's own founding conclusion that topology must be built from
+corroborated relationship evidence, not provider output directly.
+
+**Treat IP addresses or interfaces as canonical relationship
+endpoints.** Rejected — endpoint identity must remain stable across
+rescans, renumbering, and provider differences, which IP addresses and
+raw interface identifiers are not (ADR-012's own rejection of IP address
+as canonical identity applies directly here, since a relationship
+endpoint that isn't a stable identity cannot itself be stable).
+
+**Require a single provider to establish relationships.** Rejected —
+ARCH-014 established that relationship categories naturally emerge from
+corroborated, often multi-provider observations (its own worked example:
+LLDP plus a routing table plus ARP corroborating one relationship), not
+from any one provider acting alone.
+
+**Collapse relationship evidence immediately into topology.** Rejected —
+topology is a presentation of interpreted relationships, not the
+interpretation itself; collapsing the two would eliminate the
+Relationship State and Relationship Lifecycle distinctions this ADR
+establishes, and would make relationship truth inseparable from how it
+happens to be rendered.
+
+### Rationale
+
+- This decision extends, without modifying, ADR-008 (Discovery is
+  Immutable, Interpretation is Adjustable). Relationships are the third
+  instance of the same evidence/interpretation split ADR-008 established
+  for `device_type` and ADR-012 already extended to identity —
+  convergent reuse of one principle across three layers, not three
+  separate principles.
+- This decision extends, without modifying, ADR-011 (Bounded Canonical
+  Observation Model). ADR-011 named relationship resolution as one of
+  the two subsystems the retained observation layer exists to serve;
+  this ADR is that relationship-specific policy.
+- This decision directly depends on, and does not modify, ADR-012
+  (Canonical Identity Resolution). Relationship endpoints are canonical
+  identities as ADR-012 defines them; this ADR could not have been
+  written before ADR-012 existed, consistent with ADR-012's own
+  "Relationship with Future ADRs" section naming itself a prerequisite.
+- This decision does not modify ADR-002 (RuleResult), ADR-003 (First
+  Match Wins Classification), or ADR-004 (Read-Only Evidence API).
+  Relationship resolution is architecturally distinct from
+  classification, and this ADR does not change how `DeviceClassifier`
+  operates.
+- This decision does not modify ADR-009 (Per-Service Discovery Evidence)
+  or ADR-010 (Enrichment Providers Operate on Already-Discovered
+  Devices). `Device`'s evidence-field pattern and `EnrichmentProvider`'s
+  fallback-only merge are unaffected; this ADR governs how relationships
+  are interpreted from retained observations, not how evidence is
+  collected or merged into `Device`.
+- Preferring deterministic, discrete, explainable corroboration states
+  over numeric confidence scoring mirrors ADR-012's identical choice for
+  identity, both consistent with `RuleResult.confidence_contribution`'s
+  long-standing, deliberate non-use.
+
+### Consequences
+
+- Relationship resolution becomes deterministic and provider-independent,
+  consistent with ADR-012's identical properties for identity.
+- Topology gains an explainable foundation to build on: every future
+  rendered relationship is traceable to retained observations rather
+  than to an unexplained provider heuristic.
+- Future visualization and future lifecycle analysis both have an
+  architectural home to build against.
+- Evidence provenance is preserved end-to-end, from a provider's
+  original observation through to whatever a future topology view
+  eventually renders.
+- This decision is consistent with, and does not require reopening,
+  ADR-011 or ADR-012.
+- Implementation complexity increases: a future resolver must evaluate
+  corroboration across a retained relationship-observation set rather
+  than reading provider output directly.
+- Relationship resolution requires the retained observations ADR-011
+  established; it cannot be implemented against collapsed `Device` state
+  or raw provider output alone.
+- Multiple relationship observations about the same endpoints may remain
+  unresolved — a Conflicting or Weak interpretation is an explicit valid
+  outcome, not a failure requiring forced resolution.
+- Topology cannot shortcut relationship interpretation to reach a
+  rendering faster; any future implementation that does so would violate
+  this ADR's separation between relationship resolution and topology.
+
+### Future Work
+
+The following are explicitly deferred and are not authorized by this
+ADR:
+
+- Relationship resolver algorithms.
+- Provider-specific relationship-collection heuristics.
+- Topology rendering of any kind.
+- Any graph implementation for `NetworkGraph` or elsewhere.
+- Persistence strategy for relationship interpretations or observations.
+- Any serialization change.
+- Relationship identifiers and how they are assigned.
+- UI presentation of relationships or topology.
+- Observation storage design (shared with ADR-011's own deferred scope).
+- Provider-specific mapping of relationship evidence to canonical
+  categories.
+- Topology layout of any kind.
+
+Each of the above requires its own approved sprint and, per
+[ENGINEERING.md](../ENGINEERING.md), its own updates to `ROADMAP.md`,
+`docs/architecture/`, and `docs/ADR.md`.
