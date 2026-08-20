@@ -182,10 +182,13 @@ reviewed scope reduction (Section 6) that leaves symmetric categories
 separate `WEAK` relationships rather than one `CONFIRMED` one, until a
 later stage revisits it against real evidence. Section 6.
 
-**4. What conflicts can occur?** Two or more independent sources reporting
-different `related_subject` values for the same `(subject, category)` —
-e.g., LLDP and CDP naming different neighbors for the same local claim.
-Section 6.
+**4. What conflicts can occur?** More than one distinct `related_subject`
+value observed for the same `(subject, category)` — most commonly two
+independent sources disagreeing (e.g., LLDP and CDP naming different
+neighbors for the same local claim), but not exclusively: mirroring
+`IdentityResolver` field-for-field means a single source's own internally
+inconsistent reports are sufficient too, exactly as they already are for
+identity properties. Section 6.
 
 **5. What evidence must never be discarded?** The original
 `RelationshipObservation` objects (never mutated or dropped, including
@@ -544,7 +547,21 @@ of `value`.
 investigation recommends the identical three-state vocabulary
 `IdentityResolver` uses at the property level: `WEAK` (one independent
 source), `CONFIRMED` (two or more independent sources agreeing),
-`CONFLICTING` (independent sources disagree, never silently arbitrated).
+`CONFLICTING` (more than one distinct value present among the group's
+retained observations, never silently arbitrated). This is a direct,
+literal reuse of `IdentityResolver._resolve_property()`'s own definition,
+not merely its vocabulary: that method has no independent-source-count
+gate on its `CONFLICTING` branch — `len(distinct_values) > 1` alone
+triggers it, regardless of how many independent sources contributed those
+values. `CONFLICTING` therefore does not require the disagreement to
+originate from two *different* independent sources; a single source's own
+internally inconsistent reports are already sufficient, exactly as they
+already are for identity properties. (An earlier draft of this section
+described `CONFLICTING` as "independent sources disagree," which read in
+isolation could be misunderstood as requiring source plurality — this
+revision aligns the prose with the algorithm it has always specified,
+per the field-for-field mirroring this section requires, rather than
+changing the algorithm to match the earlier, imprecise prose.)
 `IdentityCorroborationState.PROBABLE` — the identity-level rollup across
 *multiple properties* of one subject — has no direct analog and this
 investigation recommends **not** introducing one. `PROBABLE` exists at
@@ -568,7 +585,13 @@ two observations sharing both `provenance.provider` and
 operation and must not count as two independent confirmations — ADR-013's
 Relationship Independence section names this explicitly as "the same
 requirement ADR-012 established for identity evidence, applied to
-relationship evidence."
+relationship evidence." This requirement governs what counts as a
+*confirmation*; it does not gate what counts as a *conflict*. A single
+source's own internally differing reports are not two independent
+confirmations of anything, but per Confidence states above, they are
+still more than one distinct value — sufficient for `CONFLICTING` on
+their own, identical to how `IdentityResolver` already treats identity
+properties.
 
 **Directionality — a real mechanism, deliberately deferred out of Stage 1.**
 Some categories are symmetric (peering): "connected to," observed from
@@ -829,6 +852,12 @@ finds is the right template to clone rather than invent independently):
   the same `(subject, category)` produce `CONFLICTING`, with both retained
   (Section 7) — the test this investigation's Section 6 correction exists
   specifically to make possible.
+- A single independent source reporting two different `related_subject`
+  values for the same `(subject, category)` also produces `CONFLICTING`,
+  with both retained — `CONFLICTING` does not require the disagreement to
+  originate from two different independent sources (Section 6), mirroring
+  `IdentityResolver._resolve_property()`'s identical, ungated behavior for
+  identity properties.
 - An observation whose `subject` or `related_subject` is absent from the
   supplied identities produces no `CanonicalRelationship` and raises no
   error (Section 8).
