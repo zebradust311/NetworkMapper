@@ -29,10 +29,14 @@ ARCH-017/FEAT-008A (see Section 6's Directionality subsection and Section
 15): Stage 1 groups `subject`/`related_subject` exactly as reported, for
 every category, with no symmetric-category canonicalization.** The
 allowlist mechanism originally proposed as part of Stage 1 is deferred —
-it is new algorithmic surface `IdentityResolver` never needed, with no real
-evidence to validate it against until a symmetric-category provider
-(LLDP/CDP) is actually built, which is not the recommended first provider
-(Section 5/15 recommend ARP-corroborated-gateway, itself directional).
+it is new algorithmic surface `IdentityResolver` never needed, with no
+real evidence to validate it against: no provider emits any relationship
+observation today, and the recommended first provider (Section 5/15
+recommend ARP-corroborated-gateway) does not resolve this either way,
+since its own canonical category and symmetric/directional classification
+are themselves left to its own implementation sprint, not decided here —
+so no confirmed symmetric-category evidence exists to build the mechanism
+against, even prospectively.
 Offered as a recommendation, not a decision — per scope, engineering
 review selects the next sprint.
 
@@ -88,15 +92,19 @@ describes a symmetric-category canonicalization mechanism that would be
 needed to fully corroborate such categories — but a post-draft scope review
 against ARCH-017/FEAT-008A (this document's own precedent) found that
 mechanism is new algorithmic surface with no real evidence to validate it
-against yet (no provider emits any relationship observation today, Section
-3, and the recommended first provider is directional, not symmetric,
-Section 5/15) and is exactly the kind of deferrable sophistication
-`IdentityResolver`'s own Stage 1 already set precedent for deferring
-(cross-subject correlation). **This investigation now recommends Stage 1
-omit the canonicalization mechanism**, grouping every category — including
-symmetric ones — exactly as reported, and revisiting corroboration accuracy
-for symmetric categories once a provider that actually produces one is
-being designed. Section 6 and Section 15 detail this revision.
+against yet: no provider emits any relationship observation today (Section
+3), and even the recommended first provider does not settle the question,
+since its own canonical category and symmetric/directional classification
+are themselves left to its implementation sprint rather than decided here
+(Section 5/15) — so no confirmed symmetric-category evidence exists to
+validate the mechanism against, prospectively or otherwise. This is
+exactly the kind of deferrable sophistication `IdentityResolver`'s own
+Stage 1 already set precedent for deferring (cross-subject correlation).
+**This investigation now recommends Stage 1 omit the canonicalization
+mechanism**, grouping every category — including symmetric ones — exactly
+as reported, and revisiting corroboration accuracy for symmetric
+categories once a provider that actually produces one is being designed.
+Section 6 and Section 15 detail this revision.
 
 The third finding is a concrete integration constraint this investigation
 surfaces for the first time, not previously written down: a future
@@ -107,9 +115,9 @@ address), not in whatever identifier its own protocol natively reports
 (a MAC address, for bridge-MIB; a chassis ID, for LLDP/CDP). If it does
 not, the observation's endpoint will never match any `CanonicalIdentity`
 and can never resolve to a canonical relationship — silently, since Section
-7's invariants treat an unresolved endpoint as ordinary retained evidence,
-not an error. Section 5 evaluates every named protocol against this
-constraint specifically.
+6's Preprocessing stage and Section 8's invariants both treat an
+unresolved endpoint as ordinary retained evidence, not an error. Section 5
+evaluates every named protocol against this constraint specifically.
 
 The fourth finding, carried forward rather than newly discovered, is that
 `RelationshipResolver`'s endpoints — canonical identities from
@@ -303,7 +311,9 @@ introducing a new, stronger claim about endpoint stability that
 `CanonicalIdentity` set is real, retained evidence (ADR-011) that simply
 does not resolve to a canonical relationship this run — mirroring exactly
 how `IdentityResolver` already treats a `RelationshipObservation` it is
-handed (ignored, not erased, not an error).
+handed (ignored, not erased, not an error). This exclusion is applied
+during Section 6's Preprocessing stage, before grouping — never after —
+per Section 6's own explicit statement of why that order is required.
 
 **Self-loops.** No relationship category ADR-013/ARCH-014 evaluated models
 a device's relationship to itself. This investigation recommends
@@ -313,7 +323,8 @@ resolution) as excluded from canonical resolution — the same
 raised error, since a self-referential observation is still real evidence
 of *something* (most plausibly a collection artifact) that should not be
 silently discarded from `Project.observations`, only withheld from
-canonical interpretation.
+canonical interpretation. Like the unresolved-endpoint exclusion above,
+this is applied during Section 6's Preprocessing stage, before grouping.
 
 **Non-`Device`-shaped and containment endpoints.** ADR-013's Relationship
 Categories and Relationship Evidence sections already record that Routing's
@@ -403,7 +414,18 @@ reference — the one source among all evaluated here that satisfies Section
 ARCH-014 Section 4's own finding that ARP is "the cleanest fit among all
 sources evaluated for a corroboration example." This investigation's own
 recommendation (Section 15) makes this NetworkMapper's most realistic first
-relationship-evidence provider.
+relationship-evidence provider. This investigation does not assign ARP
+evidence a canonical category name or a symmetric/directional
+classification — per ADR-013's own deferral of provider-specific category
+mapping, and consistent with this document's general position (Section 1)
+that provider-specific mapping is implementation detail, that mapping is
+intentionally left to the Stage 3 provider implementation sprint itself
+(Section 15), not decided here. A Stage 3 implementer must choose it
+deliberately rather than assume, by analogy to Physical/LLDP evidence, that
+ARP evidence belongs on Section 6's symmetric-category allowlist — an ARP
+binding observed from one side (the querying device) is not obviously the
+same claim as one observed from the other, and nothing in this
+investigation resolves that either way.
 
 **Routing tables (SNMP `ipCidrRouteTable`, or a local `ip route`/WMI
 query).** The far endpoint is frequently a subnet or next-hop IP, not a
@@ -443,6 +465,58 @@ requirement unchanged.
 
 ## 6. Corroboration Strategy
 
+**Resolver pipeline.** Grouping and endpoint/self-loop exclusion were
+previously specified without stating their relative order — two orderings
+are possible, and they are not equivalent (worked through below, under
+"Preprocessing must precede grouping"). This section states the
+authoritative order explicitly; it is the single source of truth for
+`RelationshipResolver`'s internal pipeline, and Sections 4 and 8
+cross-reference it rather than restating it:
+
+```
+RelationshipObservation
+        ↓
+Preprocessing
+    - resolve each observation's subject/related_subject against
+      the supplied CanonicalIdentity set
+    - exclude observations with an unresolved endpoint
+    - exclude self-loops (subject == related_subject, post-resolution)
+        ↓
+Grouping — by (subject, category), Section 4
+        ↓
+Corroboration — independent-source counting, below
+        ↓
+CanonicalRelationship (Section 8)
+```
+
+Preprocessing operates on individual observations, before any grouping
+occurs. A `RelationshipObservation` excluded during preprocessing never
+enters any `(subject, category)` group and never contributes a
+`related_subject` value for that group's corroboration/conflict
+computation — it is invisible to Grouping and Corroboration entirely, not
+merely excluded from the final output. This mirrors, and extends to
+content-based filtering, the same precede-grouping filter pattern
+`IdentityResolver.resolve()` already uses for its own type-based filter
+(`identity_observations = [o for o in observations if isinstance(o,
+IdentityObservation)]`, `identity/resolver.py:58-59`, executed before any
+grouping in that resolver too).
+
+**Preprocessing must precede grouping.** This ordering is required, not
+stylistic. If grouping ran first — i.e., if exclusion were applied only to
+the finished `CanonicalRelationship` output rather than to observations
+beforehand — a self-loop artifact (e.g., a misconfigured switch reporting
+itself as its own LLDP neighbor) or an observation whose target is not yet
+independently discovered would still occupy the same `(subject, category)`
+group as any genuine, valid observation for that same subject and
+category, since the grouping key does not include `related_subject`
+(below). A real `A → B` observation sharing a group with a noisy or
+premature `A → A` or `A → (unresolved)` observation would then present
+more than one distinct value under Corroboration's counting rule —
+incorrectly producing `CONFLICTING` for a relationship that has only one
+genuine, single-source claim behind it. Preprocessing-first avoids this
+by construction: excluded observations are removed before Grouping ever
+runs, so they cannot contaminate a group they were never part of.
+
 **The structural correction, worked through.** `IdentityResolver` computes
 `PropertyCorroboration` by grouping a subject's observations by
 `property_name`, then within each group collecting values by independent
@@ -461,9 +535,10 @@ would land in two *separate*, individually-unconflicted groups
 recognized as competing claims about the same thing — silently losing
 exactly the conflict ADR-013 requires be surfaced, not hidden. Grouping
 instead by `(subject, category)` and treating `related_subject` as the
-value restores the identical mechanism `IdentityResolver` already uses,
-field-for-field: `category` in the role of `property_name`,
-`related_subject` in the role of `value`.
+value (on already-preprocessed observations, above) restores the
+identical mechanism `IdentityResolver` already uses, field-for-field:
+`category` in the role of `property_name`, `related_subject` in the role
+of `value`.
 
 **Confidence states — direct reuse, one deliberate omission.** This
 investigation recommends the identical three-state vocabulary
@@ -516,11 +591,17 @@ categories on a small, explicit, extensible symmetric-category allowlist
 evidence path per Section 5) — but this investigation's own scope review
 against ARCH-017/FEAT-008A (Section 1, Section 15) found it does not belong
 in a first implementation: it is new algorithmic surface `IdentityResolver`
-never needed, it has no real evidence to validate it against (Section 3:
-zero providers today; Section 5/15: the recommended first provider, ARP,
-is directional, not symmetric), and it mirrors exactly the kind of harder,
-adjacent problem `IdentityResolver`'s own Stage 1 already set precedent for
-deferring (cross-subject correlation) rather than solving upfront.
+never needed, and it has no real evidence to validate it against — not
+merely because zero providers exist today (Section 3), but because even
+the recommended first provider does not resolve the question, since
+Section 5/15 leave its own canonical category and symmetric/directional
+classification to its own implementation sprint rather than deciding it
+here. Building the canonicalization mechanism now would mean building it
+against a category taxonomy that does not yet exist, not merely against
+evidence that has not yet arrived. It also mirrors exactly the kind of
+harder, adjacent problem `IdentityResolver`'s own Stage 1 already set
+precedent for deferring (cross-subject correlation) rather than solving
+upfront.
 
 **This investigation now recommends Stage 1 group `subject` and
 `related_subject` exactly as reported, for every category, with no
@@ -585,6 +666,43 @@ class RelationshipResolver:
         ...
 ```
 
+**`CanonicalRelationship`'s proposed type shape.** Referenced throughout
+this document but not previously given as a concrete definition; added
+here to close that gap:
+
+```python
+class RelationshipCorroborationState(StrEnum):
+    """Mirrors IdentityCorroborationState (identity/models.py), minus
+    PROBABLE — Section 6 explains why no relationship-level analog to
+    PROBABLE is recommended."""
+
+    WEAK = "weak"
+    CONFIRMED = "confirmed"
+    CONFLICTING = "conflicting"
+
+
+@dataclass(frozen=True)
+class CanonicalRelationship:
+    """One resolved interpretation of one subject's relationships in one
+    category — Section 4's (subject, category) key, the complete output
+    unit (Section 6: nothing rolls up above it, unlike CanonicalIdentity).
+
+    Deliberately has no separate field holding "the" resolved
+    related_subject value. When state is WEAK or CONFIRMED, exactly one
+    distinct related_subject value is present across `observations` and is
+    recoverable from there; when CONFLICTING, more than one is present and
+    none is privileged. This mirrors PropertyCorroboration's identical
+    absence of a collapsed value field (identity/models.py) — a consumer
+    reads the value(s) from the retained observations, never from a field
+    that would have to silently pick one during a conflict.
+    """
+
+    subject: str
+    category: str
+    state: RelationshipCorroborationState
+    observations: tuple[RelationshipObservation, ...]
+```
+
 **Inputs.** `observations` is the same mixed collection
 `IdentityResolver.resolve()` already accepts — in practice,
 `Project.observations` — from which `RelationshipResolver` extracts only
@@ -601,30 +719,37 @@ identities itself.
 (by `subject`, then `category`, mirroring `IdentityResolver.resolve()`'s
 own sort-by-subject and `_resolve_subject()`'s sort-by-property-name).
 
-**Invariants**, each a direct, evaluated carry-forward of an invariant
-`IdentityResolver` already upholds:
+**Invariants.** Four of the six below are a direct, evaluated carry-forward
+of an invariant `IdentityResolver` already upholds; the two endpoint/
+self-loop exclusion invariants are not — `IdentityResolver` has no
+analogous content-based filter (only a type-based one), so those two are
+genuinely new mechanics, specified fully by Section 6's Preprocessing
+stage rather than by precedent:
 
-- Never mutates `observations` or `identities`.
+- Never mutates `observations` or `identities`. (Carried forward.)
 - Never touches `Device`, `NetworkGraph`, classification, reporting, or
   persistence — a pure function over its two inputs, exactly like
-  `IdentityResolver.resolve()`.
+  `IdentityResolver.resolve()`. (Carried forward.)
 - Deterministic and order-independent: the same `(observations, identities)`
   pair, processed in any order, produces byte-identical output — the
   identical determinism requirement ADR-013's Relationship Principles
   restates from ADR-012, and the identical mechanism satisfies it
   (grouping into dicts/sets, then explicitly sorting every output
-  collection, never relying on input iteration order).
+  collection, never relying on input iteration order). (Carried forward.)
 - A `RelationshipObservation` whose subject or related_subject does not
-  resolve to a supplied `CanonicalIdentity` contributes no
-  `CanonicalRelationship` — silently excluded from canonical output, not an
-  error, not a partial/pending result (ARCH-017's "no partially interpreted
-  identity or relationship is ever exposed to a consumer" principle,
-  applied here directly).
-- A self-loop (`subject == related_subject` after endpoint resolution)
-  contributes no `CanonicalRelationship`, per Section 4.
+  resolve to a supplied `CanonicalIdentity` is excluded during Section 6's
+  Preprocessing stage, before grouping, and so contributes no
+  `CanonicalRelationship` — silently excluded, not an error, not a
+  partial/pending result (ARCH-017's "no partially interpreted identity or
+  relationship is ever exposed to a consumer" principle, applied here
+  directly). (New; see Section 6.)
+- A self-loop (`subject == related_subject` after endpoint resolution) is
+  likewise excluded during Preprocessing, before grouping, per Section 4/6,
+  and so contributes no `CanonicalRelationship`. (New; see Section 6.)
 - Every `RelationshipObservation` supplied and retained by a
   `CanonicalRelationship` is preserved by identity (`is`, not merely `==`),
   matching `IdentityResolver`'s own proven provenance-retention guarantee.
+  (Carried forward.)
 
 ---
 
@@ -941,9 +1066,9 @@ Mirroring FEAT-008A's own staging, which this investigation finds
 transfers directly:
 
 **Stage 1 — `RelationshipResolver` introduced, inert, directional-only.**
-`CanonicalRelationship` and `RelationshipCorroborationState` types
-(Section 4), the resolver itself (Section 8) grouping `subject`/
-`related_subject` exactly as reported for every category (Section 6 —
+`CanonicalRelationship` and `RelationshipCorroborationState` types and the
+resolver itself (Section 8), grouping `subject`/`related_subject` exactly
+as reported for every category (Section 6 —
 **revised after review against ARCH-017/FEAT-008A**: the symmetric-category
 canonicalization mechanism originally scoped into Stage 1 is deferred to
 Stage 3.5, below), unit tests (Section 10) — not wired into
@@ -962,7 +1087,10 @@ ARP-corroborated-gateway evidence is the cleanest near-term candidate (no
 new endpoint type, both ends already `Device`-shaped, no translation
 requirement to solve first) makes it the natural first real evidence
 source to validate `RelationshipResolver` against actual discovery, rather
-than only synthetic test fixtures.
+than only synthetic test fixtures. Per Section 5's ARP paragraph, this
+stage is also where the provider chooses ARP evidence's canonical category
+name and symmetric/directional classification — intentionally not decided
+by this investigation.
 
 **Stage 3.5 (deferred from Stage 1 by this review) — symmetric-category
 canonicalization.** The directionality mechanism Section 6 describes but
