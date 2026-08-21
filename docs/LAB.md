@@ -183,6 +183,8 @@ Potential research topics:
 - Documentation generation
 - Environment baselining
 - Inventory validation
+- Credential intake and transition handoff (see Credential Intake
+  Companion Utility)
 
 Questions:
 
@@ -284,6 +286,8 @@ Potential research topics:
 - Upgrade planning
 - Infrastructure health
 - Risk summaries
+- Transition and handoff documentation exports (see Credential Intake
+  Companion Utility)
 
 Questions:
 
@@ -307,6 +311,7 @@ Potential research topics:
 - Firmware recommendations
 - Vendor lifecycle information
 - Product family identification
+- Credential-group data modeling (see Credential Intake Companion Utility)
 
 Questions:
 
@@ -329,12 +334,202 @@ Potential research topics:
 - Change Auditor
 - Fleet comparison
 - Multi-site management
+- Credential Intake Companion Utility (see below)
 
 Questions:
 
 - Does this belong inside NetworkMapper?
 - Should this become a companion utility?
 - Would separation improve maintainability?
+
+---
+
+## Credential Intake Companion Utility
+
+**Problem**
+
+MSP onboarding and offboarding transitions routinely surface credential
+information in inconsistent, unstructured formats — Word documents, Excel
+workbooks, CSVs, PDFs, email attachments, scanned or handwritten notes, and
+files scattered across mapped drives, SMB shares, or SharePoint libraries.
+Technicians currently absorb the cost of finding, reading, and manually
+transcribing this material. Credential handling is also a distinct security
+boundary and should not be casually merged into NetworkMapper's discovery
+and reporting responsibilities.
+
+This concept explores whether a **separate, in-house companion
+application** — not a NetworkMapper subsystem — could reduce this workload
+while keeping credential handling architecturally isolated from
+NetworkMapper's core credential-handling code.
+
+**Concept**
+
+NetworkMapper would expose a simple UI button, "Credential Intake," that
+launches the companion utility and passes only non-secret context:
+
+- Customer ID
+- Project ID
+- Site ID
+- Device IDs
+- Technician identity
+- Authorization scope
+
+No credential values would pass through NetworkMapper. The utility is a
+distinct security boundary with its own launch contract, not a feature of
+NetworkMapper's credential-handling code.
+
+**Candidate source discovery**
+
+The utility would scan only technician-selected and explicitly authorized
+roots, and place discovered files into a technician review queue rather
+than importing anything automatically. Candidate sources would be
+identified using explainable signals: filename, folder path, file type,
+spreadsheet sheet names, column headers, document headings, metadata, and
+prior processing history.
+
+Each queue item would show file name, source location, file type, modified
+date, reason it was selected, confidence, review status, and processing
+history. The technician could inspect, accept, reject, defer, or mark a
+source as already processed.
+
+**Evidence-first processing**
+
+The utility would follow the same evidence-first, explainable principles as
+NetworkMapper's discovery engine:
+
+```text
+Selected source
+    ↓
+Parser/OCR provider
+    ↓
+Candidate evidence
+    ↓
+Normalization and correlation
+    ↓
+Deterministic confidence and conflict rules
+    ↓
+Technician review
+    ↓
+Accepted credential group
+    ↓
+Keeper and documentation exports
+```
+
+Extracted values would remain observations until a technician confirms
+them. If the same account appears with multiple different password
+candidates, the system must surface a conflict rather than silently
+selecting one — for example: "Administrator@Firewall — three password
+candidates found; source dates conflict; technician decision required."
+
+**Credential grouping**
+
+The preferred model is credential-centric rather than application-centric.
+Exact repeated username/password observations would group into one
+credential group with multiple associated locations — for example, a
+single `admin@xyz.com` group referencing Microsoft 365, Active Directory, a
+Hyper-V host, and an RMM platform as separate locations rather than four
+unrelated records.
+
+The system would need to:
+
+- Group exact repeated username/password observations
+- Preserve every source reference
+- Maintain a list of associated locations
+- Track validation status per location
+- Track observed dates
+- Detect conflicting values
+- Distinguish the same username with different passwords as separate
+  credential versions or groups
+- Avoid forcing the technician to assign every occurrence to one
+  application
+- Never assume a credential observed in one location is valid everywhere
+  else
+
+**Offline AI assistance**
+
+An offline, local AI model could help contextualize and format extracted
+information into coherent tables — mapping inconsistent labels to
+username/password/URL/hostname/location, suggesting credential-group
+membership or duplicate relationships, highlighting missing fields,
+formatting records into structured JSON, and explaining confidence and
+conflicts.
+
+The AI would be an optional suggestion layer, never the security boundary
+and never the authority on credential validity. It must run
+locally/offline, produce structured output with confidence and reasoning,
+never silently resolve conflicts, never determine whether a credential is
+valid, never bypass technician review, use only synthetic or redacted data
+for training or tuning, and have a deterministic fallback if unavailable.
+
+GobboNet may be worth evaluating as an experimental local-model frontend or
+benchmark target, but it should not be treated as a production security
+boundary without additional review, hardening, and integration work.
+
+**Export targets**
+
+Eventual export targets could include a Keeper-compatible JSON/CSV import,
+an XLSX workbook for documentation and OneNote insertion, an encrypted
+credential handoff PDF, a customer transition runbook, and a non-secret
+audit and evidence report. Native `.one` generation is not required for an
+initial design; an XLSX workbook is a simpler first documentation output.
+
+A documentation workbook might include sheets such as Executive Summary,
+Sites and Network, Main Topology, VLAN Inventory, Assets and
+Infrastructure, Administrative Access, Credential Groups, Services and
+Dependencies, Backup and Recovery, Risks and Open Issues, Transition
+Checklist, and Evidence Sources. A Main Topology sheet would show primary
+structure only — major sites, WAN links, firewalls, core/distribution
+switches, major servers, and VLAN relationships — not every endpoint.
+
+**Security and lifecycle requirements**
+
+This is strictly for authorized customer transitions. Research here would
+need to cover explicit authorization and scope, secure temporary staging,
+keeping secret values out of logs, telemetry, crash dumps, and ordinary
+NetworkMapper evidence, protected handling of OCR output, separate
+encryption-key delivery, recipient verification, audit logging without
+exposing secret values, defined retention and destruction, credential
+rotation after handoff, and deletion of working copies after confirmed
+transfer. NetworkMapper should not retain live credentials unless
+contractually required — the credential utility must remain a separate
+security boundary from NetworkMapper's core credential-handling code.
+
+Potential research topics:
+
+- Source discovery across files, documents, and authorized shares
+- File and document parsing, and OCR requirements for scanned or
+  handwritten notes
+- Credential-group data modeling
+- Offline AI benchmarking (including GobboNet as an experimental target)
+- Technician review workflow
+- Keeper and XLSX export design
+- Secure handoff lifecycle and retention/destruction rules
+- NetworkMapper launch/context contract (non-secret handoff only)
+- Documentation/reporting model shared with executive reporting
+- Threat model for the companion utility as a distinct security boundary
+
+Questions:
+
+- Which minimal changes, if any, does NetworkMapper need now — such as a
+  launch contract or non-secret context passing — to avoid a costly
+  retrofit later if this graduates?
+- What does "confidence" mean for an OCR- or parser-derived credential
+  candidate, and how should conflicting candidates be presented?
+- How should the utility prove it never becomes a second, informal
+  credential store inside NetworkMapper?
+- What would an ADR need to establish before any code is written — data
+  model, launch contract, or threat model first?
+
+If this concept eventually leaves the Lab, it is expected to enter as a
+distinct **research and architecture workstream** — tentatively,
+"Credential Intake Companion Utility — Feasibility and Architecture" —
+producing architecture investigation, ADR candidates, data-model
+recommendations, launch-contract recommendations, a synthetic-document
+benchmark plan, parser/OCR/AI feasibility results, export-format prototype
+recommendations, and identification of any minimal NetworkMapper-side
+changes needed to avoid a future retrofit. This is a research and
+architecture proposal only — not a production implementation commitment,
+and not a roadmap placement.
 
 ---
 
@@ -349,6 +544,8 @@ Examples:
 - Compliance reporting
 - Configuration drift analysis
 - Automated remediation suggestions
+- Offline/local AI credential contextualization (see Credential Intake
+  Companion Utility)
 
 No implementation planning should occur until these ideas have matured
 through research.
