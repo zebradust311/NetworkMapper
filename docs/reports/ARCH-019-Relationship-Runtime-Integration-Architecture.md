@@ -87,10 +87,12 @@ No production code is proposed for change by this report.
 `RelationshipResolver` belong?** `Application.run()` →
 `DiscoveryEngine.discover()` (discovery, enrichment, classification) →
 `Project(...)` construction → workbench/report/persistence I/O. Both
-resolvers belong immediately after `Project.observations` is final and
-before any reporting or persistence call reads `project` — concretely,
-between `application.py:137` (`project = Project(...)`) and line 139 (the
-first consumer, the workbench export). Section 3.
+resolvers belong immediately after `engine.observations` is final and
+before `Project(...)` is constructed — concretely, between line 94
+(`graph = engine.discover()`) and line 133 (`project = Project(...)`
+begins), computed from `engine.observations` and passed into that same
+`Project(...)` call as constructor arguments, never assigned to `project`
+afterward. Section 3.
 
 **2. Which existing components require modification, and which must
 remain untouched?** Modified: `networkmapper/project/models.py` (two new
@@ -188,13 +190,18 @@ Application.run()                                    [application.py:48]
     │
     ├─ print diagnostics, classification summary        [96-131]
     │
+    │       ← IdentityResolver / RelationshipResolver belong here
+    │         (Section 6): computed from engine.observations, passed
+    │         into the Project(...) call below as constructor
+    │         arguments — never assigned to project afterward
+    │
     ├─ project = Project(                                [133-137]
     │       customer_name=...,
     │       network_graph=graph,
     │       observations=engine.observations,
+    │       canonical_identities=...,
+    │       canonical_relationships=...,
     │   )
-    │
-    │       ← RelationshipResolver belongs here (Section 4)
     │
     ├─ (optional) ClassificationWorkbench export         [139-146]
     ├─ CsvExporter().export(project, ...)                [163-166]
@@ -214,16 +221,20 @@ consume `project.network_graph` (confirmed for `MarkdownExporter` via
 `project.observations` exists today purely so a future consumer — this
 sprint's resolvers — has something to read; nothing currently reads it.
 
-**Where `RelationshipResolver` belongs.** Directly following `Project`
-construction (`application.py:137`), before the first consumer of
-`project` (the workbench export, line 139). This is not a discretionary
-placement: it is the first point at which `project.observations` (equal
-by reference to `engine.observations` at that point) is available inside
-`Application.run()`'s own scope, and it is before anything that reads
-`project` for reporting or persistence — so resolver output can be made
-available to those consumers later (out of this sprint's scope, per
-Section 9) without needing to re-plumb `project` through an additional
-call.
+**Where `RelationshipResolver` belongs.** Immediately before `Project`
+construction (`application.py:133`), computed from `engine.observations`
+and passed into that same `Project(...)` call as a constructor argument —
+never assigned to `project` after the fact. Section 6 states why:
+constructing `Project` fully formed, in one call, is preferred to a
+construct-then-mutate alternative that would leave `project` briefly
+incomplete relative to its own declared fields for no benefit. This is not
+a discretionary placement: it is the first point at which
+`engine.observations` (equal by reference to what `project.observations`
+will hold) is available inside `Application.run()`'s own scope, and
+placing the calls here means resolver output already exists as part of
+`project` from the moment `project` exists — available to any consumer
+added later (out of this sprint's scope, per Section 9) without needing to
+re-plumb `project` through an additional call or mutation.
 
 ---
 
