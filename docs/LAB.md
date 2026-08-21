@@ -55,6 +55,9 @@ The current architecture provides:
 - Benchmark-driven engineering
 - Customer-facing reporting
 - Versioned project serialization
+- Canonical identity and relationship resolution, wired into the runtime
+  (FEAT-009B) — single-scan only; cross-scan/cross-subject correlation
+  remains open research (see Stable Device & Identity Correlation, below)
 
 The Lab assumes this architectural foundation already exists.
 
