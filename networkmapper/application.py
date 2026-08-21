@@ -17,6 +17,8 @@ from networkmapper.discovery.scan_profile import ScanProfile
 from networkmapper.discovery.snmp_credentials import SnmpCredentials, SnmpVersion
 from networkmapper.discovery.snmp_diagnostics import SnmpRunDiagnostics
 from networkmapper.discovery.snmp_provider import SnmpEnrichmentProvider
+from networkmapper.identity.resolver import IdentityResolver
+from networkmapper.relationships.resolver import RelationshipResolver
 from networkmapper.project.models import Project
 from networkmapper.project.serializer import ProjectSerializer
 from networkmapper.exporters.csv_exporter import CsvExporter
@@ -130,10 +132,15 @@ class Application:
 
         print()
 
+        identities = IdentityResolver().resolve(engine.observations)
+        relationships = RelationshipResolver().resolve(engine.observations, identities)
+
         project = Project(
             customer_name="Test Network",
             network_graph=graph,
             observations=engine.observations,
+            canonical_identities=identities,
+            canonical_relationships=relationships,
         )
 
         if args.workbench:

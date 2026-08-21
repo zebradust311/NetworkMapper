@@ -1,9 +1,11 @@
 import unittest
 from datetime import datetime
 
+from networkmapper.identity.models import CanonicalIdentity, IdentityCorroborationState
 from networkmapper.observations.models import IdentityObservation
 from networkmapper.observations.provenance import ObservationProvenance
 from networkmapper.project.models import Project
+from networkmapper.relationships.models import CanonicalRelationship, RelationshipCorroborationState
 
 
 class ProjectObservationsTest(unittest.TestCase):
@@ -41,6 +43,36 @@ class ProjectObservationsTest(unittest.TestCase):
         first.observations.append("not a real observation, just a sentinel")  # type: ignore[arg-type]
 
         self.assertEqual(second.observations, [])
+
+
+class ProjectCanonicalOutputsTest(unittest.TestCase):
+    """ARCH-019 Stage 2 / FEAT-009B."""
+
+    def test_canonical_identities_and_relationships_default_to_empty_tuples(self):
+        project = Project(customer_name="Acme")
+
+        self.assertEqual(project.canonical_identities, ())
+        self.assertEqual(project.canonical_relationships, ())
+
+    def test_project_owns_canonical_identities_and_relationships_passed_at_construction(self):
+        identity = CanonicalIdentity(
+            subject="10.0.0.1", state=IdentityCorroborationState.WEAK, properties=()
+        )
+        relationship = CanonicalRelationship(
+            subject="10.0.0.1",
+            category="connected_to",
+            state=RelationshipCorroborationState.WEAK,
+            observations=(),
+        )
+
+        project = Project(
+            customer_name="Acme",
+            canonical_identities=(identity,),
+            canonical_relationships=(relationship,),
+        )
+
+        self.assertEqual(project.canonical_identities, (identity,))
+        self.assertEqual(project.canonical_relationships, (relationship,))
 
 
 if __name__ == "__main__":

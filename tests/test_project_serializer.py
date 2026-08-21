@@ -4,10 +4,12 @@ from datetime import datetime
 from pathlib import Path
 
 from networkmapper.core.models import Device, DeviceType, ServiceEvidence
+from networkmapper.identity.models import CanonicalIdentity, IdentityCorroborationState
 from networkmapper.observations.models import IdentityObservation
 from networkmapper.observations.provenance import ObservationProvenance
 from networkmapper.project.models import Project
 from networkmapper.project.serializer import ProjectSerializer
+from networkmapper.relationships.models import CanonicalRelationship, RelationshipCorroborationState
 
 
 class ProjectSerializerTest(unittest.TestCase):
@@ -194,6 +196,49 @@ class ProjectSerializerTest(unittest.TestCase):
 
         self.assertNotIn("observations", saved_payload)
         self.assertEqual(loaded_project.observations, [])
+        # The device itself round-trips exactly as before.
+        self.assertEqual(loaded_project.network_graph.get_device("10.0.0.20").hostname, "host-20")
+
+    def test_canonical_identities_and_relationships_do_not_survive_a_save_and_load_round_trip(self):
+        # ARCH-019 Stage 2 / FEAT-009B: canonical identities/relationships
+        # share observations' non-persistence — a persisted interpretation
+        # would outlive the retained evidence (ADR-011/ADR-012) it must
+        # remain traceable to, since that evidence is never persisted
+        # either.
+        project = Project(
+            customer_name="Acme",
+            created_date=datetime(2026, 1, 1, 12, 0, 0),
+            modified_date=datetime(2026, 1, 2, 12, 0, 0),
+            canonical_identities=(
+                CanonicalIdentity(
+                    subject="10.0.0.20",
+                    state=IdentityCorroborationState.WEAK,
+                    properties=(),
+                ),
+            ),
+            canonical_relationships=(
+                CanonicalRelationship(
+                    subject="10.0.0.20",
+                    category="connected_to",
+                    state=RelationshipCorroborationState.WEAK,
+                    observations=(),
+                ),
+            ),
+        )
+        project.network_graph.add_device(
+            Device(ip_address="10.0.0.20", hostname="host-20", vendor="Unknown")
+        )
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            file_path = Path(temp_dir) / "project.json"
+            ProjectSerializer.save(project, str(file_path))
+            saved_payload = file_path.read_text(encoding="utf-8")
+            loaded_project = ProjectSerializer.load(str(file_path))
+
+        self.assertNotIn("canonical_identities", saved_payload)
+        self.assertNotIn("canonical_relationships", saved_payload)
+        self.assertEqual(loaded_project.canonical_identities, ())
+        self.assertEqual(loaded_project.canonical_relationships, ())
         # The device itself round-trips exactly as before.
         self.assertEqual(loaded_project.network_graph.get_device("10.0.0.20").hostname, "host-20")
 
