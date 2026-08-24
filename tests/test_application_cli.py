@@ -403,7 +403,7 @@ class ApplicationCliTest(unittest.TestCase):
 
         result["snmp_provider_mock"].assert_not_called()
         engine_call = result["discovery_engine_mock"].call_args
-        self.assertEqual(engine_call.kwargs["enrichment_providers"], ())
+        self.assertEqual(engine_call.kwargs["enrichment_providers"], [])
 
     def test_snmp_flag_without_community_env_var_exits_with_non_zero_code(self):
         with patch("networkmapper.application.DiscoveryEngine"), patch(

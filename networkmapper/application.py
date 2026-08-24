@@ -10,10 +10,12 @@ from datetime import datetime
 from pathlib import Path
 
 from networkmapper.developer.classification_workbench import ClassificationWorkbench
+from networkmapper.discovery.arp_neighbor_provider import SnmpArpNeighborProvider
 from networkmapper.discovery.discovery_engine import DiscoveryEngine
 from networkmapper.discovery.nmap_provider import NmapProvider
 from networkmapper.discovery.run_diagnostics import RunDiagnostics, profile_message
 from networkmapper.discovery.scan_profile import ScanProfile
+from networkmapper.discovery.snmp_arp_diagnostics import SnmpArpRunDiagnostics
 from networkmapper.discovery.snmp_credentials import SnmpCredentials, SnmpVersion
 from networkmapper.discovery.snmp_diagnostics import SnmpRunDiagnostics
 from networkmapper.discovery.snmp_provider import SnmpEnrichmentProvider
@@ -66,6 +68,7 @@ class Application:
         parser.add_argument("--workbench", action="store_true")
         parser.add_argument("--scan-profile", default="fast")
         parser.add_argument("--snmp", action="store_true")
+        parser.add_argument("--snmp-arp", action="store_true")
         args, _ = parser.parse_known_args()
 
         scan_profile = self._parse_scan_profile(args.scan_profile)
@@ -82,14 +85,23 @@ class Application:
         )
 
         snmp_provider = None
-        if args.snmp:
-            snmp_provider = SnmpEnrichmentProvider(
-                self._resolve_snmp_credentials(), event_bus=event_bus
-            )
+        arp_provider = None
+        if args.snmp or args.snmp_arp:
+            snmp_credentials = self._resolve_snmp_credentials()
+            if args.snmp:
+                snmp_provider = SnmpEnrichmentProvider(snmp_credentials, event_bus=event_bus)
+            if args.snmp_arp:
+                arp_provider = SnmpArpNeighborProvider(snmp_credentials, event_bus=event_bus)
+
+        enrichment_providers = [
+            enrichment_provider
+            for enrichment_provider in (snmp_provider, arp_provider)
+            if enrichment_provider is not None
+        ]
 
         engine = DiscoveryEngine(
             [provider],
-            enrichment_providers=[snmp_provider] if snmp_provider is not None else (),
+            enrichment_providers=enrichment_providers,
             event_bus=event_bus,
         )
 
@@ -100,6 +112,9 @@ class Application:
 
         if snmp_provider is not None and snmp_provider.run_diagnostics is not None:
             self._print_snmp_diagnostics(snmp_provider.run_diagnostics)
+
+        if arp_provider is not None and arp_provider.run_diagnostics is not None:
+            self._print_arp_diagnostics(arp_provider.run_diagnostics)
 
         before_save_count = graph.device_count()
         print("\nClassification Summary")
@@ -295,17 +310,19 @@ class Application:
             print()
 
     def _resolve_snmp_credentials(self) -> SnmpCredentials:
-        """Resolve SNMP credentials from the environment when `--snmp` is passed.
+        """Resolve SNMP credentials from the environment when `--snmp` or
+        `--snmp-arp` is passed — shared between both flags (FEAT-010A), so
+        the operator is only ever asked for the same credential once.
 
-        ARCH-012 Credential Strategy / Failure Model: `--snmp` without a
-        resolvable credential is an operator configuration error, not a
+        ARCH-012 Credential Strategy / Failure Model: either flag without
+        a resolvable credential is an operator configuration error, not a
         per-host SNMP failure — it fails fast at startup rather than
-        silently skipping SNMP enrichment for the whole run.
+        silently skipping enrichment for the whole run.
         """
         community = os.environ.get(SNMP_COMMUNITY_ENV_VAR)
         if not community:
             print(
-                f"Error: --snmp requires the {SNMP_COMMUNITY_ENV_VAR} "
+                f"Error: --snmp/--snmp-arp requires the {SNMP_COMMUNITY_ENV_VAR} "
                 "environment variable to be set.",
                 file=sys.stderr,
             )
@@ -324,6 +341,29 @@ class Application:
         print(f"Hosts Responded: {snmp_diagnostics.hosts_responded}")
         print(f"Hosts Timed Out: {snmp_diagnostics.hosts_timed_out}")
         if snmp_diagnostics.hosts_timed_out:
+            print(
+                "Note: SNMPv2c cannot distinguish an incorrect community "
+                "string from SNMP being disabled or the host being "
+                "unreachable on UDP/161 — all three appear as a timeout."
+            )
+        print()
+
+    def _print_arp_diagnostics(self, arp_diagnostics: SnmpArpRunDiagnostics) -> None:
+        """Print run-level ARP-neighbor diagnostics: hard, directly
+        measured counts only — no fabricated percentages or ETAs
+        (OBS-002), mirroring `_print_snmp_diagnostics`."""
+        total_entries = sum(
+            host.entries_returned for host in arp_diagnostics.host_diagnostics.values()
+        )
+        print("ARP Neighbor Diagnostics")
+        print("-" * 40)
+        print(f"SNMP Version: {arp_diagnostics.version}")
+        print(f"Hosts Eligible: {arp_diagnostics.hosts_eligible}")
+        print(f"Hosts Queried: {arp_diagnostics.hosts_queried}")
+        print(f"Hosts Responded: {arp_diagnostics.hosts_responded}")
+        print(f"Hosts Timed Out: {arp_diagnostics.hosts_timed_out}")
+        print(f"Total ARP Entries Collected: {total_entries}")
+        if arp_diagnostics.hosts_timed_out:
             print(
                 "Note: SNMPv2c cannot distinguish an incorrect community "
                 "string from SNMP being disabled or the host being "
