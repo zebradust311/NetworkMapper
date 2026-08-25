@@ -4,7 +4,7 @@ from networkmapper.core.models import Device
 from networkmapper.discovery.arp_neighbor_provider import ARP_NEIGHBOR_CATEGORY, SnmpArpNeighborProvider
 from networkmapper.discovery.snmp_client import SnmpArpTableEntry, SnmpArpTableResult, SnmpClient
 from networkmapper.discovery.snmp_credentials import SnmpCredentials, SnmpVersion
-from networkmapper.observations.models import RelationshipObservation
+from networkmapper.observations.models import IdentityObservation, RelationshipObservation
 from networkmapper.runtime.events import RuntimeEvent, RuntimeEventBus, RuntimeEventKind, RuntimePhase
 
 _CREDENTIALS = SnmpCredentials(version=SnmpVersion.V2C, community="s3cr3t-community")
@@ -203,6 +203,84 @@ class SnmpArpNeighborProviderTest(unittest.TestCase):
         self.assertEqual(len(received), 2)
         self.assertEqual(received[0].kind, RuntimeEventKind.PHASE_STARTED)
         self.assertEqual(received[1].kind, RuntimeEventKind.PHASE_COMPLETED)
+
+
+class SnmpArpNeighborProviderMacIdentityTest(unittest.TestCase):
+    """ARCH-022 / FEAT-011A."""
+
+    def test_a_discovered_row_produces_both_relationship_and_mac_identity_evidence(self):
+        device = Device(ip_address="203.0.113.5")
+        neighbor = Device(ip_address="192.168.1.10")
+        client = _StubSnmpClient(
+            {"203.0.113.5": SnmpArpTableResult(responded=True, entries=[_entry("192.168.1.10", mac_address="AA:BB:CC:DD:EE:FF")])}
+        )
+        provider = SnmpArpNeighborProvider(_CREDENTIALS, client=client)
+
+        provider.enrich([device, neighbor])
+
+        observations = provider.collect_observations()
+        relationship_observations = [o for o in observations if isinstance(o, RelationshipObservation)]
+        identity_observations = [o for o in observations if isinstance(o, IdentityObservation)]
+
+        self.assertEqual(len(relationship_observations), 1)
+        self.assertEqual(relationship_observations[0].subject, "203.0.113.5")
+        self.assertEqual(relationship_observations[0].related_subject, "192.168.1.10")
+
+        self.assertEqual(len(identity_observations), 1)
+        identity_observation = identity_observations[0]
+        self.assertEqual(identity_observation.subject, "192.168.1.10")
+        self.assertEqual(identity_observation.property_name, "mac_address")
+        self.assertEqual(identity_observation.value, "AA:BB:CC:DD:EE:FF")
+        self.assertEqual(identity_observation.provenance.provider, "snmp")
+        self.assertEqual(identity_observation.provenance.collection_method, "ipNetToPhysicalTable")
+
+    def test_an_undiscovered_row_produces_relationship_evidence_only(self):
+        # ARCH-022 Section 4: the endpoint-bootstrapping safeguard. The
+        # ARP entry's IP (192.168.1.10) is NOT in the devices passed to
+        # enrich() — only the gateway itself was independently
+        # discovered. This must not manufacture identity evidence for
+        # the undiscovered neighbor.
+        device = Device(ip_address="203.0.113.5")
+        client = _StubSnmpClient(
+            {"203.0.113.5": SnmpArpTableResult(responded=True, entries=[_entry("192.168.1.10")])}
+        )
+        provider = SnmpArpNeighborProvider(_CREDENTIALS, client=client)
+
+        provider.enrich([device])
+
+        observations = provider.collect_observations()
+        relationship_observations = [o for o in observations if isinstance(o, RelationshipObservation)]
+        identity_observations = [o for o in observations if isinstance(o, IdentityObservation)]
+
+        self.assertEqual(len(relationship_observations), 1)
+        self.assertEqual(relationship_observations[0].related_subject, "192.168.1.10")
+        self.assertEqual(identity_observations, [])
+
+    def test_mixed_discovered_and_undiscovered_rows_are_gated_independently(self):
+        device = Device(ip_address="203.0.113.5")
+        discovered_neighbor = Device(ip_address="192.168.1.10")
+        client = _StubSnmpClient(
+            {
+                "203.0.113.5": SnmpArpTableResult(
+                    responded=True,
+                    entries=[
+                        _entry("192.168.1.10", mac_address="AA:AA:AA:AA:AA:AA"),
+                        _entry("192.168.1.99", mac_address="BB:BB:BB:BB:BB:BB"),
+                    ],
+                )
+            }
+        )
+        provider = SnmpArpNeighborProvider(_CREDENTIALS, client=client)
+
+        provider.enrich([device, discovered_neighbor])
+
+        observations = provider.collect_observations()
+        relationship_observations = [o for o in observations if isinstance(o, RelationshipObservation)]
+        identity_observations = [o for o in observations if isinstance(o, IdentityObservation)]
+
+        self.assertEqual({o.related_subject for o in relationship_observations}, {"192.168.1.10", "192.168.1.99"})
+        self.assertEqual(len(identity_observations), 1)
+        self.assertEqual(identity_observations[0].subject, "192.168.1.10")
 
 
 if __name__ == "__main__":

@@ -18,7 +18,7 @@ from networkmapper.discovery.enrichment_provider import EnrichmentProvider
 from networkmapper.discovery.snmp_arp_diagnostics import SnmpArpHostDiagnostics, SnmpArpRunDiagnostics
 from networkmapper.discovery.snmp_client import PysnmpClient, SnmpArpTableResult, SnmpClient
 from networkmapper.discovery.snmp_credentials import SnmpCredentials
-from networkmapper.observations.models import RelationshipObservation
+from networkmapper.observations.models import IdentityObservation, RelationshipObservation
 from networkmapper.observations.provenance import ObservationProvenance
 from networkmapper.runtime.events import (
     ProgressMeasurement,
@@ -49,6 +49,15 @@ class SnmpArpNeighborProvider(EnrichmentProvider):
     `SnmpEnrichmentProvider`. Never raises — every per-device failure is
     caught, recorded as diagnostics, and the remaining hosts are still
     queried.
+
+    ARCH-022/FEAT-011A: also emits a `mac_address` `IdentityObservation`
+    for each entry, but only when the entry's IP already belongs to the
+    independently-discovered device set — never unconditionally, unlike
+    the `RelationshipObservation` emission above. An entry for an
+    undiscovered IP must not become identity evidence: doing so would let
+    this same ARP evidence manufacture a `CanonicalIdentity` for a host
+    nothing else confirms exists, which would then let the same evidence
+    resolve its own relationship endpoint (ARCH-022 Section 4).
     """
 
     def __init__(
@@ -79,12 +88,13 @@ class SnmpArpNeighborProvider(EnrichmentProvider):
         self._event_bus = event_bus if event_bus is not None else RuntimeEventBus()
         self._client = client if client is not None else PysnmpClient()
         self.run_diagnostics: SnmpArpRunDiagnostics | None = None
-        self._observations: list[RelationshipObservation] = []
+        self._observations: list[IdentityObservation | RelationshipObservation] = []
 
     def enrich(self, devices: Sequence[Device]) -> None:
         """Walk each device's ARP table. Never mutates any `Device` field."""
         total = len(devices)
         self._observations = []
+        discovered_ips = {device.ip_address for device in devices}
         run_id = uuid.uuid4().hex
         observed_at = datetime.now()
         self._publish(
@@ -102,6 +112,7 @@ class SnmpArpNeighborProvider(EnrichmentProvider):
             if result.responded:
                 hosts_responded += 1
                 self._collect_relationship_observations(device.ip_address, result, run_id, observed_at)
+                self._collect_mac_identity_observations(result, discovered_ips, run_id, observed_at)
             else:
                 hosts_timed_out += 1
 
@@ -149,8 +160,8 @@ class SnmpArpNeighborProvider(EnrichmentProvider):
         except Exception:
             return SnmpArpTableResult(responded=False, failure_reason="malformed response")
 
-    def collect_observations(self) -> list[RelationshipObservation]:
-        """Return retained relationship observations from the most recent enrich() call."""
+    def collect_observations(self) -> list[IdentityObservation | RelationshipObservation]:
+        """Return retained observations from the most recent enrich() call."""
         return list(self._observations)
 
     def _collect_relationship_observations(
@@ -166,6 +177,42 @@ class SnmpArpNeighborProvider(EnrichmentProvider):
                     subject=ip_address,
                     related_subject=entry.ip_address,
                     category=ARP_NEIGHBOR_CATEGORY,
+                    provenance=ObservationProvenance(
+                        provider="snmp",
+                        collection_method="ipNetToPhysicalTable",
+                        observed_at=observed_at,
+                        source_run=run_id,
+                    ),
+                )
+            )
+
+    def _collect_mac_identity_observations(
+        self,
+        result: SnmpArpTableResult,
+        discovered_ips: set[str],
+        run_id: str,
+        observed_at: datetime,
+    ) -> None:
+        """Emit `mac_address` `IdentityObservation`s only for ARP entries
+        whose IP already belongs to the independently-discovered device
+        set (ARCH-022 Section 4) — gated, unlike the unconditional
+        `RelationshipObservation` emission above. An entry for an
+        undiscovered IP must not become identity evidence: doing so would
+        let this same ARP evidence manufacture a `CanonicalIdentity` for a
+        host nothing else confirms exists, which would then let the same
+        evidence resolve its own relationship endpoint — the
+        endpoint-bootstrapping defect ARCH-022 Section 4 found and this
+        gate exists specifically to prevent.
+        """
+        for entry in result.entries:
+            if entry.ip_address not in discovered_ips:
+                continue
+
+            self._observations.append(
+                IdentityObservation(
+                    subject=entry.ip_address,
+                    property_name="mac_address",
+                    value=entry.mac_address,
                     provenance=ObservationProvenance(
                         provider="snmp",
                         collection_method="ipNetToPhysicalTable",

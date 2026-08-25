@@ -89,8 +89,16 @@ class DiscoveryEngine:
             # collection shares the same fallback: a provider defect
             # after enrich() has already mutated devices in place only
             # loses that provider's observations, never the evidence
-            # already written to Device.
+            # already written to Device. ARCH-022/FEAT-011A:
+            # receive_observations() shares this same safety net — a
+            # defect there degrades to "this provider consulted nothing,"
+            # never aborts the run, and provider ordering is never a
+            # guaranteed dependency (ARCH-022 Section 7): a fresh,
+            # immutable snapshot of self.observations is passed on every
+            # iteration, so a provider simply sees less if an earlier
+            # optional provider hasn't run or contributed nothing.
             try:
+                enrichment_provider.receive_observations(tuple(self.observations))
                 enrichment_provider.enrich(devices)
                 self.observations.extend(enrichment_provider.collect_observations())
             except Exception:

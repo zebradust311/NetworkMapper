@@ -51,6 +51,7 @@ class _StubEnrichmentProvider(EnrichmentProvider):
         self._raises = raises
         self._observations = observations or []
         self.seen_ips: list[str] = []
+        self.received_observations: tuple | None = None
 
     def enrich(self, devices) -> None:
         if self._raises:
@@ -64,6 +65,9 @@ class _StubEnrichmentProvider(EnrichmentProvider):
 
     def collect_observations(self) -> list[IdentityObservation]:
         return self._observations
+
+    def receive_observations(self, observations) -> None:
+        self.received_observations = observations
 
 
 class DiscoveryEngineTest(unittest.TestCase):
@@ -308,6 +312,87 @@ class DiscoveryEngineObservationCollectionTest(unittest.TestCase):
         engine.discover()
 
         self.assertEqual(engine.observations, [])
+
+
+class DiscoveryEngineReceiveObservationsTest(unittest.TestCase):
+    """ARCH-022 / FEAT-011A."""
+
+    def test_the_snapshot_passed_is_a_tuple_not_the_live_list(self):
+        enrichment = _StubEnrichmentProvider()
+        engine = DiscoveryEngine(
+            [_StubProvider([Device(ip_address="10.0.0.1")], observations=[_observation("10.0.0.1", "dc-01")])],
+            enrichment_providers=[enrichment],
+        )
+
+        engine.discover()
+
+        self.assertIsInstance(enrichment.received_observations, tuple)
+        self.assertEqual(enrichment.received_observations, tuple(engine.observations))
+
+    def test_a_later_provider_sees_an_earlier_providers_observations(self):
+        first_observation = _observation("10.0.0.1", "dc-01", provider="first")
+        first = _StubEnrichmentProvider(observations=[first_observation])
+        second = _StubEnrichmentProvider()
+        engine = DiscoveryEngine(
+            [_StubProvider([Device(ip_address="10.0.0.1")])],
+            enrichment_providers=[first, second],
+        )
+
+        engine.discover()
+
+        self.assertEqual(first.received_observations, ())
+        self.assertEqual(second.received_observations, (first_observation,))
+
+    def test_a_provider_remains_correct_when_earlier_evidence_is_absent(self):
+        # No discovery-provider observations, no earlier enrichment
+        # provider — the first and only provider must still complete
+        # normally against an empty snapshot, not raise or degrade
+        # incorrectly (ARCH-022 Section 7: absence reduces coverage,
+        # never correctness).
+        enrichment = _StubEnrichmentProvider(evidence_by_ip={"10.0.0.1": "some evidence"})
+        engine = DiscoveryEngine(
+            [_StubProvider([Device(ip_address="10.0.0.1")])],
+            enrichment_providers=[enrichment],
+        )
+
+        graph = engine.discover()
+
+        self.assertEqual(enrichment.received_observations, ())
+        self.assertEqual(graph.get_device("10.0.0.1").snmp_sys_descr, "some evidence")
+
+    def test_a_provider_not_overriding_receive_observations_is_unaffected(self):
+        # The real EnrichmentProvider default (no override) must not
+        # change existing behavior — mirrors the identical guarantee
+        # already proven for collect_observations()'s own default.
+        class _MinimalEnrichmentProvider(EnrichmentProvider):
+            def enrich(self, devices) -> None:
+                pass
+
+        engine = DiscoveryEngine(
+            [_StubProvider([Device(ip_address="10.0.0.1", hostname="dc-01", vendor="Cisco")])],
+            enrichment_providers=[_MinimalEnrichmentProvider()],
+        )
+
+        graph = engine.discover()
+
+        self.assertEqual(len(graph.all_devices()), 1)
+
+    def test_receive_observations_exception_does_not_abort_discovery(self):
+        class _RaisingOnReceive(EnrichmentProvider):
+            def enrich(self, devices) -> None:
+                pass
+
+            def receive_observations(self, observations) -> None:
+                raise RuntimeError("receive_observations defect")
+
+        engine = DiscoveryEngine(
+            [_StubProvider([Device(ip_address="10.0.0.1", hostname="dc-01", vendor="Cisco")])],
+            enrichment_providers=[_RaisingOnReceive()],
+        )
+
+        graph = engine.discover()
+
+        self.assertEqual(len(graph.all_devices()), 1)
 
 
 if __name__ == "__main__":

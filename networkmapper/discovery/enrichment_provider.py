@@ -36,3 +36,23 @@ class EnrichmentProvider(ABC):
         influences `enrich()`'s own effect on any `Device`.
         """
         return []
+
+    def receive_observations(
+        self, observations: tuple[IdentityObservation | RelationshipObservation, ...]
+    ) -> None:
+        """Receive an immutable snapshot of observations collected so far
+        this run (ARCH-022; FEAT-011A).
+
+        Optional and additive, the same no-op-by-default pattern
+        `collect_observations()` already establishes. `DiscoveryEngine`
+        calls this immediately before `enrich()`, with a fresh snapshot
+        reflecting whatever has been collected up to that point — never a
+        live, mutable reference.
+
+        Provider ordering is not a guaranteed dependency mechanism
+        (ARCH-022 Section 7): a provider must remain correct when this
+        snapshot lacks evidence another optional provider would have
+        contributed had it run first — absence may reduce coverage, never
+        correctness.
+        """
+        return None
