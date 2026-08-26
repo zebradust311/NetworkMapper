@@ -130,6 +130,114 @@ class SnmpArpTableResult:
     failure_reason: str | None = None
 
 
+# ARCH-023 Section 3: LLDP-MIB (IEEE 802.1AB), OID root 1.0.8802.1.1.2.
+# lldpRemTable carries one row per (local port, neighbor); chassis ID and
+# its subtype are load-bearing (Section 7: without them no relationship
+# evidence can be built for that row at all) — port/system/capability
+# columns are best-effort. lldpRemManAddrTable is a separate table, joined
+# back to lldpRemTable by the shared (TimeMark, LocalPortNum, RemIndex)
+# index prefix; its own walk is best-effort relative to chassis-ID
+# resolution (Section 7). Exact numeric suffixes below are the standard
+# LLDP-MIB module structure, not verified against a live device in this
+# environment — the same disclosure this lineage already applies to
+# get_arp_table()'s own OID handling (_walk_column's docstring below);
+# confirm against the authoritative MIB module before trusting a real walk
+# (ARCH-023 Section 13).
+LLDP_REM_CHASSIS_ID_SUBTYPE_OID = "1.0.8802.1.1.2.1.4.1.1.4"
+LLDP_REM_CHASSIS_ID_OID = "1.0.8802.1.1.2.1.4.1.1.5"
+LLDP_REM_PORT_ID_SUBTYPE_OID = "1.0.8802.1.1.2.1.4.1.1.6"
+LLDP_REM_PORT_ID_OID = "1.0.8802.1.1.2.1.4.1.1.7"
+LLDP_REM_PORT_DESC_OID = "1.0.8802.1.1.2.1.4.1.1.8"
+LLDP_REM_SYS_NAME_OID = "1.0.8802.1.1.2.1.4.1.1.9"
+LLDP_REM_SYS_DESC_OID = "1.0.8802.1.1.2.1.4.1.1.10"
+LLDP_REM_SYS_CAP_SUPPORTED_OID = "1.0.8802.1.1.2.1.4.1.1.11"
+LLDP_REM_SYS_CAP_ENABLED_OID = "1.0.8802.1.1.2.1.4.1.1.12"
+
+# lldpRemManAddrTable's own INDEX already encodes the advertised address
+# itself (subtype, length, then octets) — unlike ipNetToPhysicalTable,
+# where the address is an index component but the MAC is a separate
+# value column. Walking any one leaf column under this table's row
+# yields the address via the returned OID's index suffix; lldpRemManAddrIfSubtype
+# is used as that column purely because it is guaranteed present for
+# every row — its own value is not consumed.
+LLDP_REM_MAN_ADDR_IF_SUBTYPE_OID = "1.0.8802.1.1.2.1.4.2.1.3"
+
+LLDP_TABLE_MAX_ROWS = 10_000
+
+_LLDP_CHASSIS_ID_SUBTYPE_MAC_ADDRESS = 4
+_LLDP_CHASSIS_ID_SUBTYPE_NETWORK_ADDRESS = 5
+_IANA_IPV4_ADDRESS_FAMILY = 1
+
+
+@dataclass(frozen=True)
+class SnmpLldpNeighborEntry:
+    """One row of a device's `lldpRemTable` (one (local port, neighbor) pair).
+
+    Attributes:
+        local_port_num: The querying device's own `lldpRemLocalPortNum`
+            for this neighbor.
+        rem_index: The `lldpRemIndex` row-correlation component.
+        chassis_id_subtype: The raw `lldpRemChassisIdSubtype` value (1-7
+            per IEEE 802.1AB). Resolvability is a provider-layer decision
+            (ARCH-023 Section 5); this client only reports what the
+            device said.
+        chassis_id: The chassis ID, formatted per its subtype where a
+            format is known — colon-hex for `macAddress`(4), a
+            dotted-decimal string (parseable as `ipaddress.IPv4Address`)
+            for an IPv4 `networkAddress`(5) — otherwise raw hex bytes,
+            which never contain a `.` and are therefore always
+            distinguishable from a resolved IPv4 string downstream.
+        port_id_subtype: The raw `lldpRemPortIdSubtype` value, or `-1` if
+            absent (best-effort, ARCH-023 Section 7).
+        port_id: The raw `lldpRemPortId` value, or `None` if absent.
+            Retained, unconsumed (ARCH-023 Section 4/12 — no
+            `Interface`/port model exists yet).
+        port_desc: `lldpRemPortDesc`, or `None` if absent (best-effort).
+        sys_name: `lldpRemSysName`, or `None` if absent (best-effort).
+        sys_desc: `lldpRemSysDesc`, or `None` if absent (best-effort).
+        sys_cap_supported: `lldpRemSysCapSupported`, or `None` if absent.
+        sys_cap_enabled: `lldpRemSysCapEnabled`, or `None` if absent.
+        management_addresses: Every IPv4 management address this neighbor
+            advertised, joined from `lldpRemManAddrTable` (ARCH-023
+            Section 3) — a list, since a neighbor may advertise more than
+            one.
+    """
+
+    local_port_num: int
+    rem_index: int
+    chassis_id_subtype: int
+    chassis_id: str
+    port_id_subtype: int = -1
+    port_id: str | None = None
+    port_desc: str | None = None
+    sys_name: str | None = None
+    sys_desc: str | None = None
+    sys_cap_supported: str | None = None
+    sys_cap_enabled: str | None = None
+    management_addresses: list[str] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class SnmpLldpTableResult:
+    """The outcome of one `lldpRemTable`/`lldpRemManAddrTable` walk against one host.
+
+    Attributes:
+        responded: Whether the walk completed successfully. `True` even
+            when `entries` is empty — a device with no LLDP neighbors, or
+            no LLDP-MIB support at all under SNMPv2c's
+            noSuchObject/endOfMibView response, is a legitimate result
+            (ARCH-023 Section 7), not a failure.
+        entries: Every neighbor row found, in no particular order.
+        failure_reason: A short, fixed diagnostic string when `responded`
+            is False. Deliberately never derived from a caught exception's
+            raw message — see ARCH-012 Security Considerations.
+    """
+
+    responded: bool
+    entries: list[SnmpLldpNeighborEntry] = field(default_factory=list)
+    failure_reason: str | None = None
+
+
 class SnmpClient:
     """Boundary between `SnmpEnrichmentProvider` and the SNMP wire protocol.
 
@@ -156,6 +264,16 @@ class SnmpClient:
         retries: int,
     ) -> SnmpArpTableResult:
         """Walk one host's `ipNetToPhysicalTable` (ARCH-020). Must never raise."""
+        raise NotImplementedError
+
+    def get_lldp_neighbors(
+        self,
+        host: str,
+        credentials: SnmpCredentials,
+        timeout: float,
+        retries: int,
+    ) -> SnmpLldpTableResult:
+        """Walk one host's `lldpRemTable`/`lldpRemManAddrTable` (ARCH-023). Must never raise."""
         raise NotImplementedError
 
 
@@ -283,6 +401,195 @@ class PysnmpClient(SnmpClient):
 
         return SnmpArpTableResult(responded=True, entries=entries)
 
+    def get_lldp_neighbors(
+        self,
+        host: str,
+        credentials: SnmpCredentials,
+        timeout: float,
+        retries: int,
+    ) -> SnmpLldpTableResult:
+        try:
+            return asyncio.run(self._get_lldp_neighbors(host, credentials, timeout, retries))
+        except Exception:
+            # Mirrors get_arp_table's identical safety net (ARCH-012
+            # Failure Model): never propagate a caught exception's message,
+            # never raise out of this method.
+            return SnmpLldpTableResult(responded=False, failure_reason="malformed response")
+
+    async def _get_lldp_neighbors(
+        self,
+        host: str,
+        credentials: SnmpCredentials,
+        timeout: float,
+        retries: int,
+    ) -> SnmpLldpTableResult:
+        engine = SnmpEngine()
+        target = await UdpTransportTarget.create(
+            (host, SNMP_PORT), timeout=timeout, retries=retries
+        )
+        auth_data = CommunityData(credentials.community, mpModel=1)  # mpModel=1: SNMPv2c
+
+        subtype_by_key = await self._walk_lldp_column(
+            engine, auth_data, target, LLDP_REM_CHASSIS_ID_SUBTYPE_OID
+        )
+        if subtype_by_key is None:
+            # Chassis-ID subtype and chassis ID are load-bearing (ARCH-023
+            # Section 7): without them no relationship evidence can be
+            # built for any row, so a failed walk fails the whole host —
+            # the same treatment get_arp_table already gives its own
+            # load-bearing PhysAddress walk.
+            return SnmpLldpTableResult(responded=False, failure_reason="timeout")
+
+        chassis_id_by_key = await self._walk_lldp_column(
+            engine, auth_data, target, LLDP_REM_CHASSIS_ID_OID
+        )
+        if chassis_id_by_key is None:
+            return SnmpLldpTableResult(responded=False, failure_reason="timeout")
+
+        # Best-effort columns (ARCH-023 Section 7): a failed walk degrades
+        # that one field to absent for every row, never fails the host.
+        port_id_subtype_by_key = await self._walk_lldp_column(
+            engine, auth_data, target, LLDP_REM_PORT_ID_SUBTYPE_OID
+        ) or {}
+        port_id_by_key = await self._walk_lldp_column(
+            engine, auth_data, target, LLDP_REM_PORT_ID_OID
+        ) or {}
+        port_desc_by_key = await self._walk_lldp_column(
+            engine, auth_data, target, LLDP_REM_PORT_DESC_OID
+        ) or {}
+        sys_name_by_key = await self._walk_lldp_column(
+            engine, auth_data, target, LLDP_REM_SYS_NAME_OID
+        ) or {}
+        sys_desc_by_key = await self._walk_lldp_column(
+            engine, auth_data, target, LLDP_REM_SYS_DESC_OID
+        ) or {}
+        sys_cap_supported_by_key = await self._walk_lldp_column(
+            engine, auth_data, target, LLDP_REM_SYS_CAP_SUPPORTED_OID
+        ) or {}
+        sys_cap_enabled_by_key = await self._walk_lldp_column(
+            engine, auth_data, target, LLDP_REM_SYS_CAP_ENABLED_OID
+        ) or {}
+
+        # lldpRemManAddrTable's own walk (ARCH-023 Section 7): best-effort
+        # relative to chassis-ID resolution — a failed or empty walk
+        # yields no management addresses for any row, never fails the host.
+        management_addresses_by_key = await self._walk_lldp_man_addr_table(engine, auth_data, target)
+
+        entries: list[SnmpLldpNeighborEntry] = []
+        for key, subtype_value in subtype_by_key.items():
+            if key not in chassis_id_by_key:
+                continue
+
+            _time_mark, local_port_num, rem_index = key
+            subtype = _as_int(subtype_value)
+            formatted_chassis_id = _format_lldp_chassis_id(subtype, chassis_id_by_key[key])
+            if formatted_chassis_id is None:
+                # Malformed entry — a chassis-ID byte length inconsistent
+                # with its claimed subtype (ARCH-023 Section 7). Skipped,
+                # not erroring, mirroring _parse_ipv4_arp_row's identical
+                # non-IPv4-row skip.
+                continue
+
+            entries.append(
+                SnmpLldpNeighborEntry(
+                    local_port_num=local_port_num,
+                    rem_index=rem_index,
+                    chassis_id_subtype=subtype,
+                    chassis_id=formatted_chassis_id,
+                    port_id_subtype=_as_int(port_id_subtype_by_key.get(key)),
+                    port_id=_as_optional_text(port_id_by_key.get(key)),
+                    port_desc=_as_optional_text(port_desc_by_key.get(key)),
+                    sys_name=_as_optional_text(sys_name_by_key.get(key)),
+                    sys_desc=_as_optional_text(sys_desc_by_key.get(key)),
+                    sys_cap_supported=_as_optional_text(sys_cap_supported_by_key.get(key)),
+                    sys_cap_enabled=_as_optional_text(sys_cap_enabled_by_key.get(key)),
+                    management_addresses=management_addresses_by_key.get(key, []),
+                )
+            )
+
+        return SnmpLldpTableResult(responded=True, entries=entries)
+
+    async def _walk_lldp_column(
+        self,
+        engine: SnmpEngine,
+        auth_data: CommunityData,
+        target: UdpTransportTarget,
+        column_oid: str,
+    ) -> dict[tuple[int, int, int], object] | None:
+        """Walk one `lldpRemTable` column, keyed by `(TimeMark, LocalPortNum,
+        RemIndex)`. Returns `None` on any walk-level failure, mirroring
+        `_walk_column`'s identical contract for `ipNetToPhysicalTable`.
+
+        `lldpRemTimeMark` uses the `TimeFilter` textual convention (RFC
+        2021), not an ordinary integer index component (ARCH-023 Section
+        3). This walks and parses it as a plain integer, matching what a
+        `lexicographicMode=False` walk returns positionally — whether that
+        walk behaves as expected against this convention on a real device
+        is a named, unresolved implementation-time validation item
+        (ARCH-023 Section 3/13), not settled here.
+        """
+        values_by_key: dict[tuple[int, int, int], object] = {}
+        async for error_indication, error_status, _error_index, var_binds in walk_cmd(
+            engine,
+            auth_data,
+            target,
+            ContextData(),
+            ObjectType(ObjectIdentity(column_oid)),
+            lexicographicMode=False,
+            maxRows=LLDP_TABLE_MAX_ROWS,
+            lookupMib=False,
+        ):
+            if error_indication or error_status:
+                return None
+
+            for name, value in var_binds:
+                if isinstance(value, _UNRESOLVED_VALUE_TYPES):
+                    continue
+                parsed = _parse_lldp_rem_row(str(name), column_oid)
+                if parsed is None:
+                    continue
+                values_by_key[parsed] = value
+
+        return values_by_key
+
+    async def _walk_lldp_man_addr_table(
+        self,
+        engine: SnmpEngine,
+        auth_data: CommunityData,
+        target: UdpTransportTarget,
+    ) -> dict[tuple[int, int, int], list[str]]:
+        """Walk `lldpRemManAddrTable`, returning every IPv4 management
+        address found, grouped by the `(TimeMark, LocalPortNum, RemIndex)`
+        prefix shared with `lldpRemTable` (ARCH-023 Section 3). Best-effort:
+        a failed or empty walk returns an empty mapping, never fails the
+        host (ARCH-023 Section 7) — the caller already treats this
+        method's absence-of-result the same as an empty one.
+        """
+        addresses_by_key: dict[tuple[int, int, int], list[str]] = {}
+        async for error_indication, error_status, _error_index, var_binds in walk_cmd(
+            engine,
+            auth_data,
+            target,
+            ContextData(),
+            ObjectType(ObjectIdentity(LLDP_REM_MAN_ADDR_IF_SUBTYPE_OID)),
+            lexicographicMode=False,
+            maxRows=LLDP_TABLE_MAX_ROWS,
+            lookupMib=False,
+        ):
+            if error_indication or error_status:
+                return {}
+
+            for name, value in var_binds:
+                if isinstance(value, _UNRESOLVED_VALUE_TYPES):
+                    continue
+                parsed = _parse_lldp_man_addr_row(str(name), LLDP_REM_MAN_ADDR_IF_SUBTYPE_OID)
+                if parsed is None:
+                    continue
+                key, address = parsed
+                addresses_by_key.setdefault(key, []).append(address)
+
+        return addresses_by_key
+
     async def _walk_column(
         self,
         engine: SnmpEngine,
@@ -372,10 +679,110 @@ def _format_mac(value: object) -> str:
 
 
 def _as_int(value: object) -> int:
-    """Coerce a `Type` column varbind value to `int`; `-1` if absent/unusable."""
+    """Coerce a `Type`/LLDP-subtype column varbind value to `int`; `-1` if absent/unusable."""
     if value is None:
         return -1
     try:
         return int(value)
     except (TypeError, ValueError):
         return -1
+
+
+def _as_optional_text(value: object) -> str | None:
+    """Coerce a best-effort LLDP column varbind value to text, or `None`
+    when absent — the same "field simply missing" representation
+    `SnmpArpTableEntry.entry_type` already uses for its own best-effort
+    `Type` column (via `_ARP_ENTRY_TYPE_NAMES.get(...)` returning `None`)."""
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _parse_lldp_rem_row(oid_str: str, column_oid: str) -> tuple[int, int, int] | None:
+    """Parse one `lldpRemTable` row's OID into `(TimeMark, LocalPortNum, RemIndex)`.
+
+    Returns `None` for a malformed/unexpected OID shape — skipped, not
+    erroring, mirroring `_parse_ipv4_arp_row`'s identical treatment of a
+    row it cannot parse.
+    """
+    prefix = column_oid + "."
+    if not oid_str.startswith(prefix):
+        return None
+
+    try:
+        components = [int(part) for part in oid_str[len(prefix):].split(".")]
+    except ValueError:
+        return None
+
+    if len(components) != 3:
+        return None
+
+    return components[0], components[1], components[2]
+
+
+def _parse_lldp_man_addr_row(
+    oid_str: str, column_oid: str
+) -> tuple[tuple[int, int, int], str] | None:
+    """Parse one `lldpRemManAddrTable` row's OID into its `(TimeMark,
+    LocalPortNum, RemIndex)` row-correlation prefix and its advertised
+    management address, when the address is IPv4 (ARCH-023 Section 3/9:
+    IPv4-only for Stage 1, mirroring `get_arp_table`'s own scope). The
+    address itself is encoded in the row's INDEX (subtype, then length,
+    then octets) — unlike `ipNetToPhysicalTable`'s all-value-columns
+    shape — so there is no separate value to read; only the OID matters
+    here. Returns `None` for a non-IPv4 address family or a
+    malformed/unexpected OID shape, both silently excluded.
+    """
+    prefix = column_oid + "."
+    if not oid_str.startswith(prefix):
+        return None
+
+    try:
+        components = [int(part) for part in oid_str[len(prefix):].split(".")]
+    except ValueError:
+        return None
+
+    if len(components) < 5:
+        return None
+
+    time_mark, local_port_num, rem_index, addr_subtype, addr_len = components[0:5]
+    if addr_subtype != _IANA_IPV4_ADDRESS_FAMILY or addr_len != 4:
+        return None
+
+    octets = components[5 : 5 + addr_len]
+    if len(octets) != addr_len or any(not (0 <= octet <= 255) for octet in octets):
+        return None
+
+    return (time_mark, local_port_num, rem_index), ".".join(str(octet) for octet in octets)
+
+
+def _format_lldp_chassis_id(subtype: int, value: object) -> str | None:
+    """Format a raw `lldpRemChassisId` value per its claimed subtype
+    (ARCH-023 Section 5). Returns `None` when the byte length is
+    inconsistent with what the claimed subtype requires — a malformed
+    entry, skipped rather than erroring (ARCH-023 Section 7), mirroring
+    `_parse_ipv4_arp_row`'s identical non-IPv4-row skip.
+
+    A subtype/family combination that is simply out of Stage 1's
+    resolvable scope (e.g. an IPv6 `networkAddress`) is not malformed —
+    it is retained as opaque hex for whatever it is (never containing a
+    `.`, so it is always distinguishable from a resolved IPv4 string by
+    the provider layer, which is what actually declines to use it).
+    """
+    raw = bytes(value)
+
+    if subtype == _LLDP_CHASSIS_ID_SUBTYPE_MAC_ADDRESS:
+        return _format_mac(raw) if len(raw) == 6 else None
+
+    if subtype == _LLDP_CHASSIS_ID_SUBTYPE_NETWORK_ADDRESS:
+        if len(raw) < 1:
+            return None
+        family, address_octets = raw[0], raw[1:]
+        if family == _IANA_IPV4_ADDRESS_FAMILY:
+            if len(address_octets) != 4:
+                return None
+            return ".".join(str(octet) for octet in address_octets)
+        return raw.hex()
+
+    return raw.hex()

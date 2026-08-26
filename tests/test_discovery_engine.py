@@ -2,12 +2,24 @@ import unittest
 from datetime import datetime
 
 from networkmapper.core.models import Device, DeviceType
+from networkmapper.discovery.arp_neighbor_provider import ARP_NEIGHBOR_CATEGORY, SnmpArpNeighborProvider
 from networkmapper.discovery.discovery_engine import DiscoveryEngine
 from networkmapper.discovery.enrichment_provider import EnrichmentProvider
+from networkmapper.discovery.lldp_neighbor_provider import LLDP_NEIGHBOR_CATEGORY, SnmpLldpNeighborProvider
 from networkmapper.discovery.provider import DiscoveryProvider
-from networkmapper.observations.models import IdentityObservation
+from networkmapper.discovery.snmp_client import (
+    SnmpArpTableEntry,
+    SnmpArpTableResult,
+    SnmpClient,
+    SnmpLldpNeighborEntry,
+    SnmpLldpTableResult,
+)
+from networkmapper.discovery.snmp_credentials import SnmpCredentials, SnmpVersion
+from networkmapper.observations.models import IdentityObservation, RelationshipObservation
 from networkmapper.observations.provenance import ObservationProvenance
 from networkmapper.runtime.events import RuntimeEvent, RuntimeEventBus, RuntimeEventKind, RuntimePhase
+
+_SNMP_CREDENTIALS = SnmpCredentials(version=SnmpVersion.V2C, community="public")
 
 
 def _observation(subject: str, value: str, provider: str = "stub") -> IdentityObservation:
@@ -393,6 +405,122 @@ class DiscoveryEngineReceiveObservationsTest(unittest.TestCase):
         graph = engine.discover()
 
         self.assertEqual(len(graph.all_devices()), 1)
+
+
+_EMPTY_ARP_RESULT = SnmpArpTableResult(responded=True, entries=[])
+_EMPTY_LLDP_RESULT = SnmpLldpTableResult(responded=True, entries=[])
+
+
+class _StubArpSnmpClient(SnmpClient):
+    def __init__(self, host: str, result: SnmpArpTableResult) -> None:
+        self._host = host
+        self._result = result
+
+    def get_arp_table(self, host, credentials, timeout, retries) -> SnmpArpTableResult:
+        return self._result if host == self._host else _EMPTY_ARP_RESULT
+
+
+class _StubLldpSnmpClient(SnmpClient):
+    def __init__(self, host: str, result: SnmpLldpTableResult) -> None:
+        self._host = host
+        self._result = result
+
+    def get_lldp_neighbors(self, host, credentials, timeout, retries) -> SnmpLldpTableResult:
+        return self._result if host == self._host else _EMPTY_LLDP_RESULT
+
+
+class DiscoveryEngineTwoProviderIntegrationTest(unittest.TestCase):
+    """ARCH-023 / FEAT-012A Section 11: `SnmpArpNeighborProvider` and
+    `SnmpLldpNeighborProvider` registered together in one `DiscoveryEngine`,
+    in both orders — the first real, non-synthetic exercise of FEAT-011A's
+    "later providers may see earlier evidence, and providers remain
+    correct when it is absent" guarantee (ARCH-022 Section 7).
+    """
+
+    def _build_engine(self, enrichment_providers: list) -> DiscoveryEngine:
+        gateway = Device(ip_address="203.0.113.5")
+        neighbor = Device(ip_address="192.168.1.10")
+        return DiscoveryEngine(
+            [_StubProvider([gateway, neighbor])],
+            enrichment_providers=enrichment_providers,
+        )
+
+    def _arp_provider(self) -> SnmpArpNeighborProvider:
+        arp_result = SnmpArpTableResult(
+            responded=True,
+            entries=[
+                SnmpArpTableEntry(
+                    interface_index=1, ip_address="192.168.1.10", mac_address="AA:BB:CC:DD:EE:FF"
+                )
+            ],
+        )
+        return SnmpArpNeighborProvider(
+            _SNMP_CREDENTIALS, client=_StubArpSnmpClient("203.0.113.5", arp_result)
+        )
+
+    def _lldp_provider(self) -> SnmpLldpNeighborProvider:
+        # A macAddress(4)-subtype chassis ID matching the ARP entry's own
+        # MAC — resolvable only via the MAC-to-Subject Reverse Index, so
+        # this row's outcome depends entirely on whether ARP's own
+        # mac_address evidence reached receive_observations() first.
+        lldp_result = SnmpLldpTableResult(
+            responded=True,
+            entries=[
+                SnmpLldpNeighborEntry(
+                    local_port_num=1,
+                    rem_index=1,
+                    chassis_id_subtype=4,
+                    chassis_id="AA:BB:CC:DD:EE:FF",
+                )
+            ],
+        )
+        return SnmpLldpNeighborProvider(
+            _SNMP_CREDENTIALS, client=_StubLldpSnmpClient("203.0.113.5", lldp_result)
+        )
+
+    def test_lldp_resolves_via_arp_contributed_mac_evidence_when_arp_runs_first(self):
+        engine = self._build_engine([self._arp_provider(), self._lldp_provider()])
+
+        engine.discover()
+
+        connected_to_observations = [
+            observation
+            for observation in engine.observations
+            if isinstance(observation, RelationshipObservation) and observation.category == LLDP_NEIGHBOR_CATEGORY
+        ]
+        self.assertEqual(len(connected_to_observations), 1)
+        self.assertEqual(connected_to_observations[0].related_subject, "192.168.1.10")
+
+    def test_lldp_produces_reduced_but_correct_output_when_it_runs_before_arp(self):
+        engine = self._build_engine([self._lldp_provider(), self._arp_provider()])
+
+        engine.discover()  # must not raise
+
+        connected_to_observations = [
+            observation
+            for observation in engine.observations
+            if isinstance(observation, RelationshipObservation) and observation.category == LLDP_NEIGHBOR_CATEGORY
+        ]
+        self.assertEqual(connected_to_observations, [])
+        # ARP's own evidence is unaffected by ordering.
+        arp_observations = [
+            observation
+            for observation in engine.observations
+            if isinstance(observation, RelationshipObservation) and observation.category == ARP_NEIGHBOR_CATEGORY
+        ]
+        self.assertEqual(len(arp_observations), 1)
+
+    def test_lldp_produces_correct_output_when_arp_is_absent_entirely(self):
+        engine = self._build_engine([self._lldp_provider()])
+
+        engine.discover()  # must not raise
+
+        connected_to_observations = [
+            observation
+            for observation in engine.observations
+            if isinstance(observation, RelationshipObservation) and observation.category == LLDP_NEIGHBOR_CATEGORY
+        ]
+        self.assertEqual(connected_to_observations, [])
 
 
 if __name__ == "__main__":
