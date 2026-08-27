@@ -238,6 +238,98 @@ class SnmpLldpTableResult:
     failure_reason: str | None = None
 
 
+# ARCH-024 Section 3: BRIDGE-MIB (RFC 4188), OID root 1.3.6.1.2.1.17
+# (dot1dBridge), dot1dTp branch. dot1dTpFdbTable's row INDEX is the
+# 6-byte MAC address itself (dot1dTpFdbAddress) -- no composite index,
+# unlike ipNetToPhysicalTable's (ifIndex, addressType, addressLength,
+# address) or lldpRemTable's (TimeMark, LocalPortNum, RemIndex). Two
+# value columns: dot1dTpFdbPort (load-bearing, ARCH-024 Section 7) and
+# dot1dTpFdbStatus (best-effort, ARCH-024 Section 7 -- corrected from
+# this investigation's own first draft, which had proposed treating
+# status as load-bearing). dot1dBasePortTable is not walked -- Stage 1
+# retains dot1dTpFdbPort as unconsumed context only (ARCH-024 Section
+# 5), it does not map it to ifIndex.
+#
+# Numeric suffixes below are RFC 4188's long-standing, stable standard
+# structure -- high confidence, but not verified against a live device
+# or the authoritative MIB module text in this environment, the
+# identical disclosure ARCH-020/ARCH-023 already apply to their own OID
+# handling (_walk_column's docstring above; LLDP_REM_* OIDs' module
+# comment). Confirm against the authoritative MIB module before trusting
+# a real walk (ARCH-024 Section 13).
+DOT1D_TP_FDB_PORT_OID = "1.3.6.1.2.1.17.4.3.1.2"
+DOT1D_TP_FDB_STATUS_OID = "1.3.6.1.2.1.17.4.3.1.3"
+
+# ARCH-024 Section 7: a materially larger, more severe scale concern
+# than ARP/LLDP presented -- a core or aggregation switch's FDB commonly
+# holds thousands of entries, illustratively 8,000-32,000+ (an
+# unverified operational estimate, not a cited vendor specification).
+# This is its own, consciously chosen constant, not a reuse of
+# ARP_TABLE_MAX_ROWS/LLDP_TABLE_MAX_ROWS's shared 10,000 -- deliberately
+# set above that shared bound as a starting point, and named here as an
+# implementation-time value to be reconsidered against real device data
+# (PLAN-012B Section 5, uncertainty #3), not settled by ARCH-024 itself.
+BRIDGE_FDB_TABLE_MAX_ROWS = 20_000
+
+# ARCH-024 Section 6: dot1dTpFdbStatus's five values. "learned"(3) is the
+# only status Stage 1's provider layer emits relationship evidence for;
+# translated to a name here, mirroring _ARP_ENTRY_TYPE_NAMES' identical
+# int-to-name shape for ipNetToPhysicalType.
+_BRIDGE_FDB_STATUS_NAMES: dict[int, str] = {
+    1: "other",
+    2: "invalid",
+    3: "learned",
+    4: "self",
+    5: "mgmt",
+}
+
+
+@dataclass(frozen=True)
+class SnmpBridgeFdbEntry:
+    """One row of a device's `dot1dTpFdbTable` (its bridge forwarding database).
+
+    Attributes:
+        mac_address: The learned MAC address, formatted as colon-separated
+            hex (e.g. "AA:BB:CC:DD:EE:FF") -- this row's own INDEX, not a
+            value column (ARCH-024 Section 3).
+        port: The `dot1dTpFdbPort` value -- which `dot1dBasePort` learned
+            this MAC (0 if the bridge itself doesn't know, per RFC 4188).
+            Retained, unconsumed context (ARCH-024 Section 5), mirroring
+            `SnmpLldpNeighborEntry.port_id`'s identical precedent.
+        status: "other"/"invalid"/"learned"/"self"/"mgmt", or `None` if
+            the agent's response didn't include a resolvable
+            `dot1dTpFdbStatus` row for this MAC (best-effort, ARCH-024
+            Section 7) -- the same "field simply missing" representation
+            `SnmpArpTableEntry.entry_type` already uses for its own
+            best-effort `Type` column.
+    """
+
+    mac_address: str
+    port: int
+    status: str | None = None
+
+
+@dataclass(frozen=True)
+class SnmpBridgeFdbResult:
+    """The outcome of one `dot1dTpFdbTable` walk against one host.
+
+    Attributes:
+        responded: Whether the walk completed successfully. `True` even
+            when `entries` is empty -- an empty forwarding database, a
+            bridge queried too soon after a reset, or a device with no
+            Bridge-MIB support at all, is a legitimate result (ARCH-024
+            Section 7), not a failure.
+        entries: Every row found, in no particular order.
+        failure_reason: A short, fixed diagnostic string when `responded`
+            is False. Deliberately never derived from a caught exception's
+            raw message -- see ARCH-012 Security Considerations.
+    """
+
+    responded: bool
+    entries: list[SnmpBridgeFdbEntry] = field(default_factory=list)
+    failure_reason: str | None = None
+
+
 class SnmpClient:
     """Boundary between `SnmpEnrichmentProvider` and the SNMP wire protocol.
 
@@ -274,6 +366,16 @@ class SnmpClient:
         retries: int,
     ) -> SnmpLldpTableResult:
         """Walk one host's `lldpRemTable`/`lldpRemManAddrTable` (ARCH-023). Must never raise."""
+        raise NotImplementedError
+
+    def get_bridge_fdb(
+        self,
+        host: str,
+        credentials: SnmpCredentials,
+        timeout: float,
+        retries: int,
+    ) -> SnmpBridgeFdbResult:
+        """Walk one host's `dot1dTpFdbTable` (ARCH-024). Must never raise."""
         raise NotImplementedError
 
 
@@ -590,6 +692,100 @@ class PysnmpClient(SnmpClient):
 
         return addresses_by_key
 
+    def get_bridge_fdb(
+        self,
+        host: str,
+        credentials: SnmpCredentials,
+        timeout: float,
+        retries: int,
+    ) -> SnmpBridgeFdbResult:
+        try:
+            return asyncio.run(self._get_bridge_fdb(host, credentials, timeout, retries))
+        except Exception:
+            # Mirrors get_arp_table/get_lldp_neighbors' identical safety
+            # net (ARCH-012 Failure Model): never propagate a caught
+            # exception's message, never raise out of this method.
+            return SnmpBridgeFdbResult(responded=False, failure_reason="malformed response")
+
+    async def _get_bridge_fdb(
+        self,
+        host: str,
+        credentials: SnmpCredentials,
+        timeout: float,
+        retries: int,
+    ) -> SnmpBridgeFdbResult:
+        engine = SnmpEngine()
+        target = await UdpTransportTarget.create(
+            (host, SNMP_PORT), timeout=timeout, retries=retries
+        )
+        auth_data = CommunityData(credentials.community, mpModel=1)  # mpModel=1: SNMPv2c
+
+        port_by_mac = await self._walk_bridge_fdb_column(
+            engine, auth_data, target, DOT1D_TP_FDB_PORT_OID
+        )
+        if port_by_mac is None:
+            # dot1dTpFdbPort is load-bearing (ARCH-024 Section 7): without
+            # a MAC and a learning port, no usable row exists at all -- a
+            # failed walk fails the whole host, mirroring get_arp_table's
+            # own load-bearing PhysAddress walk.
+            return SnmpBridgeFdbResult(responded=False, failure_reason="timeout")
+
+        # dot1dTpFdbStatus is best-effort (ARCH-024 Section 7, corrected
+        # from this investigation's own first draft): a failed status
+        # walk leaves every row's status unresolved (None), never fails
+        # the host -- the safety property (only emit for an explicitly
+        # "learned" row) is enforced at the provider layer instead.
+        status_by_mac = await self._walk_bridge_fdb_column(
+            engine, auth_data, target, DOT1D_TP_FDB_STATUS_OID
+        ) or {}
+
+        entries = [
+            SnmpBridgeFdbEntry(
+                mac_address=mac_address,
+                port=_as_int(port_value),
+                status=_BRIDGE_FDB_STATUS_NAMES.get(_as_int(status_by_mac.get(mac_address))),
+            )
+            for mac_address, port_value in port_by_mac.items()
+        ]
+
+        return SnmpBridgeFdbResult(responded=True, entries=entries)
+
+    async def _walk_bridge_fdb_column(
+        self,
+        engine: SnmpEngine,
+        auth_data: CommunityData,
+        target: UdpTransportTarget,
+        column_oid: str,
+    ) -> dict[str, object] | None:
+        """Walk one `dot1dTpFdbTable` column, keyed by the formatted MAC
+        address parsed from each row's own INDEX. Returns `None` on any
+        walk-level failure, mirroring `_walk_column`/`_walk_lldp_column`'s
+        identical contract for their own tables.
+        """
+        values_by_mac: dict[str, object] = {}
+        async for error_indication, error_status, _error_index, var_binds in walk_cmd(
+            engine,
+            auth_data,
+            target,
+            ContextData(),
+            ObjectType(ObjectIdentity(column_oid)),
+            lexicographicMode=False,
+            maxRows=BRIDGE_FDB_TABLE_MAX_ROWS,
+            lookupMib=False,
+        ):
+            if error_indication or error_status:
+                return None
+
+            for name, value in var_binds:
+                if isinstance(value, _UNRESOLVED_VALUE_TYPES):
+                    continue
+                mac_address = _parse_bridge_fdb_row(str(name), column_oid)
+                if mac_address is None:
+                    continue
+                values_by_mac[mac_address] = value
+
+        return values_by_mac
+
     async def _walk_column(
         self,
         engine: SnmpEngine,
@@ -755,6 +951,31 @@ def _parse_lldp_man_addr_row(
         return None
 
     return (time_mark, local_port_num, rem_index), ".".join(str(octet) for octet in octets)
+
+
+def _parse_bridge_fdb_row(oid_str: str, column_oid: str) -> str | None:
+    """Parse one `dot1dTpFdbTable` row's OID into its formatted MAC address.
+
+    Row INDEX is the 6-byte MAC address itself (`dot1dTpFdbAddress`) --
+    no composite index, unlike `_parse_ipv4_arp_row`/`_parse_lldp_rem_row`
+    (ARCH-024 Section 3). Returns `None` when the index does not yield
+    exactly 6 octets each in 0-255 -- a malformed entry, skipped rather
+    than erroring, mirroring `_parse_ipv4_arp_row`'s identical
+    non-conforming-row skip (ARCH-024 Section 7).
+    """
+    prefix = column_oid + "."
+    if not oid_str.startswith(prefix):
+        return None
+
+    try:
+        octets = [int(part) for part in oid_str[len(prefix):].split(".")]
+    except ValueError:
+        return None
+
+    if len(octets) != 6 or any(not (0 <= octet <= 255) for octet in octets):
+        return None
+
+    return _format_mac(bytes(octets))
 
 
 def _format_lldp_chassis_id(subtype: int, value: object) -> str | None:

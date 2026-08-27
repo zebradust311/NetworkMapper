@@ -9,6 +9,7 @@ from unittest.mock import ANY, patch
 from networkmapper.application import Application, SNMP_COMMUNITY_ENV_VAR
 from networkmapper.discovery.run_diagnostics import HostDiagnostics, RunDiagnostics, ScanPhase
 from networkmapper.discovery.scan_profile import ScanProfile
+from networkmapper.discovery.snmp_bridge_fdb_diagnostics import SnmpBridgeFdbRunDiagnostics
 from networkmapper.discovery.snmp_diagnostics import SnmpRunDiagnostics
 from networkmapper.reporting.report_run import ReportRunPaths
 
@@ -48,6 +49,7 @@ class ApplicationCliTest(unittest.TestCase):
         argv: list[str],
         run_diagnostics: RunDiagnostics | None = None,
         snmp_run_diagnostics: SnmpRunDiagnostics | None = None,
+        bridge_fdb_run_diagnostics: SnmpBridgeFdbRunDiagnostics | None = None,
         env: dict[str, str] | None = None,
     ):
         with patch("networkmapper.application.DiscoveryEngine") as discovery_engine_mock, patch(
@@ -55,6 +57,12 @@ class ApplicationCliTest(unittest.TestCase):
         ) as provider_mock, patch(
             "networkmapper.application.SnmpEnrichmentProvider"
         ) as snmp_provider_mock, patch(
+            "networkmapper.application.SnmpArpNeighborProvider"
+        ) as arp_provider_mock, patch(
+            "networkmapper.application.SnmpLldpNeighborProvider"
+        ) as lldp_provider_mock, patch(
+            "networkmapper.application.SnmpBridgeFdbProvider"
+        ) as fdb_provider_mock, patch(
             "networkmapper.application.CsvExporter"
         ) as csv_exporter_mock, patch(
             "networkmapper.application.MarkdownExporter"
@@ -74,6 +82,7 @@ class ApplicationCliTest(unittest.TestCase):
                 ScanProfile.FAST
             )
             snmp_provider_mock.return_value.run_diagnostics = snmp_run_diagnostics
+            fdb_provider_mock.return_value.run_diagnostics = bridge_fdb_run_diagnostics
             report_run_paths_mock.return_value = _fake_report_run_paths()
 
             stdout = io.StringIO()
@@ -84,6 +93,9 @@ class ApplicationCliTest(unittest.TestCase):
         return {
             "provider_mock": provider_mock,
             "snmp_provider_mock": snmp_provider_mock,
+            "arp_provider_mock": arp_provider_mock,
+            "lldp_provider_mock": lldp_provider_mock,
+            "fdb_provider_mock": fdb_provider_mock,
             "discovery_engine_mock": discovery_engine_mock,
             "csv_exporter_mock": csv_exporter_mock,
             "markdown_exporter_mock": markdown_exporter_mock,
@@ -457,6 +469,91 @@ class ApplicationCliTest(unittest.TestCase):
         result = self._run_application(["networkmapper"])
 
         self.assertNotIn("SNMP Diagnostics", result["stdout"])
+
+    def test_snmp_bridge_fdb_flag_absent_by_default(self):
+        result = self._run_application(["networkmapper"])
+
+        result["fdb_provider_mock"].assert_not_called()
+        engine_call = result["discovery_engine_mock"].call_args
+        self.assertEqual(engine_call.kwargs["enrichment_providers"], [])
+
+    def test_snmp_bridge_fdb_flag_without_community_env_var_exits_with_non_zero_code(self):
+        with patch("networkmapper.application.DiscoveryEngine"), patch(
+            "networkmapper.application.NmapProvider"
+        ) as provider_mock, patch(
+            "sys.argv", ["networkmapper", "--snmp-bridge-fdb"]
+        ), patch.dict(os.environ, {}, clear=False):
+            os.environ.pop(SNMP_COMMUNITY_ENV_VAR, None)
+            provider_mock.return_value.run_diagnostics = _default_run_diagnostics(ScanProfile.FAST)
+
+            stdout = io.StringIO()
+            stderr = io.StringIO()
+            with redirect_stdout(stdout), redirect_stderr(stderr):
+                with self.assertRaises(SystemExit) as context:
+                    Application().run()
+
+        self.assertNotEqual(context.exception.code, 0)
+        self.assertIn(SNMP_COMMUNITY_ENV_VAR, stderr.getvalue())
+
+    def test_snmp_bridge_fdb_flag_with_community_env_var_enables_bridge_fdb_enrichment(self):
+        result = self._run_application(
+            ["networkmapper", "--snmp-bridge-fdb"],
+            env={SNMP_COMMUNITY_ENV_VAR: "s3cr3t-community"},
+            bridge_fdb_run_diagnostics=SnmpBridgeFdbRunDiagnostics(
+                hosts_eligible=2,
+                hosts_queried=2,
+                hosts_responded=1,
+                hosts_timed_out=1,
+                version="v2c",
+            ),
+        )
+
+        result["fdb_provider_mock"].assert_called_once()
+        credentials = result["fdb_provider_mock"].call_args.args[0]
+        self.assertEqual(credentials.community, "s3cr3t-community")
+
+        engine_call = result["discovery_engine_mock"].call_args
+        self.assertEqual(
+            engine_call.kwargs["enrichment_providers"],
+            [result["fdb_provider_mock"].return_value],
+        )
+
+        stdout = result["stdout"]
+        self.assertIn("Bridge FDB Diagnostics", stdout)
+        self.assertIn("Hosts Eligible: 2", stdout)
+        self.assertIn("Hosts Responded: 1", stdout)
+        self.assertIn("Hosts Timed Out: 1", stdout)
+        self.assertNotIn("s3cr3t-community", stdout)
+
+    def test_snmp_bridge_fdb_flag_absent_prints_no_bridge_fdb_diagnostics(self):
+        result = self._run_application(["networkmapper"])
+
+        self.assertNotIn("Bridge FDB Diagnostics", result["stdout"])
+
+    def test_snmp_bridge_fdb_flag_combines_with_arp_and_lldp_flags(self):
+        result = self._run_application(
+            ["networkmapper", "--snmp-arp", "--snmp-lldp", "--snmp-bridge-fdb"],
+            env={SNMP_COMMUNITY_ENV_VAR: "s3cr3t-community"},
+            bridge_fdb_run_diagnostics=SnmpBridgeFdbRunDiagnostics(
+                hosts_eligible=1, hosts_queried=1, hosts_responded=1, hosts_timed_out=0, version="v2c"
+            ),
+        )
+
+        result["arp_provider_mock"].assert_called_once()
+        result["lldp_provider_mock"].assert_called_once()
+        result["fdb_provider_mock"].assert_called_once()
+
+        engine_call = result["discovery_engine_mock"].call_args
+        self.assertEqual(
+            engine_call.kwargs["enrichment_providers"],
+            [
+                result["arp_provider_mock"].return_value,
+                result["lldp_provider_mock"].return_value,
+                result["fdb_provider_mock"].return_value,
+            ],
+        )
+        self.assertIn("Bridge FDB Diagnostics", result["stdout"])
+        self.assertNotIn("s3cr3t-community", result["stdout"])
 
 
 if __name__ == "__main__":

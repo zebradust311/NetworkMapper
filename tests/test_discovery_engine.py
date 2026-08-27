@@ -3,6 +3,7 @@ from datetime import datetime
 
 from networkmapper.core.models import Device, DeviceType
 from networkmapper.discovery.arp_neighbor_provider import ARP_NEIGHBOR_CATEGORY, SnmpArpNeighborProvider
+from networkmapper.discovery.bridge_fdb_provider import BRIDGE_FDB_CATEGORY, SnmpBridgeFdbProvider
 from networkmapper.discovery.discovery_engine import DiscoveryEngine
 from networkmapper.discovery.enrichment_provider import EnrichmentProvider
 from networkmapper.discovery.lldp_neighbor_provider import LLDP_NEIGHBOR_CATEGORY, SnmpLldpNeighborProvider
@@ -10,6 +11,8 @@ from networkmapper.discovery.provider import DiscoveryProvider
 from networkmapper.discovery.snmp_client import (
     SnmpArpTableEntry,
     SnmpArpTableResult,
+    SnmpBridgeFdbEntry,
+    SnmpBridgeFdbResult,
     SnmpClient,
     SnmpLldpNeighborEntry,
     SnmpLldpTableResult,
@@ -429,6 +432,18 @@ class _StubLldpSnmpClient(SnmpClient):
         return self._result if host == self._host else _EMPTY_LLDP_RESULT
 
 
+_EMPTY_BRIDGE_FDB_RESULT = SnmpBridgeFdbResult(responded=True, entries=[])
+
+
+class _StubBridgeFdbSnmpClient(SnmpClient):
+    def __init__(self, host: str, result: SnmpBridgeFdbResult) -> None:
+        self._host = host
+        self._result = result
+
+    def get_bridge_fdb(self, host, credentials, timeout, retries) -> SnmpBridgeFdbResult:
+        return self._result if host == self._host else _EMPTY_BRIDGE_FDB_RESULT
+
+
 class DiscoveryEngineTwoProviderIntegrationTest(unittest.TestCase):
     """ARCH-023 / FEAT-012A Section 11: `SnmpArpNeighborProvider` and
     `SnmpLldpNeighborProvider` registered together in one `DiscoveryEngine`,
@@ -521,6 +536,142 @@ class DiscoveryEngineTwoProviderIntegrationTest(unittest.TestCase):
             if isinstance(observation, RelationshipObservation) and observation.category == LLDP_NEIGHBOR_CATEGORY
         ]
         self.assertEqual(connected_to_observations, [])
+
+
+class DiscoveryEngineThreeProviderIntegrationTest(unittest.TestCase):
+    """ARCH-024 / PLAN-012B Section 7.3: `SnmpArpNeighborProvider`,
+    `SnmpLldpNeighborProvider`, and `SnmpBridgeFdbProvider` registered
+    together in one `DiscoveryEngine`.
+
+    `SnmpArpNeighborProvider` is this test's sole MAC-evidence producer
+    (its gated `mac_address` `IdentityObservation`, ARCH-022 Section 4).
+    `SnmpLldpNeighborProvider` and `SnmpBridgeFdbProvider` are both
+    independent *consumers* of that same `build_mac_index()` snapshot —
+    via two structurally distinct resolution paths (LLDP's `macAddress`
+    chassis-ID-subtype fallback; Bridge-FDB's `dot1dTpFdbTable` MAC-keyed
+    rows) — neither one produces MAC evidence itself, extending FEAT-012A
+    Section 11's own two-provider precedent to a third, independent real
+    consumer (ARCH-024 Section 11).
+    """
+
+    def _build_engine(self, enrichment_providers: list) -> DiscoveryEngine:
+        gateway = Device(ip_address="203.0.113.5")
+        neighbor = Device(ip_address="192.168.1.10")
+        return DiscoveryEngine(
+            [_StubProvider([gateway, neighbor])],
+            enrichment_providers=enrichment_providers,
+        )
+
+    def _arp_provider(self) -> SnmpArpNeighborProvider:
+        arp_result = SnmpArpTableResult(
+            responded=True,
+            entries=[
+                SnmpArpTableEntry(
+                    interface_index=1, ip_address="192.168.1.10", mac_address="AA:BB:CC:DD:EE:FF"
+                )
+            ],
+        )
+        return SnmpArpNeighborProvider(
+            _SNMP_CREDENTIALS, client=_StubArpSnmpClient("203.0.113.5", arp_result)
+        )
+
+    def _lldp_provider(self) -> SnmpLldpNeighborProvider:
+        lldp_result = SnmpLldpTableResult(
+            responded=True,
+            entries=[
+                SnmpLldpNeighborEntry(
+                    local_port_num=1,
+                    rem_index=1,
+                    chassis_id_subtype=4,
+                    chassis_id="AA:BB:CC:DD:EE:FF",
+                )
+            ],
+        )
+        return SnmpLldpNeighborProvider(
+            _SNMP_CREDENTIALS, client=_StubLldpSnmpClient("203.0.113.5", lldp_result)
+        )
+
+    def _bridge_fdb_provider(self) -> SnmpBridgeFdbProvider:
+        # A learned-status row keyed by the same MAC ARP's own entry
+        # reports — resolvable only via the MAC-to-Subject Reverse Index,
+        # so this row's outcome depends entirely on whether ARP's own
+        # mac_address evidence reached receive_observations() first.
+        fdb_result = SnmpBridgeFdbResult(
+            responded=True,
+            entries=[SnmpBridgeFdbEntry(mac_address="AA:BB:CC:DD:EE:FF", port=4, status="learned")],
+        )
+        return SnmpBridgeFdbProvider(
+            _SNMP_CREDENTIALS, client=_StubBridgeFdbSnmpClient("203.0.113.5", fdb_result)
+        )
+
+    def test_bridge_fdb_resolves_via_arp_contributed_mac_evidence_when_arp_runs_first(self):
+        engine = self._build_engine([self._arp_provider(), self._bridge_fdb_provider()])
+
+        engine.discover()
+
+        bridge_fdb_observations = [
+            observation
+            for observation in engine.observations
+            if isinstance(observation, RelationshipObservation) and observation.category == BRIDGE_FDB_CATEGORY
+        ]
+        self.assertEqual(len(bridge_fdb_observations), 1)
+        self.assertEqual(bridge_fdb_observations[0].related_subject, "192.168.1.10")
+
+    def test_bridge_fdb_produces_reduced_but_correct_output_when_it_runs_before_arp(self):
+        engine = self._build_engine([self._bridge_fdb_provider(), self._arp_provider()])
+
+        engine.discover()  # must not raise
+
+        bridge_fdb_observations = [
+            observation
+            for observation in engine.observations
+            if isinstance(observation, RelationshipObservation) and observation.category == BRIDGE_FDB_CATEGORY
+        ]
+        self.assertEqual(bridge_fdb_observations, [])
+        # ARP's own evidence is unaffected by ordering.
+        arp_observations = [
+            observation
+            for observation in engine.observations
+            if isinstance(observation, RelationshipObservation) and observation.category == ARP_NEIGHBOR_CATEGORY
+        ]
+        self.assertEqual(len(arp_observations), 1)
+
+    def test_bridge_fdb_produces_correct_output_when_arp_is_absent_entirely(self):
+        engine = self._build_engine([self._bridge_fdb_provider()])
+
+        engine.discover()  # must not raise
+
+        bridge_fdb_observations = [
+            observation
+            for observation in engine.observations
+            if isinstance(observation, RelationshipObservation) and observation.category == BRIDGE_FDB_CATEGORY
+        ]
+        self.assertEqual(bridge_fdb_observations, [])
+
+    def test_lldp_and_bridge_fdb_both_resolve_independently_from_the_same_arp_contributed_mac_index(self):
+        # The one genuinely new case a third real consumer enables: two
+        # independent consumers reading the same snapshot in one run, not
+        # a repeat of either provider's own pairwise test above.
+        engine = self._build_engine(
+            [self._arp_provider(), self._lldp_provider(), self._bridge_fdb_provider()]
+        )
+
+        engine.discover()
+
+        connected_to_observations = [
+            observation
+            for observation in engine.observations
+            if isinstance(observation, RelationshipObservation) and observation.category == LLDP_NEIGHBOR_CATEGORY
+        ]
+        bridge_fdb_observations = [
+            observation
+            for observation in engine.observations
+            if isinstance(observation, RelationshipObservation) and observation.category == BRIDGE_FDB_CATEGORY
+        ]
+        self.assertEqual(len(connected_to_observations), 1)
+        self.assertEqual(connected_to_observations[0].related_subject, "192.168.1.10")
+        self.assertEqual(len(bridge_fdb_observations), 1)
+        self.assertEqual(bridge_fdb_observations[0].related_subject, "192.168.1.10")
 
 
 if __name__ == "__main__":

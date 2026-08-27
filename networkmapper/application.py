@@ -11,12 +11,14 @@ from pathlib import Path
 
 from networkmapper.developer.classification_workbench import ClassificationWorkbench
 from networkmapper.discovery.arp_neighbor_provider import SnmpArpNeighborProvider
+from networkmapper.discovery.bridge_fdb_provider import SnmpBridgeFdbProvider
 from networkmapper.discovery.discovery_engine import DiscoveryEngine
 from networkmapper.discovery.lldp_neighbor_provider import SnmpLldpNeighborProvider
 from networkmapper.discovery.nmap_provider import NmapProvider
 from networkmapper.discovery.run_diagnostics import RunDiagnostics, profile_message
 from networkmapper.discovery.scan_profile import ScanProfile
 from networkmapper.discovery.snmp_arp_diagnostics import SnmpArpRunDiagnostics
+from networkmapper.discovery.snmp_bridge_fdb_diagnostics import SnmpBridgeFdbRunDiagnostics
 from networkmapper.discovery.snmp_credentials import SnmpCredentials, SnmpVersion
 from networkmapper.discovery.snmp_diagnostics import SnmpRunDiagnostics
 from networkmapper.discovery.snmp_lldp_diagnostics import SnmpLldpRunDiagnostics
@@ -72,6 +74,7 @@ class Application:
         parser.add_argument("--snmp", action="store_true")
         parser.add_argument("--snmp-arp", action="store_true")
         parser.add_argument("--snmp-lldp", action="store_true")
+        parser.add_argument("--snmp-bridge-fdb", action="store_true")
         args, _ = parser.parse_known_args()
 
         scan_profile = self._parse_scan_profile(args.scan_profile)
@@ -90,7 +93,8 @@ class Application:
         snmp_provider = None
         arp_provider = None
         lldp_provider = None
-        if args.snmp or args.snmp_arp or args.snmp_lldp:
+        fdb_provider = None
+        if args.snmp or args.snmp_arp or args.snmp_lldp or args.snmp_bridge_fdb:
             snmp_credentials = self._resolve_snmp_credentials()
             if args.snmp:
                 snmp_provider = SnmpEnrichmentProvider(snmp_credentials, event_bus=event_bus)
@@ -98,10 +102,12 @@ class Application:
                 arp_provider = SnmpArpNeighborProvider(snmp_credentials, event_bus=event_bus)
             if args.snmp_lldp:
                 lldp_provider = SnmpLldpNeighborProvider(snmp_credentials, event_bus=event_bus)
+            if args.snmp_bridge_fdb:
+                fdb_provider = SnmpBridgeFdbProvider(snmp_credentials, event_bus=event_bus)
 
         enrichment_providers = [
             enrichment_provider
-            for enrichment_provider in (snmp_provider, arp_provider, lldp_provider)
+            for enrichment_provider in (snmp_provider, arp_provider, lldp_provider, fdb_provider)
             if enrichment_provider is not None
         ]
 
@@ -124,6 +130,9 @@ class Application:
 
         if lldp_provider is not None and lldp_provider.run_diagnostics is not None:
             self._print_lldp_diagnostics(lldp_provider.run_diagnostics)
+
+        if fdb_provider is not None and fdb_provider.run_diagnostics is not None:
+            self._print_bridge_fdb_diagnostics(fdb_provider.run_diagnostics)
 
         before_save_count = graph.device_count()
         print("\nClassification Summary")
@@ -320,9 +329,10 @@ class Application:
 
     def _resolve_snmp_credentials(self) -> SnmpCredentials:
         """Resolve SNMP credentials from the environment when `--snmp`,
-        `--snmp-arp`, or `--snmp-lldp` is passed — shared between all
-        three flags (FEAT-010A; FEAT-012A extends this to the third), so
-        the operator is only ever asked for the same credential once.
+        `--snmp-arp`, `--snmp-lldp`, or `--snmp-bridge-fdb` is passed —
+        shared between all four flags (FEAT-010A; FEAT-012A extended this
+        to a third; ARCH-024/FEAT-012B extends it to a fourth), so the
+        operator is only ever asked for the same credential once.
 
         ARCH-012 Credential Strategy / Failure Model: any flag without a
         resolvable credential is an operator configuration error, not a
@@ -332,8 +342,9 @@ class Application:
         community = os.environ.get(SNMP_COMMUNITY_ENV_VAR)
         if not community:
             print(
-                f"Error: --snmp/--snmp-arp/--snmp-lldp requires the "
-                f"{SNMP_COMMUNITY_ENV_VAR} environment variable to be set.",
+                f"Error: --snmp/--snmp-arp/--snmp-lldp/--snmp-bridge-fdb "
+                f"requires the {SNMP_COMMUNITY_ENV_VAR} environment "
+                f"variable to be set.",
                 file=sys.stderr,
             )
             raise SystemExit(2)
@@ -401,6 +412,29 @@ class Application:
         print(f"Total LLDP Neighbor Entries Collected: {total_entries}")
         print(f"Total Management Addresses Collected: {total_management_addresses}")
         if lldp_diagnostics.hosts_timed_out:
+            print(
+                "Note: SNMPv2c cannot distinguish an incorrect community "
+                "string from SNMP being disabled or the host being "
+                "unreachable on UDP/161 — all three appear as a timeout."
+            )
+        print()
+
+    def _print_bridge_fdb_diagnostics(self, fdb_diagnostics: SnmpBridgeFdbRunDiagnostics) -> None:
+        """Print run-level Bridge-FDB diagnostics: hard, directly
+        measured counts only — no fabricated percentages or ETAs
+        (OBS-002), mirroring `_print_arp_diagnostics`/`_print_lldp_diagnostics`."""
+        total_entries = sum(
+            host.entries_returned for host in fdb_diagnostics.host_diagnostics.values()
+        )
+        print("Bridge FDB Diagnostics")
+        print("-" * 40)
+        print(f"SNMP Version: {fdb_diagnostics.version}")
+        print(f"Hosts Eligible: {fdb_diagnostics.hosts_eligible}")
+        print(f"Hosts Queried: {fdb_diagnostics.hosts_queried}")
+        print(f"Hosts Responded: {fdb_diagnostics.hosts_responded}")
+        print(f"Hosts Timed Out: {fdb_diagnostics.hosts_timed_out}")
+        print(f"Total Bridge FDB Entries Collected: {total_entries}")
+        if fdb_diagnostics.hosts_timed_out:
             print(
                 "Note: SNMPv2c cannot distinguish an incorrect community "
                 "string from SNMP being disabled or the host being "

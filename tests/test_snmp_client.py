@@ -4,6 +4,8 @@ from unittest.mock import AsyncMock, patch
 from pysnmp.hlapi.v3arch.asyncio import NoSuchInstance, NoSuchObject
 
 from networkmapper.discovery.snmp_client import (
+    DOT1D_TP_FDB_PORT_OID,
+    DOT1D_TP_FDB_STATUS_OID,
     IP_NET_TO_PHYSICAL_PHYS_ADDRESS_OID,
     IP_NET_TO_PHYSICAL_TYPE_OID,
     LLDP_REM_CHASSIS_ID_OID,
@@ -582,6 +584,211 @@ class PysnmpClientLldpNeighborTest(unittest.TestCase):
     )
     def test_unexpected_exception_never_propagates(self, _target_mock):
         result = PysnmpClient().get_lldp_neighbors("203.0.113.5", _CREDENTIALS, 1.0, 1)
+
+        self.assertFalse(result.responded)
+        self.assertEqual(result.failure_reason, "malformed response")
+        self.assertNotIn("unexpected transport failure", (result.failure_reason or ""))
+
+
+# AA:BB:CC:DD:EE:FF and BB:CC:DD:EE:FF:00, as dot1dTpFdbTable's own
+# 6-octet index suffix.
+_MAC_A_OCTETS = "170.187.204.221.238.255"
+_MAC_B_OCTETS = "187.204.221.238.255.0"
+
+
+class PysnmpClientBridgeFdbTest(unittest.TestCase):
+    """ARCH-024 / PLAN-012B / FEAT-012B."""
+
+    @patch("networkmapper.discovery.snmp_client.UdpTransportTarget.create", new_callable=AsyncMock)
+    @patch("networkmapper.discovery.snmp_client.walk_cmd")
+    def test_successful_walk_joins_port_and_status_by_mac(self, walk_cmd_mock, _target_mock):
+        walk_cmd_mock.side_effect = _walk_cmd_side_effect(
+            [
+                [(None, 0, 0, [(f"{DOT1D_TP_FDB_PORT_OID}.{_MAC_A_OCTETS}", 4)])],
+                [(None, 0, 0, [(f"{DOT1D_TP_FDB_STATUS_OID}.{_MAC_A_OCTETS}", 3)])],
+            ]
+        )
+
+        result = PysnmpClient().get_bridge_fdb("203.0.113.5", _CREDENTIALS, 1.0, 1)
+
+        self.assertTrue(result.responded)
+        self.assertIsNone(result.failure_reason)
+        self.assertEqual(len(result.entries), 1)
+        entry = result.entries[0]
+        self.assertEqual(entry.mac_address, "AA:BB:CC:DD:EE:FF")
+        self.assertEqual(entry.port, 4)
+        self.assertEqual(entry.status, "learned")
+
+    @patch("networkmapper.discovery.snmp_client.UdpTransportTarget.create", new_callable=AsyncMock)
+    @patch("networkmapper.discovery.snmp_client.walk_cmd")
+    def test_multiple_rows_are_all_returned(self, walk_cmd_mock, _target_mock):
+        walk_cmd_mock.side_effect = _walk_cmd_side_effect(
+            [
+                [
+                    (
+                        None,
+                        0,
+                        0,
+                        [
+                            (f"{DOT1D_TP_FDB_PORT_OID}.{_MAC_A_OCTETS}", 4),
+                            (f"{DOT1D_TP_FDB_PORT_OID}.{_MAC_B_OCTETS}", 7),
+                        ],
+                    )
+                ],
+                [(None, 0, 0, [])],
+            ]
+        )
+
+        result = PysnmpClient().get_bridge_fdb("203.0.113.5", _CREDENTIALS, 1.0, 1)
+
+        self.assertTrue(result.responded)
+        self.assertEqual(
+            {entry.mac_address for entry in result.entries},
+            {"AA:BB:CC:DD:EE:FF", "BB:CC:DD:EE:FF:00"},
+        )
+
+    @patch("networkmapper.discovery.snmp_client.UdpTransportTarget.create", new_callable=AsyncMock)
+    @patch("networkmapper.discovery.snmp_client.walk_cmd")
+    def test_a_row_missing_from_the_status_walk_leaves_status_none(
+        self, walk_cmd_mock, _target_mock
+    ):
+        walk_cmd_mock.side_effect = _walk_cmd_side_effect(
+            [
+                [(None, 0, 0, [(f"{DOT1D_TP_FDB_PORT_OID}.{_MAC_A_OCTETS}", 4)])],
+                [(None, 0, 0, [])],  # Status walk returns nothing for this row.
+            ]
+        )
+
+        result = PysnmpClient().get_bridge_fdb("203.0.113.5", _CREDENTIALS, 1.0, 1)
+
+        self.assertTrue(result.responded)
+        self.assertEqual(len(result.entries), 1)
+        self.assertIsNone(result.entries[0].status)
+
+    @patch("networkmapper.discovery.snmp_client.UdpTransportTarget.create", new_callable=AsyncMock)
+    @patch("networkmapper.discovery.snmp_client.walk_cmd")
+    def test_a_malformed_row_index_not_six_octets_is_skipped(self, walk_cmd_mock, _target_mock):
+        walk_cmd_mock.side_effect = _walk_cmd_side_effect(
+            [
+                [
+                    (
+                        None,
+                        0,
+                        0,
+                        [
+                            # Only 5 octets — malformed, skipped.
+                            (f"{DOT1D_TP_FDB_PORT_OID}.170.187.204.221.238", 4),
+                            (f"{DOT1D_TP_FDB_PORT_OID}.{_MAC_A_OCTETS}", 4),
+                        ],
+                    )
+                ],
+                [(None, 0, 0, [])],
+            ]
+        )
+
+        result = PysnmpClient().get_bridge_fdb("203.0.113.5", _CREDENTIALS, 1.0, 1)
+
+        self.assertTrue(result.responded)
+        self.assertEqual(len(result.entries), 1)
+        self.assertEqual(result.entries[0].mac_address, "AA:BB:CC:DD:EE:FF")
+
+    def _status_result_for(self, status_value: int):
+        with patch(
+            "networkmapper.discovery.snmp_client.UdpTransportTarget.create", new_callable=AsyncMock
+        ), patch("networkmapper.discovery.snmp_client.walk_cmd") as walk_cmd_mock:
+            walk_cmd_mock.side_effect = _walk_cmd_side_effect(
+                [
+                    [(None, 0, 0, [(f"{DOT1D_TP_FDB_PORT_OID}.{_MAC_A_OCTETS}", 4)])],
+                    [(None, 0, 0, [(f"{DOT1D_TP_FDB_STATUS_OID}.{_MAC_A_OCTETS}", status_value)])],
+                ]
+            )
+            return PysnmpClient().get_bridge_fdb("203.0.113.5", _CREDENTIALS, 1.0, 1)
+
+    def test_learned_status_row(self):
+        result = self._status_result_for(3)
+        self.assertEqual(result.entries[0].status, "learned")
+
+    def test_self_status_row(self):
+        result = self._status_result_for(4)
+        self.assertEqual(result.entries[0].status, "self")
+
+    def test_mgmt_status_row(self):
+        result = self._status_result_for(5)
+        self.assertEqual(result.entries[0].status, "mgmt")
+
+    def test_invalid_status_row(self):
+        result = self._status_result_for(2)
+        self.assertEqual(result.entries[0].status, "invalid")
+
+    def test_other_status_row(self):
+        result = self._status_result_for(1)
+        self.assertEqual(result.entries[0].status, "other")
+
+    @patch("networkmapper.discovery.snmp_client.UdpTransportTarget.create", new_callable=AsyncMock)
+    @patch("networkmapper.discovery.snmp_client.walk_cmd")
+    def test_zero_rows_is_a_legitimate_responded_result(self, walk_cmd_mock, _target_mock):
+        walk_cmd_mock.side_effect = _walk_cmd_side_effect([[(None, 0, 0, [])], [(None, 0, 0, [])]])
+
+        result = PysnmpClient().get_bridge_fdb("203.0.113.5", _CREDENTIALS, 1.0, 1)
+
+        self.assertTrue(result.responded)
+        self.assertEqual(result.entries, [])
+        self.assertIsNone(result.failure_reason)
+
+    @patch("networkmapper.discovery.snmp_client.UdpTransportTarget.create", new_callable=AsyncMock)
+    @patch("networkmapper.discovery.snmp_client.walk_cmd")
+    def test_missing_bridge_mib_support_is_a_legitimate_responded_result(
+        self, walk_cmd_mock, _target_mock
+    ):
+        walk_cmd_mock.side_effect = _walk_cmd_side_effect(
+            [
+                [(None, 0, 0, [(f"{DOT1D_TP_FDB_PORT_OID}.0", NoSuchObject())])],
+                [(None, 0, 0, [(f"{DOT1D_TP_FDB_STATUS_OID}.0", NoSuchObject())])],
+            ]
+        )
+
+        result = PysnmpClient().get_bridge_fdb("203.0.113.5", _CREDENTIALS, 1.0, 1)
+
+        self.assertTrue(result.responded)
+        self.assertEqual(result.entries, [])
+        self.assertIsNone(result.failure_reason)
+
+    @patch("networkmapper.discovery.snmp_client.UdpTransportTarget.create", new_callable=AsyncMock)
+    @patch("networkmapper.discovery.snmp_client.walk_cmd")
+    def test_port_walk_error_indication_is_reported_as_timeout(self, walk_cmd_mock, _target_mock):
+        walk_cmd_mock.side_effect = _walk_cmd_side_effect(
+            [[(Exception("No SNMP response received before timeout"), 0, 0, [])]]
+        )
+
+        result = PysnmpClient().get_bridge_fdb("203.0.113.5", _CREDENTIALS, 1.0, 1)
+
+        self.assertFalse(result.responded)
+        self.assertEqual(result.failure_reason, "timeout")
+        self.assertEqual(result.entries, [])
+
+    @patch("networkmapper.discovery.snmp_client.UdpTransportTarget.create", new_callable=AsyncMock)
+    @patch("networkmapper.discovery.snmp_client.walk_cmd")
+    def test_status_walk_failure_does_not_fail_the_whole_result(self, walk_cmd_mock, _target_mock):
+        walk_cmd_mock.side_effect = _walk_cmd_side_effect(
+            [
+                [(None, 0, 0, [(f"{DOT1D_TP_FDB_PORT_OID}.{_MAC_A_OCTETS}", 4)])],
+                [(Exception("timeout"), 0, 0, [])],  # Status walk fails; best-effort.
+            ]
+        )
+
+        result = PysnmpClient().get_bridge_fdb("203.0.113.5", _CREDENTIALS, 1.0, 1)
+
+        self.assertTrue(result.responded)
+        self.assertEqual(len(result.entries), 1)
+        self.assertIsNone(result.entries[0].status)
+
+    @patch(
+        "networkmapper.discovery.snmp_client.UdpTransportTarget.create",
+        new_callable=AsyncMock,
+        side_effect=RuntimeError("unexpected transport failure"),
+    )
+    def test_unexpected_exception_never_propagates(self, _target_mock):
+        result = PysnmpClient().get_bridge_fdb("203.0.113.5", _CREDENTIALS, 1.0, 1)
 
         self.assertFalse(result.responded)
         self.assertEqual(result.failure_reason, "malformed response")
