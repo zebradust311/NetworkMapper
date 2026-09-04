@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import dataclasses
+
 from networkmapper.classification.classification_rule import ClassificationRule
 from networkmapper.classification.evidence_helpers import (
     first_matching_identifier,
@@ -10,7 +12,7 @@ from networkmapper.classification.evidence_helpers import (
     service_ports,
 )
 from networkmapper.classification.rule_result import RuleResult
-from networkmapper.core.models import Device, DeviceType
+from networkmapper.core.models import Device, DeviceType, ServiceEvidence
 
 
 SUPPORTED_PRINTER_VENDOR_KEYWORDS = (
@@ -42,6 +44,18 @@ PRINTER_SERVICE_KEYWORDS = (
     "raw",
     "pdl-datastream",
 )
+
+# RULE-005: nmap's http-title script emits this fixed-format notice --
+# scanner commentary, not device-reported identity text -- when a page
+# redirects without being followed, and often embeds the full opaque
+# redirect URL (including any query-string tokens) verbatim. A real-world
+# UniFi guest-portal redirect's opaque ticket token was found to contain
+# the bare "hp" keyword purely by incidental substring collision,
+# misclassifying Ubiquiti access points as printers. Filtering this
+# specific notice out of identifier matching (not any other HTTP title)
+# closes that hole without touching genuine printer HTTP titles, which
+# never take this fixed form.
+_REDIRECT_NOTICE_PREFIX = "did not follow redirect"
 
 
 class PrinterVendorRule(ClassificationRule):
@@ -110,10 +124,33 @@ class PrinterVendorRule(ClassificationRule):
         HTTP title, just reported over SNMP instead.
         """
         return first_matching_identifier(
-            device.services,
+            self._without_redirect_notice_titles(device.services),
             SUPPORTED_PRINTER_VENDOR_KEYWORDS,
             snmp_sys_descr=device.snmp_sys_descr,
         )
+
+    def _without_redirect_notice_titles(
+        self, services: list[ServiceEvidence]
+    ) -> list[ServiceEvidence]:
+        """Return `services` with any "Did not follow redirect..." HTTP
+        title evidence removed before identifier matching.
+
+        Only `http_title` is nulled, on a shallow per-entry copy --
+        `product`, `tls_subject`, `tls_issuer`, `http_auth_realm`, and any
+        other port's own (non-redirect-notice) `http_title` are
+        untouched, so a real printer that happens to also show a redirect
+        notice on an unrelated port remains correctly detected via its
+        other evidence.
+        """
+        return [
+            (
+                dataclasses.replace(entry, http_title=None)
+                if entry.http_title
+                and entry.http_title.strip().lower().startswith(_REDIRECT_NOTICE_PREFIX)
+                else entry
+            )
+            for entry in services
+        ]
 
     def _find_printer_networking(self, device: Device) -> tuple[int | None, str | None]:
         matched_port = first_matching_port(

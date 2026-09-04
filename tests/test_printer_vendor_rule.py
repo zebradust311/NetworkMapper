@@ -292,6 +292,89 @@ class PrinterVendorRuleTest(unittest.TestCase):
             "printer vendor identifier.",
         )
 
+    def test_redirect_notice_http_title_does_not_match_incidental_hp_substring(self):
+        """RULE-005: reproduces the real production defect exactly.
+
+        A UniFi guest-portal redirect's opaque, effectively-random
+        base64-like ticket token incidentally contains "hp" as a bare
+        substring. Nmap's "Did not follow redirect to ..." notice is
+        scanner commentary, not device-reported identity text, and must
+        not be searched for printer vendor keywords.
+        """
+        device = Device(
+            ip_address="172.16.100.116",
+            vendor="Ubiquiti",
+            services=[
+                ServiceEvidence(
+                    port=80,
+                    protocol="tcp",
+                    service="http",
+                    http_title=(
+                        "Did not follow redirect to "
+                        "http://172.16.100.89:8880/guest/s/default/?ap=0c:ea:14:b7:41:9d"
+                        "&ec=4i5lQ9ecDwcp-LCkH1697alvguXoqmWg3DshpMadGs7OTsAnAWcJPf0sYnKy8ojRBcJi"
+                    ),
+                ),
+            ],
+        )
+
+        result = self.rule.classify(device)
+
+        self.assertFalse(result.matched)
+        self.assertIsNone(result.suggested_device_type)
+
+    def test_redirect_notice_exclusion_does_not_affect_genuine_printer_title_containing_hp(self):
+        """Sanity check for the fix's precision: a genuine printer HTTP
+        title containing "hp" in ordinary (non-redirect-notice) context
+        must still match."""
+        device = Device(
+            ip_address="192.168.1.30",
+            vendor=None,
+            services=[
+                ServiceEvidence(
+                    port=80,
+                    protocol="tcp",
+                    http_title="HP LaserJet Pro MFP - Status",
+                ),
+            ],
+        )
+
+        result = self.rule.classify(device)
+
+        self.assertTrue(result.matched)
+        self.assertEqual(result.suggested_device_type, DeviceType.PRINTER)
+
+    def test_redirect_notice_on_an_unrelated_port_does_not_hide_a_real_printer_title(self):
+        """A device with a redirect notice on one port and a genuine
+        printer identifier on another port must still be detected via
+        the untouched evidence."""
+        device = Device(
+            ip_address="192.168.1.31",
+            vendor=None,
+            services=[
+                ServiceEvidence(
+                    port=443,
+                    protocol="tcp",
+                    http_title="Did not follow redirect to https://192.168.1.31/",
+                ),
+                ServiceEvidence(
+                    port=80,
+                    protocol="tcp",
+                    http_title="HP LaserJet MFP M479 - Home",
+                ),
+            ],
+        )
+
+        result = self.rule.classify(device)
+
+        self.assertTrue(result.matched)
+        self.assertEqual(result.suggested_device_type, DeviceType.PRINTER)
+        self.assertEqual(
+            result.reason,
+            "Detected HTTP title 'HP LaserJet MFP M479 - Home' matched known "
+            "printer vendor identifier.",
+        )
+
     def test_non_printer_product_falls_back_to_networking_signal(self):
         device = Device(
             ip_address="192.168.1.20",

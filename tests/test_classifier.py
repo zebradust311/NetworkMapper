@@ -204,6 +204,107 @@ class DeviceClassifierTest(unittest.TestCase):
 
         self.assertEqual(result.device_type, DeviceType.UNKNOWN)
 
+    def test_axis_vendor_with_camera_station_evidence_classifies_as_camera_via_full_classifier(self):
+        """RULE-005 (architect review correction): the exact real
+        production evidence for 172.16.101.138 -- Axis vendor plus a TLS
+        certificate issued by AXIS Camera Station -- must resolve to
+        CAMERA instead of UNKNOWN."""
+        device = Device(
+            ip_address="172.16.101.138",
+            hostname=None,
+            vendor="Axis Communications AB",
+            services=[
+                ServiceEvidence(port=80, protocol="tcp", http_title="Did not follow redirect to https://172.16.101.138/"),
+                ServiceEvidence(
+                    port=443,
+                    protocol="tcp",
+                    http_title="Site doesn't have a title (text/html).",
+                    tls_subject="commonName=172.16.101.138",
+                    tls_issuer="commonName=AXIS Camera Station root certificate",
+                ),
+            ],
+        )
+
+        result = DeviceClassifier().classify(device)
+
+        self.assertEqual(result.device_type, DeviceType.CAMERA)
+
+    def test_axis_vendor_with_only_generic_evidence_remains_unknown_via_full_classifier(self):
+        """RULE-005 (architect review correction): Axis vendor identity
+        alone -- the real, majority pattern across the actual production
+        scan (25 of 38 Axis devices: a generic embedded web server and no
+        distinguishing title) -- must NOT classify as CAMERA. Vendor is
+        manufacturer identity, not device-category identity."""
+        device = Device(
+            ip_address="172.16.101.100",
+            hostname=None,
+            vendor="Axis Communications AB",
+            services=[
+                ServiceEvidence(port=80, protocol="tcp", product="Apache httpd 2.4.17", http_title="Index page"),
+            ],
+        )
+
+        result = DeviceClassifier().classify(device)
+
+        self.assertEqual(result.device_type, DeviceType.UNKNOWN)
+
+    def test_unifi_guest_portal_redirect_classifies_as_access_point_not_printer(self):
+        """RULE-005: the exact real production defect -- a UniFi access
+        point's guest-portal redirect HTTP title, with no hostname,
+        previously misclassified as PRINTER via an incidental "hp"
+        substring collision. UbiquitiAccessPointRule must now resolve it
+        to ACCESS_POINT before PrinterVendorRule is ever reached."""
+        device = Device(
+            ip_address="172.16.100.116",
+            hostname=None,
+            vendor="Ubiquiti",
+            services=[
+                ServiceEvidence(
+                    port=80,
+                    protocol="tcp",
+                    service="http",
+                    http_title=(
+                        "Did not follow redirect to "
+                        "http://172.16.100.89:8880/guest/s/default/?ap=0c:ea:14:b7:41:9d"
+                        "&ec=4i5lQ9ecDwcp-LCkH1697alvguXoqmWg3DshpMadGs7OTsAnAWcJPf0sYnKy8ojRBcJi"
+                    ),
+                ),
+                ServiceEvidence(
+                    port=443,
+                    protocol="tcp",
+                    service="https",
+                    http_title=(
+                        "Did not follow redirect to "
+                        "http://172.16.100.89:8880/guest/s/default/?ap=0c:ea:14:b7:41:9d"
+                        "&ec=4i5lQ9ecDwcp-LCkH1697alvguXoqmWg3DshpMadGs7OTsAnAWcJPf0sYnKy8ojRBcJi"
+                    ),
+                    tls_subject="commonName=ui/organizationName=Ubiquiti Networks, Inc.",
+                ),
+            ],
+        )
+
+        result = DeviceClassifier().classify(device)
+
+        self.assertEqual(result.device_type, DeviceType.ACCESS_POINT)
+
+    def test_ubiquiti_edgeswitch_still_classifies_as_switch_not_access_point(self):
+        """Regression guard: a genuine Ubiquiti EdgeSwitch (matched by
+        SwitchVendorRule's identifier tier, which runs after
+        UbiquitiAccessPointRule) must not be captured by the new
+        guest-portal evidence path."""
+        device = Device(
+            ip_address="172.16.100.10",
+            hostname=None,
+            vendor="Ubiquiti",
+            services=[
+                ServiceEvidence(port=443, protocol="tcp", http_title="Ubiquiti EdgeSwitch"),
+            ],
+        )
+
+        result = DeviceClassifier().classify(device)
+
+        self.assertEqual(result.device_type, DeviceType.SWITCH)
+
     def test_bench_002_generic_web_app_title_remains_unknown(self):
         """BENCH-002's web-app-01 device (a generic internal web app HTTP
         title with no vendor signal) was deliberately left UNKNOWN, not

@@ -16,6 +16,7 @@ class DeviceType(StrEnum):
     PHONE = "phone"
     ACCESS_POINT = "access_point"
     HYPERVISOR = "hypervisor"
+    CAMERA = "camera"
 
 
 @dataclass

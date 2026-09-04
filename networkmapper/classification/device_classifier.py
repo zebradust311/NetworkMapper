@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from networkmapper.classification.classification_rule import ClassificationRule
 from networkmapper.classification.rule_result import RuleResult
+from networkmapper.classification.rules.camera_vendor_rule import CameraVendorRule
 from networkmapper.classification.rules.dell_workstation_rule import DellWorkstationRule
 from networkmapper.classification.rules.hypervisor_hostname_rule import HypervisorHostnameRule
 from networkmapper.classification.rules.network_appliance_rule import NetworkApplianceRule
@@ -38,6 +39,16 @@ class DeviceClassifier:
         ("readynas") doesn't overlap with any other rule's vendor or
         identifier keywords, so its exact position among the other,
         differently-typed rules is not safety-relevant.
+
+        CameraVendorRule (RULE-005) runs between SwitchVendorRule and
+        PrinterVendorRule. Its vendor keyword ("axis communications") and
+        product-identifier keyword ("axis camera station") don't overlap
+        with any other rule's vendor or identifier keywords (confirmed
+        directly, including against every PrinterVendorRule printer-vendor
+        keyword), so — like NetworkApplianceRule above — its exact
+        position among the other, differently-typed rules is not
+        safety-relevant; it is grouped here only to keep the vendor-based
+        rules adjacent.
         """
         self._rules: list[ClassificationRule] = [
             ServerHostnameRule(),
@@ -47,6 +58,7 @@ class DeviceClassifier:
             SonicWallFirewallRule(),
             VoiceVendorRule(),
             SwitchVendorRule(),
+            CameraVendorRule(),
             PrinterVendorRule(),
             DellWorkstationRule(),
         ]
