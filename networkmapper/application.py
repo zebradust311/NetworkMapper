@@ -4,6 +4,7 @@ Main application controller for NetworkMapper.
 
 
 import argparse
+import ipaddress
 import os
 import sys
 from datetime import datetime
@@ -14,6 +15,7 @@ from networkmapper.discovery.arp_neighbor_provider import SnmpArpNeighborProvide
 from networkmapper.discovery.bridge_fdb_provider import SnmpBridgeFdbProvider
 from networkmapper.discovery.discovery_engine import DiscoveryEngine
 from networkmapper.discovery.lldp_neighbor_provider import SnmpLldpNeighborProvider
+from networkmapper.discovery.local_subnet import detect_local_subnet
 from networkmapper.discovery.nmap_provider import NmapProvider
 from networkmapper.discovery.run_diagnostics import RunDiagnostics, profile_message
 from networkmapper.discovery.scan_profile import ScanProfile
@@ -71,6 +73,7 @@ class Application:
         parser = argparse.ArgumentParser(add_help=False)
         parser.add_argument("--workbench", action="store_true")
         parser.add_argument("--scan-profile", default="fast")
+        parser.add_argument("--subnet", action="append")
         parser.add_argument("--snmp", action="store_true")
         parser.add_argument("--snmp-arp", action="store_true")
         parser.add_argument("--snmp-lldp", action="store_true")
@@ -86,9 +89,28 @@ class Application:
             activity=f"Scan profile: {scan_profile.value.upper()}",
         )
 
-        provider = NmapProvider(
-            "172.16.100.0/24", scan_profile=scan_profile, event_bus=event_bus
-        )
+        subnets = self._parse_subnets(args.subnet)
+        if not subnets:
+            detected = detect_local_subnet()
+            if detected is None:
+                print(
+                    "Error: no --subnet supplied and NetworkMapper could not "
+                    "automatically determine an active local IPv4 subnet. "
+                    "Provide --subnet explicitly.",
+                    file=sys.stderr,
+                )
+                raise SystemExit(2)
+
+            print(
+                f"No --subnet supplied. Detected local IPv4 address "
+                f"{detected.source_address} -> using subnet {detected.subnet_cidr}."
+            )
+            subnets = [detected.subnet_cidr]
+
+        providers = [
+            NmapProvider(subnet_cidr, scan_profile=scan_profile, event_bus=event_bus)
+            for subnet_cidr in subnets
+        ]
 
         snmp_provider = None
         arp_provider = None
@@ -112,15 +134,17 @@ class Application:
         ]
 
         engine = DiscoveryEngine(
-            [provider],
+            providers,
             enrichment_providers=enrichment_providers,
             event_bus=event_bus,
         )
 
         graph = engine.discover()
 
-        if provider.run_diagnostics is not None:
-            self._print_discovery_diagnostics(scan_profile, provider.run_diagnostics)
+        for subnet_cidr, provider in zip(subnets, providers):
+            if provider.run_diagnostics is not None:
+                print(f"\nSubnet: {subnet_cidr}")
+                self._print_discovery_diagnostics(scan_profile, provider.run_diagnostics)
 
         if snmp_provider is not None and snmp_provider.run_diagnostics is not None:
             self._print_snmp_diagnostics(snmp_provider.run_diagnostics)
@@ -460,3 +484,43 @@ class Application:
             raise SystemExit(2)
 
         return profile_map[normalized_value]
+
+    def _parse_subnets(self, values: list[str] | None) -> list[str]:
+        """Validate, canonicalize, and deduplicate explicit --subnet values.
+
+        Returns an empty list when no --subnet was supplied at all —
+        the caller falls back to local-subnet auto-detection in that case
+        (PLAN-013A Section 2.4). An explicitly-supplied-but-invalid value
+        is unambiguously an operator error and exits immediately; it is
+        never treated the same as "no preference stated".
+        """
+        if not values:
+            return []
+
+        canonical_subnets: list[str] = []
+        seen_subnets: set[str] = set()
+        for value in values:
+            try:
+                network = ipaddress.ip_network(value, strict=False)
+            except ValueError:
+                print(
+                    f"Error: invalid --subnet value '{value}'. "
+                    "Provide a valid IPv4 CIDR (e.g. 172.16.100.0/24).",
+                    file=sys.stderr,
+                )
+                raise SystemExit(2)
+
+            if network.version != 4:
+                print(
+                    f"Error: --subnet value '{value}' is not IPv4. "
+                    "Only IPv4 subnets are supported.",
+                    file=sys.stderr,
+                )
+                raise SystemExit(2)
+
+            canonical_subnet = str(network)
+            if canonical_subnet not in seen_subnets:
+                seen_subnets.add(canonical_subnet)
+                canonical_subnets.append(canonical_subnet)
+
+        return canonical_subnets

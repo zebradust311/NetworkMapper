@@ -7,6 +7,7 @@ from pathlib import Path
 from unittest.mock import ANY, patch
 
 from networkmapper.application import Application, SNMP_COMMUNITY_ENV_VAR
+from networkmapper.discovery.local_subnet import DetectedLocalSubnet
 from networkmapper.discovery.run_diagnostics import HostDiagnostics, RunDiagnostics, ScanPhase
 from networkmapper.discovery.scan_profile import ScanProfile
 from networkmapper.discovery.snmp_bridge_fdb_diagnostics import SnmpBridgeFdbRunDiagnostics
@@ -51,10 +52,13 @@ class ApplicationCliTest(unittest.TestCase):
         snmp_run_diagnostics: SnmpRunDiagnostics | None = None,
         bridge_fdb_run_diagnostics: SnmpBridgeFdbRunDiagnostics | None = None,
         env: dict[str, str] | None = None,
+        detected_local_subnet: DetectedLocalSubnet | None = None,
     ):
         with patch("networkmapper.application.DiscoveryEngine") as discovery_engine_mock, patch(
             "networkmapper.application.NmapProvider"
         ) as provider_mock, patch(
+            "networkmapper.application.detect_local_subnet"
+        ) as detect_local_subnet_mock, patch(
             "networkmapper.application.SnmpEnrichmentProvider"
         ) as snmp_provider_mock, patch(
             "networkmapper.application.SnmpArpNeighborProvider"
@@ -81,6 +85,7 @@ class ApplicationCliTest(unittest.TestCase):
             provider_mock.return_value.run_diagnostics = run_diagnostics or _default_run_diagnostics(
                 ScanProfile.FAST
             )
+            detect_local_subnet_mock.return_value = detected_local_subnet
             snmp_provider_mock.return_value.run_diagnostics = snmp_run_diagnostics
             fdb_provider_mock.return_value.run_diagnostics = bridge_fdb_run_diagnostics
             report_run_paths_mock.return_value = _fake_report_run_paths()
@@ -92,6 +97,7 @@ class ApplicationCliTest(unittest.TestCase):
 
         return {
             "provider_mock": provider_mock,
+            "detect_local_subnet_mock": detect_local_subnet_mock,
             "snmp_provider_mock": snmp_provider_mock,
             "arp_provider_mock": arp_provider_mock,
             "lldp_provider_mock": lldp_provider_mock,
@@ -106,7 +112,7 @@ class ApplicationCliTest(unittest.TestCase):
         }
 
     def test_application_without_arguments_preserves_existing_behavior(self):
-        result = self._run_application(["networkmapper"])
+        result = self._run_application(["networkmapper", "--subnet", "172.16.100.0/24"])
 
         self.assertIn("NetworkMapper is starting", result["stdout"])
         self.assertIn("✓ CSV exported", result["stdout"])
@@ -119,9 +125,12 @@ class ApplicationCliTest(unittest.TestCase):
             scan_profile=ScanProfile.FAST,
             event_bus=ANY,
         )
+        result["detect_local_subnet_mock"].assert_not_called()
 
     def test_report_artifacts_are_written_to_a_unique_run_directory(self):
-        result = self._run_application(["networkmapper", "--scan-profile", "standard"])
+        result = self._run_application(
+            ["networkmapper", "--subnet", "172.16.100.0/24", "--scan-profile", "standard"]
+        )
 
         report_run_paths_mock = result["report_run_paths_mock"]
         report_run_paths_mock.assert_called_once()
@@ -142,7 +151,9 @@ class ApplicationCliTest(unittest.TestCase):
         self.assertIn(f"✓ Markdown exported to {fake_paths.markdown_path}", result["stdout"])
 
     def test_scan_profile_fast_is_supported(self):
-        result = self._run_application(["networkmapper", "--scan-profile", "fast"])
+        result = self._run_application(
+            ["networkmapper", "--subnet", "172.16.100.0/24", "--scan-profile", "fast"]
+        )
 
         result["provider_mock"].assert_called_once_with(
             "172.16.100.0/24",
@@ -151,7 +162,9 @@ class ApplicationCliTest(unittest.TestCase):
         )
 
     def test_scan_profile_standard_is_supported(self):
-        result = self._run_application(["networkmapper", "--scan-profile", "standard"])
+        result = self._run_application(
+            ["networkmapper", "--subnet", "172.16.100.0/24", "--scan-profile", "standard"]
+        )
 
         result["provider_mock"].assert_called_once_with(
             "172.16.100.0/24",
@@ -160,7 +173,9 @@ class ApplicationCliTest(unittest.TestCase):
         )
 
     def test_scan_profile_deep_is_supported(self):
-        result = self._run_application(["networkmapper", "--scan-profile", "deep"])
+        result = self._run_application(
+            ["networkmapper", "--subnet", "172.16.100.0/24", "--scan-profile", "deep"]
+        )
 
         result["provider_mock"].assert_called_once_with(
             "172.16.100.0/24",
@@ -190,7 +205,11 @@ class ApplicationCliTest(unittest.TestCase):
 
                 with patch("networkmapper.application.DiscoveryEngine") as discovery_engine_mock, patch(
                     "networkmapper.application.NmapProvider"
-                ) as provider_mock, patch("networkmapper.application.CsvExporter") as csv_exporter_mock, patch(
+                ) as provider_mock, patch(
+                    "networkmapper.application.detect_local_subnet"
+                ) as detect_local_subnet_mock, patch(
+                    "networkmapper.application.CsvExporter"
+                ) as csv_exporter_mock, patch(
                     "networkmapper.application.MarkdownExporter"
                 ) as markdown_exporter_mock, patch(
                     "networkmapper.application.ProjectSerializer"
@@ -208,7 +227,10 @@ class ApplicationCliTest(unittest.TestCase):
                     )
                     report_run_paths_mock.return_value = _fake_report_run_paths()
 
-                    with patch("sys.argv", ["networkmapper", "--workbench"]):
+                    with patch(
+                        "sys.argv",
+                        ["networkmapper", "--subnet", "172.16.100.0/24", "--workbench"],
+                    ):
                         with redirect_stdout(io.StringIO()) as stdout:
                             Application().run()
 
@@ -223,12 +245,13 @@ class ApplicationCliTest(unittest.TestCase):
                         scan_profile=ScanProfile.FAST,
                         event_bus=ANY,
                     )
+                    detect_local_subnet_mock.assert_not_called()
             finally:
                 os.chdir(current_dir)
 
     def test_fast_profile_prints_enrichment_disabled_message(self):
         result = self._run_application(
-            ["networkmapper", "--scan-profile", "fast"],
+            ["networkmapper", "--subnet", "172.16.100.0/24", "--scan-profile", "fast"],
             run_diagnostics=_default_run_diagnostics(ScanProfile.FAST),
         )
 
@@ -267,7 +290,7 @@ class ApplicationCliTest(unittest.TestCase):
         )
 
         result = self._run_application(
-            ["networkmapper", "--scan-profile", "deep"],
+            ["networkmapper", "--subnet", "172.16.100.0/24", "--scan-profile", "deep"],
             run_diagnostics=run_diagnostics,
         )
 
@@ -285,7 +308,7 @@ class ApplicationCliTest(unittest.TestCase):
 
     def test_fast_profile_omits_additional_capabilities_section(self):
         result = self._run_application(
-            ["networkmapper", "--scan-profile", "fast"],
+            ["networkmapper", "--subnet", "172.16.100.0/24", "--scan-profile", "fast"],
             run_diagnostics=_default_run_diagnostics(ScanProfile.FAST),
         )
 
@@ -334,7 +357,7 @@ class ApplicationCliTest(unittest.TestCase):
         )
 
         result = self._run_application(
-            ["networkmapper", "--scan-profile", "standard"],
+            ["networkmapper", "--subnet", "172.16.100.0/24", "--scan-profile", "standard"],
             run_diagnostics=run_diagnostics,
         )
 
@@ -388,7 +411,7 @@ class ApplicationCliTest(unittest.TestCase):
         )
 
         result = self._run_application(
-            ["networkmapper", "--scan-profile", "standard"],
+            ["networkmapper", "--subnet", "172.16.100.0/24", "--scan-profile", "standard"],
             run_diagnostics=run_diagnostics,
         )
 
@@ -404,14 +427,14 @@ class ApplicationCliTest(unittest.TestCase):
         )
 
         result = self._run_application(
-            ["networkmapper", "--scan-profile", "fast"],
+            ["networkmapper", "--subnet", "172.16.100.0/24", "--scan-profile", "fast"],
             run_diagnostics=run_diagnostics,
         )
 
         self.assertIn("- Host Discovery (-sn) — unknown", result["stdout"])
 
     def test_snmp_flag_absent_by_default(self):
-        result = self._run_application(["networkmapper"])
+        result = self._run_application(["networkmapper", "--subnet", "172.16.100.0/24"])
 
         result["snmp_provider_mock"].assert_not_called()
         engine_call = result["discovery_engine_mock"].call_args
@@ -420,7 +443,9 @@ class ApplicationCliTest(unittest.TestCase):
     def test_snmp_flag_without_community_env_var_exits_with_non_zero_code(self):
         with patch("networkmapper.application.DiscoveryEngine"), patch(
             "networkmapper.application.NmapProvider"
-        ) as provider_mock, patch("sys.argv", ["networkmapper", "--snmp"]), patch.dict(
+        ) as provider_mock, patch("networkmapper.application.detect_local_subnet"), patch(
+            "sys.argv", ["networkmapper", "--subnet", "172.16.100.0/24", "--snmp"]
+        ), patch.dict(
             os.environ, {}, clear=False
         ):
             os.environ.pop(SNMP_COMMUNITY_ENV_VAR, None)
@@ -437,7 +462,7 @@ class ApplicationCliTest(unittest.TestCase):
 
     def test_snmp_flag_with_community_env_var_enables_snmp_enrichment(self):
         result = self._run_application(
-            ["networkmapper", "--snmp"],
+            ["networkmapper", "--subnet", "172.16.100.0/24", "--snmp"],
             env={SNMP_COMMUNITY_ENV_VAR: "s3cr3t-community"},
             snmp_run_diagnostics=SnmpRunDiagnostics(
                 hosts_eligible=2,
@@ -466,12 +491,12 @@ class ApplicationCliTest(unittest.TestCase):
         self.assertNotIn("s3cr3t-community", stdout)
 
     def test_snmp_flag_absent_prints_no_snmp_diagnostics(self):
-        result = self._run_application(["networkmapper"])
+        result = self._run_application(["networkmapper", "--subnet", "172.16.100.0/24"])
 
         self.assertNotIn("SNMP Diagnostics", result["stdout"])
 
     def test_snmp_bridge_fdb_flag_absent_by_default(self):
-        result = self._run_application(["networkmapper"])
+        result = self._run_application(["networkmapper", "--subnet", "172.16.100.0/24"])
 
         result["fdb_provider_mock"].assert_not_called()
         engine_call = result["discovery_engine_mock"].call_args
@@ -480,8 +505,8 @@ class ApplicationCliTest(unittest.TestCase):
     def test_snmp_bridge_fdb_flag_without_community_env_var_exits_with_non_zero_code(self):
         with patch("networkmapper.application.DiscoveryEngine"), patch(
             "networkmapper.application.NmapProvider"
-        ) as provider_mock, patch(
-            "sys.argv", ["networkmapper", "--snmp-bridge-fdb"]
+        ) as provider_mock, patch("networkmapper.application.detect_local_subnet"), patch(
+            "sys.argv", ["networkmapper", "--subnet", "172.16.100.0/24", "--snmp-bridge-fdb"]
         ), patch.dict(os.environ, {}, clear=False):
             os.environ.pop(SNMP_COMMUNITY_ENV_VAR, None)
             provider_mock.return_value.run_diagnostics = _default_run_diagnostics(ScanProfile.FAST)
@@ -497,7 +522,7 @@ class ApplicationCliTest(unittest.TestCase):
 
     def test_snmp_bridge_fdb_flag_with_community_env_var_enables_bridge_fdb_enrichment(self):
         result = self._run_application(
-            ["networkmapper", "--snmp-bridge-fdb"],
+            ["networkmapper", "--subnet", "172.16.100.0/24", "--snmp-bridge-fdb"],
             env={SNMP_COMMUNITY_ENV_VAR: "s3cr3t-community"},
             bridge_fdb_run_diagnostics=SnmpBridgeFdbRunDiagnostics(
                 hosts_eligible=2,
@@ -526,13 +551,20 @@ class ApplicationCliTest(unittest.TestCase):
         self.assertNotIn("s3cr3t-community", stdout)
 
     def test_snmp_bridge_fdb_flag_absent_prints_no_bridge_fdb_diagnostics(self):
-        result = self._run_application(["networkmapper"])
+        result = self._run_application(["networkmapper", "--subnet", "172.16.100.0/24"])
 
         self.assertNotIn("Bridge FDB Diagnostics", result["stdout"])
 
     def test_snmp_bridge_fdb_flag_combines_with_arp_and_lldp_flags(self):
         result = self._run_application(
-            ["networkmapper", "--snmp-arp", "--snmp-lldp", "--snmp-bridge-fdb"],
+            [
+                "networkmapper",
+                "--subnet",
+                "172.16.100.0/24",
+                "--snmp-arp",
+                "--snmp-lldp",
+                "--snmp-bridge-fdb",
+            ],
             env={SNMP_COMMUNITY_ENV_VAR: "s3cr3t-community"},
             bridge_fdb_run_diagnostics=SnmpBridgeFdbRunDiagnostics(
                 hosts_eligible=1, hosts_queried=1, hosts_responded=1, hosts_timed_out=0, version="v2c"
@@ -554,6 +586,209 @@ class ApplicationCliTest(unittest.TestCase):
         )
         self.assertIn("Bridge FDB Diagnostics", result["stdout"])
         self.assertNotIn("s3cr3t-community", result["stdout"])
+
+    # ------------------------------------------------------------------
+    # FEAT-013A: configurable multi-subnet discovery / local-subnet
+    # auto-detection (PLAN-013A Revision 3)
+    # ------------------------------------------------------------------
+
+    def test_explicit_single_subnet_overrides_local_detection(self):
+        result = self._run_application(
+            ["networkmapper", "--subnet", "172.16.100.0/24"],
+            detected_local_subnet=DetectedLocalSubnet(
+                source_address="10.0.0.5", subnet_cidr="10.0.0.0/24"
+            ),
+        )
+
+        result["detect_local_subnet_mock"].assert_not_called()
+        result["provider_mock"].assert_called_once_with(
+            "172.16.100.0/24", scan_profile=ScanProfile.FAST, event_bus=ANY
+        )
+
+    def test_explicit_multiple_subnets_bypass_local_detection(self):
+        result = self._run_application(
+            ["networkmapper", "--subnet", "172.16.100.0/24", "--subnet", "172.16.101.0/24"],
+            detected_local_subnet=DetectedLocalSubnet(
+                source_address="10.0.0.5", subnet_cidr="10.0.0.0/24"
+            ),
+        )
+
+        result["detect_local_subnet_mock"].assert_not_called()
+        self.assertEqual(result["provider_mock"].call_count, 2)
+        self.assertEqual(
+            [call.args[0] for call in result["provider_mock"].call_args_list],
+            ["172.16.100.0/24", "172.16.101.0/24"],
+        )
+
+    def test_no_subnet_supplied_uses_detected_local_subnet(self):
+        result = self._run_application(
+            ["networkmapper"],
+            detected_local_subnet=DetectedLocalSubnet(
+                source_address="192.168.1.55", subnet_cidr="192.168.1.0/24"
+            ),
+        )
+
+        result["detect_local_subnet_mock"].assert_called_once()
+        result["provider_mock"].assert_called_once_with(
+            "192.168.1.0/24", scan_profile=ScanProfile.FAST, event_bus=ANY
+        )
+
+    def test_detected_source_address_and_subnet_are_both_printed_before_discovery_begins(self):
+        result = self._run_application(
+            ["networkmapper"],
+            detected_local_subnet=DetectedLocalSubnet(
+                source_address="192.168.1.55", subnet_cidr="192.168.1.0/24"
+            ),
+        )
+
+        stdout = result["stdout"]
+        self.assertIn("192.168.1.55", stdout)
+        self.assertIn("192.168.1.0/24", stdout)
+
+        announcement_index = stdout.index("192.168.1.55")
+        diagnostics_index = stdout.index("Discovery Diagnostics")
+        self.assertLess(announcement_index, diagnostics_index)
+
+    def test_local_detection_failure_exits_cleanly(self):
+        with patch("networkmapper.application.DiscoveryEngine") as discovery_engine_mock, patch(
+            "networkmapper.application.NmapProvider"
+        ) as provider_mock, patch(
+            "networkmapper.application.detect_local_subnet"
+        ) as detect_local_subnet_mock, patch("sys.argv", ["networkmapper"]):
+            detect_local_subnet_mock.return_value = None
+
+            stdout = io.StringIO()
+            stderr = io.StringIO()
+            with redirect_stdout(stdout), redirect_stderr(stderr):
+                with self.assertRaises(SystemExit) as context:
+                    Application().run()
+
+        self.assertNotEqual(context.exception.code, 0)
+        self.assertIn("--subnet", stderr.getvalue())
+        provider_mock.assert_not_called()
+        discovery_engine_mock.assert_not_called()
+
+    def test_duplicate_subnets_construct_only_one_provider(self):
+        result = self._run_application(
+            ["networkmapper", "--subnet", "172.16.100.0/24", "--subnet", "172.16.100.0/24"]
+        )
+
+        result["provider_mock"].assert_called_once_with(
+            "172.16.100.0/24", scan_profile=ScanProfile.FAST, event_bus=ANY
+        )
+
+    def test_invalid_subnet_exits_before_any_provider_is_constructed(self):
+        with patch("networkmapper.application.DiscoveryEngine") as discovery_engine_mock, patch(
+            "networkmapper.application.NmapProvider"
+        ) as provider_mock, patch("networkmapper.application.detect_local_subnet") as detect_mock, patch(
+            "sys.argv", ["networkmapper", "--subnet", "not-a-cidr"]
+        ):
+            stdout = io.StringIO()
+            stderr = io.StringIO()
+            with redirect_stdout(stdout), redirect_stderr(stderr):
+                with self.assertRaises(SystemExit) as context:
+                    Application().run()
+
+        self.assertNotEqual(context.exception.code, 0)
+        self.assertIn("not-a-cidr", stderr.getvalue())
+        provider_mock.assert_not_called()
+        discovery_engine_mock.assert_not_called()
+        detect_mock.assert_not_called()
+
+    def test_diagnostics_are_printed_once_per_subnet_each_labeled_with_its_cidr(self):
+        first_diagnostics = RunDiagnostics(
+            scan_profile=ScanProfile.FAST,
+            hosts_discovered=3,
+            enrichment_enabled=False,
+            enrichment_arguments=None,
+            phases=[ScanPhase(name="Host Discovery", arguments="-sn", elapsed_seconds=1.0)],
+        )
+        second_diagnostics = RunDiagnostics(
+            scan_profile=ScanProfile.FAST,
+            hosts_discovered=7,
+            enrichment_enabled=False,
+            enrichment_arguments=None,
+            phases=[ScanPhase(name="Host Discovery", arguments="-sn", elapsed_seconds=2.0)],
+        )
+
+        with patch("networkmapper.application.DiscoveryEngine") as discovery_engine_mock, patch(
+            "networkmapper.application.NmapProvider"
+        ) as provider_mock, patch("networkmapper.application.detect_local_subnet"), patch(
+            "networkmapper.application.CsvExporter"
+        ), patch("networkmapper.application.MarkdownExporter"), patch(
+            "networkmapper.application.ProjectSerializer"
+        ) as serializer_mock, patch(
+            "networkmapper.application.build_report_run_paths"
+        ) as report_run_paths_mock, patch(
+            "sys.argv",
+            ["networkmapper", "--subnet", "172.16.100.0/24", "--subnet", "172.16.101.0/24"],
+        ):
+            first_provider = type("Provider", (), {"run_diagnostics": first_diagnostics})()
+            second_provider = type("Provider", (), {"run_diagnostics": second_diagnostics})()
+            provider_mock.side_effect = [first_provider, second_provider]
+
+            graph = type("Graph", (), {"device_count": lambda self: 1, "all_devices": lambda self: []})()
+            discovery_engine_mock.return_value.discover.return_value = graph
+            serializer_mock.load.return_value.network_graph.device_count.return_value = 1
+            report_run_paths_mock.return_value = _fake_report_run_paths()
+
+            stdout = io.StringIO()
+            with redirect_stdout(stdout):
+                Application().run()
+
+        output = stdout.getvalue()
+        first_subnet_index = output.index("Subnet: 172.16.100.0/24")
+        second_subnet_index = output.index("Subnet: 172.16.101.0/24")
+        self.assertLess(first_subnet_index, second_subnet_index)
+        self.assertIn("Hosts Discovered: 3", output)
+        self.assertIn("Hosts Discovered: 7", output)
+        # DiscoveryEngine itself is constructed exactly once, with both providers.
+        discovery_engine_mock.assert_called_once()
+        self.assertEqual(list(discovery_engine_mock.call_args.args[0]), [first_provider, second_provider])
+
+    def test_existing_single_subnet_diagnostics_output_is_unchanged(self):
+        result = self._run_application(
+            ["networkmapper", "--subnet", "172.16.100.0/24"],
+            run_diagnostics=_default_run_diagnostics(ScanProfile.FAST),
+        )
+
+        stdout = result["stdout"]
+        self.assertIn("Subnet: 172.16.100.0/24", stdout)
+        self.assertIn("Discovery Diagnostics", stdout)
+        self.assertIn("Scan Profile: FAST", stdout)
+
+    def test_snmp_flags_compose_with_multiple_subnets(self):
+        result = self._run_application(
+            [
+                "networkmapper",
+                "--subnet",
+                "172.16.100.0/24",
+                "--subnet",
+                "172.16.101.0/24",
+                "--snmp",
+                "--snmp-arp",
+                "--snmp-lldp",
+                "--snmp-bridge-fdb",
+            ],
+            env={SNMP_COMMUNITY_ENV_VAR: "s3cr3t-community"},
+        )
+
+        self.assertEqual(result["provider_mock"].call_count, 2)
+        result["snmp_provider_mock"].assert_called_once()
+        result["arp_provider_mock"].assert_called_once()
+        result["lldp_provider_mock"].assert_called_once()
+        result["fdb_provider_mock"].assert_called_once()
+
+        engine_call = result["discovery_engine_mock"].call_args
+        self.assertEqual(
+            engine_call.kwargs["enrichment_providers"],
+            [
+                result["snmp_provider_mock"].return_value,
+                result["arp_provider_mock"].return_value,
+                result["lldp_provider_mock"].return_value,
+                result["fdb_provider_mock"].return_value,
+            ],
+        )
 
 
 if __name__ == "__main__":
