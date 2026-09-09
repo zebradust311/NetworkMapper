@@ -7,7 +7,11 @@ from datetime import datetime
 from networkmapper.classification.device_classifier import DeviceClassifier
 from networkmapper.classification.rule_result import RuleResult
 from networkmapper.core.models import Device, DeviceType, ServiceEvidence
+from networkmapper.identity.models import IdentityCorroborationState
+from networkmapper.observations.provenance import ObservationProvenance
 from networkmapper.project.models import Project
+from networkmapper.relationships.models import RelationshipCorroborationState
+from networkmapper.reporting.canonical_presentation import CanonicalPresentation
 from networkmapper.reporting.project_summary import ProjectSummary
 from networkmapper.reporting.report_run import RunMetadata
 
@@ -82,6 +86,11 @@ class MarkdownExporter:
         lines.extend(self._render_classification_overview(project))
         lines.append("")
         lines.extend(self._render_device_inventory(project, classifier))
+        lines.append("")
+        presentation = CanonicalPresentation.from_project(project)
+        lines.extend(self._render_canonical_identity(presentation))
+        lines.append("")
+        lines.extend(self._render_canonical_relationships(presentation))
         lines.append("")
         lines.extend(self._render_appendices(project, summary))
 
@@ -368,6 +377,99 @@ class MarkdownExporter:
             return None, None
 
         return rule_names[-1], last_result
+
+    # ------------------------------------------------------------------
+    # Canonical Identity / Relationships (new, PLAN-025 Slice 1)
+    #
+    # Sourced entirely from `CanonicalPresentation`, itself a read-only
+    # projection of `project.canonical_identities` /
+    # `project.canonical_relationships` (ADR-012, ADR-013). This exporter
+    # renders exactly what the presentation layer hands it: resolver
+    # corroboration states are never recomputed here, and a CONFLICTING
+    # group's distinct values/related subjects are always rendered in
+    # full, never collapsed to one. See PLAN-025 Section 7 for why these
+    # are standalone top-level sections rather than interleaved into each
+    # device's existing Identity/Evidence/Classification block.
+    # ------------------------------------------------------------------
+
+    def _render_canonical_identity(self, presentation: CanonicalPresentation) -> list[str]:
+        """Render one entry per `CanonicalIdentity`: corroboration state,
+        then each property's state and every distinct observed value with
+        its supporting provenance."""
+        lines: list[str] = ["# Canonical Identity", ""]
+
+        if not presentation.identities:
+            lines.append("No canonical identity evidence collected.")
+            return lines
+
+        for identity in presentation.identities:
+            lines.append(f"## {self._subject_label(identity.subject, identity.device)}")
+            lines.append("")
+            lines.append(f"- Corroboration State: {self._corroboration_label(identity.state)}")
+            lines.append("")
+
+            for property_presentation in identity.properties:
+                lines.append(f"### {property_presentation.property_name}")
+                lines.append("")
+                lines.append(
+                    f"- State: {self._corroboration_label(property_presentation.state)}"
+                )
+                for value in property_presentation.values:
+                    lines.append(f"- Value: {value.value}")
+                    for observation in value.observations:
+                        lines.append(f"  - {self._format_provenance(observation.provenance)}")
+                lines.append("")
+
+        return lines
+
+    def _render_canonical_relationships(self, presentation: CanonicalPresentation) -> list[str]:
+        """Render one entry per `CanonicalRelationship`: directional,
+        category-labeled, corroboration state, and every distinct related
+        subject with its supporting provenance."""
+        lines: list[str] = ["# Canonical Relationships", ""]
+
+        if not presentation.relationships:
+            lines.append("No canonical relationship evidence collected.")
+            return lines
+
+        for relationship in presentation.relationships:
+            subject_label = self._subject_label(relationship.subject, relationship.device)
+            lines.append(f"## {subject_label} — {relationship.category_label}")
+            lines.append("")
+            lines.append(
+                f"- Corroboration State: {self._corroboration_label(relationship.state)}"
+            )
+            lines.append("- Related:")
+            for related in relationship.related:
+                related_label = self._subject_label(related.related_subject, related.device)
+                lines.append(f"  - {subject_label} → {related_label}")
+                for observation in related.observations:
+                    lines.append(f"    - {self._format_provenance(observation.provenance)}")
+            lines.append("")
+
+        return lines
+
+    def _subject_label(self, subject: str, device: Device | None) -> str:
+        """Render an enriched label for a canonical subject when a
+        matching `Device` exists, falling back to the raw subject
+        identifier otherwise — a lookup miss never suppresses the record."""
+        if device is not None and device.hostname:
+            return f"{device.hostname} ({subject})"
+        return subject
+
+    def _corroboration_label(
+        self, state: IdentityCorroborationState | RelationshipCorroborationState
+    ) -> str:
+        """Render a resolver-provided corroboration state as-is, title-cased
+        for display. Never recomputed — this is formatting only."""
+        return state.value.replace("_", " ").title()
+
+    def _format_provenance(self, provenance: ObservationProvenance) -> str:
+        """Render one observation's provider/method/timestamp provenance."""
+        return (
+            f"{provenance.provider} / {provenance.collection_method} "
+            f"({provenance.observed_at:%Y-%m-%d %H:%M:%S})"
+        )
 
     # ------------------------------------------------------------------
     # Appendices (new, REPORT-001)

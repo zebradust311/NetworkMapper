@@ -8,9 +8,48 @@ from networkmapper.classification.device_classifier import DeviceClassifier
 from networkmapper.core.models import Device, DeviceType, ServiceEvidence
 from networkmapper.discovery.scan_profile import ScanProfile
 from networkmapper.exporters.markdown_exporter import MarkdownExporter
+from networkmapper.identity.models import (
+    CanonicalIdentity,
+    IdentityCorroborationState,
+    PropertyCorroboration,
+)
+from networkmapper.observations.models import IdentityObservation, RelationshipObservation
+from networkmapper.observations.provenance import ObservationProvenance
 from networkmapper.project.models import Project
+from networkmapper.relationships.models import CanonicalRelationship, RelationshipCorroborationState
 from networkmapper.reporting.project_summary import ProjectSummary
 from networkmapper.reporting.report_run import RunMetadata
+
+
+def _provenance(
+    *,
+    provider: str = "nmap",
+    collection_method: str = "host-discovery",
+    source_run: str = "run-001",
+) -> ObservationProvenance:
+    return ObservationProvenance(
+        provider=provider,
+        collection_method=collection_method,
+        observed_at=datetime(2026, 8, 19, 9, 0, 0),
+        source_run=source_run,
+    )
+
+
+def _identity_observation(subject: str, property_name: str, value: str, **kwargs) -> IdentityObservation:
+    return IdentityObservation(
+        subject=subject, property_name=property_name, value=value, provenance=_provenance(**kwargs)
+    )
+
+
+def _relationship_observation(
+    subject: str, related_subject: str, category: str, **kwargs
+) -> RelationshipObservation:
+    return RelationshipObservation(
+        subject=subject,
+        related_subject=related_subject,
+        category=category,
+        provenance=_provenance(**kwargs),
+    )
 
 
 class MarkdownExporterTest(unittest.TestCase):
@@ -466,6 +505,201 @@ class MarkdownExporterTest(unittest.TestCase):
         with_metadata = self._export(project, run_metadata=run_metadata)
 
         self.assertTrue(with_metadata.endswith(without_metadata))
+
+    # ------------------------------------------------------------------
+    # Canonical Identity / Relationships (PLAN-025 Slice 1)
+    # ------------------------------------------------------------------
+
+    def test_canonical_identity_section_reports_no_evidence_when_empty(self):
+        """A `Project` with the default, empty `canonical_identities` tuple
+        (every pre-existing test in this file, implicitly) must render the
+        new section gracefully rather than error or imply a resolved-empty
+        conclusion (PLAN-025 Section 5's reachable empty case)."""
+        markdown = self._export(self._project())
+
+        self.assertIn("# Canonical Identity", markdown)
+        self.assertIn("No canonical identity evidence collected.", markdown)
+
+    def test_canonical_relationships_section_reports_no_evidence_when_empty(self):
+        markdown = self._export(self._project())
+
+        self.assertIn("# Canonical Relationships", markdown)
+        self.assertIn("No canonical relationship evidence collected.", markdown)
+
+    def test_canonical_identity_section_renders_state_value_device_and_provenance(self):
+        project = self._project()
+        project.network_graph.add_device(Device(ip_address="10.0.0.1", hostname="DC1"))
+        project.canonical_identities = (
+            CanonicalIdentity(
+                subject="10.0.0.1",
+                state=IdentityCorroborationState.CONFIRMED,
+                properties=(
+                    PropertyCorroboration(
+                        property_name="hostname",
+                        state=IdentityCorroborationState.CONFIRMED,
+                        observations=(
+                            _identity_observation(
+                                "10.0.0.1", "hostname", "DC1", provider="nmap", collection_method="host-discovery"
+                            ),
+                            _identity_observation(
+                                "10.0.0.1", "hostname", "DC1", provider="snmp", collection_method="sysName"
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        markdown = self._export(project)
+        section = markdown[markdown.index("# Canonical Identity") : markdown.index("# Canonical Relationships")]
+
+        self.assertIn("## DC1 (10.0.0.1)", section)
+        self.assertIn("- Corroboration State: Confirmed", section)
+        self.assertIn("### hostname", section)
+        self.assertIn("- Value: DC1", section)
+        self.assertIn("nmap / host-discovery", section)
+        self.assertIn("snmp / sysName", section)
+
+    def test_canonical_identity_section_shows_unmatched_subject_and_all_conflicting_values(self):
+        project = self._project()
+        project.canonical_identities = (
+            CanonicalIdentity(
+                subject="10.0.0.9",
+                state=IdentityCorroborationState.CONFLICTING,
+                properties=(
+                    PropertyCorroboration(
+                        property_name="hostname",
+                        state=IdentityCorroborationState.CONFLICTING,
+                        observations=(
+                            _identity_observation(
+                                "10.0.0.9", "hostname", "dc-01", provider="nmap", collection_method="host-discovery"
+                            ),
+                            _identity_observation(
+                                "10.0.0.9", "hostname", "dc-99", provider="wmi", collection_method="Win32_ComputerSystem"
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        markdown = self._export(project)
+        section = markdown[markdown.index("# Canonical Identity") : markdown.index("# Canonical Relationships")]
+
+        # No matching Device — the raw subject is the heading, never dropped.
+        self.assertIn("## 10.0.0.9", section)
+        self.assertNotIn("## 10.0.0.9 (", section)
+        self.assertIn("- Corroboration State: Conflicting", section)
+        # Both distinct conflicting values render; neither is collapsed away.
+        self.assertIn("- Value: dc-01", section)
+        self.assertIn("- Value: dc-99", section)
+
+    def test_canonical_relationships_section_renders_direction_category_and_device_enrichment(self):
+        project = self._project()
+        project.network_graph.add_device(Device(ip_address="10.0.0.1", hostname="SW1"))
+        project.network_graph.add_device(Device(ip_address="10.0.0.2", hostname="SW2"))
+        project.canonical_relationships = (
+            CanonicalRelationship(
+                subject="10.0.0.1",
+                category="connected_to",
+                state=RelationshipCorroborationState.WEAK,
+                observations=(
+                    _relationship_observation(
+                        "10.0.0.1", "10.0.0.2", "connected_to", provider="lldp", collection_method="lldp-neighbor"
+                    ),
+                ),
+            ),
+        )
+
+        markdown = self._export(project)
+        section = markdown[markdown.index("# Canonical Relationships") :]
+
+        self.assertIn("## SW1 (10.0.0.1) — Connected To", section)
+        self.assertIn("- Corroboration State: Weak", section)
+        self.assertIn("SW1 (10.0.0.1) → SW2 (10.0.0.2)", section)
+        self.assertIn("lldp / lldp-neighbor", section)
+        # Architect-review correction: the label must not bake the current
+        # evidence provider (LLDP) into the canonical category label itself.
+        self.assertNotIn("Connected To (LLDP)", section)
+
+    def test_canonical_relationships_section_shows_all_conflicting_related_subjects(self):
+        project = self._project()
+        project.canonical_relationships = (
+            CanonicalRelationship(
+                subject="10.0.0.1",
+                category="arp_neighbor",
+                state=RelationshipCorroborationState.CONFLICTING,
+                observations=(
+                    _relationship_observation(
+                        "10.0.0.1", "10.0.0.2", "arp_neighbor", provider="nmap", collection_method="arp-scan"
+                    ),
+                    _relationship_observation(
+                        "10.0.0.1", "10.0.0.9", "arp_neighbor", provider="snmp", collection_method="ipNetToMediaTable"
+                    ),
+                ),
+            ),
+        )
+
+        markdown = self._export(project)
+        section = markdown[markdown.index("# Canonical Relationships") :]
+
+        self.assertIn("## 10.0.0.1 — ARP Neighbor", section)
+        self.assertIn("- Corroboration State: Conflicting", section)
+        self.assertIn("10.0.0.1 → 10.0.0.2", section)
+        self.assertIn("10.0.0.1 → 10.0.0.9", section)
+
+    def test_unknown_relationship_category_falls_back_to_generic_label(self):
+        project = self._project()
+        project.canonical_relationships = (
+            CanonicalRelationship(
+                subject="10.0.0.1",
+                category="cdp_neighbor",
+                state=RelationshipCorroborationState.WEAK,
+                observations=(_relationship_observation("10.0.0.1", "10.0.0.2", "cdp_neighbor"),),
+            ),
+        )
+
+        markdown = self._export(project)
+        section = markdown[markdown.index("# Canonical Relationships") :]
+
+        self.assertIn("Cdp Neighbor", section)
+
+    def test_canonical_sections_do_not_move_or_alter_existing_report_content(self):
+        """Adding the two new sections must be purely additive — every
+        existing section's content is byte-for-byte unchanged."""
+        project_without_canonical_data = self._project()
+        classifier = DeviceClassifier()
+        project_without_canonical_data.network_graph.add_device(
+            classifier.classify(Device(ip_address="10.0.0.80", hostname="dc-05", vendor="Unknown"))
+        )
+        without_canonical_data = self._export(project_without_canonical_data)
+
+        project_with_canonical_data = self._project()
+        project_with_canonical_data.network_graph.add_device(
+            classifier.classify(Device(ip_address="10.0.0.80", hostname="dc-05", vendor="Unknown"))
+        )
+        project_with_canonical_data.canonical_identities = (
+            CanonicalIdentity(
+                subject="10.0.0.80",
+                state=IdentityCorroborationState.WEAK,
+                properties=(
+                    PropertyCorroboration(
+                        property_name="hostname",
+                        state=IdentityCorroborationState.WEAK,
+                        observations=(_identity_observation("10.0.0.80", "hostname", "dc-05"),),
+                    ),
+                ),
+            ),
+        )
+        with_canonical_data = self._export(project_with_canonical_data)
+
+        pre_canonical_without = without_canonical_data[: without_canonical_data.index("# Canonical Identity")]
+        pre_canonical_with = with_canonical_data[: with_canonical_data.index("# Canonical Identity")]
+        self.assertEqual(pre_canonical_without, pre_canonical_with)
+
+        post_canonical_without = without_canonical_data[without_canonical_data.index("# Appendices") :]
+        post_canonical_with = with_canonical_data[with_canonical_data.index("# Appendices") :]
+        self.assertEqual(post_canonical_without, post_canonical_with)
 
 
 if __name__ == "__main__":

@@ -170,6 +170,8 @@ ProjectSummary derives reusable summary data from a Project. Exporters then rend
 
 This separation keeps reporting concerns distinct from the core model and supports multiple output formats from the same source data.
 
+CanonicalPresentation (PLAN-025 Slice 1) is a sibling to ProjectSummary that derives reusable identity/relationship presentation data from a Project's already-resolved `canonical_identities` and `canonical_relationships` (ADR-012, ADR-013). It never re-resolves or reinterprets those conclusions — it only projects them into a technician-legible shape and enriches endpoints with a matching Device where one exists. The Markdown exporter is its current consumer.
+
 ## Data Flow
 
 The implemented data flow can be summarized as:
