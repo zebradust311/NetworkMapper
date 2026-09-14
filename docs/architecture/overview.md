@@ -172,6 +172,8 @@ This separation keeps reporting concerns distinct from the core model and suppor
 
 CanonicalPresentation (PLAN-025 Slice 1) is a sibling to ProjectSummary that derives reusable identity/relationship presentation data from a Project's already-resolved `canonical_identities` and `canonical_relationships` (ADR-012, ADR-013). It never re-resolves or reinterprets those conclusions — it only projects them into a technician-legible shape and enriches endpoints with a matching Device where one exists. The Markdown exporter is its current consumer.
 
+CsvExporter (PLAN-026/FEAT-026 Slice 1) is CanonicalPresentation's second consumer: it appends `Canonical Identity State` and `Conflicting Identity Properties` columns to the existing device-row CSV, matching each device row to a canonical identity by `IdentityPresentation.subject == Device.ip_address` only. This is a read-only, additive projection over data CanonicalPresentation already computed — CsvExporter performs no resolution of its own.
+
 ## Data Flow
 
 The implemented data flow can be summarized as:
