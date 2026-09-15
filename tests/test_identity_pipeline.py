@@ -126,11 +126,16 @@ class IdentityPipelineIntegrationTest(unittest.TestCase):
             run_directory=Path("output/identity-pipeline-test-run"),
             markdown_path=Path("output/identity-pipeline-test-run/report.md"),
             csv_path=Path("output/identity-pipeline-test-run/devices.csv"),
+            relationships_csv_path=Path("output/identity-pipeline-test-run/relationships.csv"),
         )
 
         with patch("networkmapper.application.NmapProvider", _FakeNetworkProvider), patch(
             "networkmapper.application.CsvExporter"
-        ) as csv_exporter_mock, patch("networkmapper.application.MarkdownExporter") as markdown_exporter_mock, patch(
+        ) as csv_exporter_mock, patch(
+            "networkmapper.application.RelationshipCsvExporter"
+        ) as relationship_csv_exporter_mock, patch(
+            "networkmapper.application.MarkdownExporter"
+        ) as markdown_exporter_mock, patch(
             "networkmapper.application.ProjectSerializer"
         ) as serializer_mock, patch(
             "networkmapper.application.build_report_run_paths", return_value=fake_report_paths
@@ -148,6 +153,7 @@ class IdentityPipelineIntegrationTest(unittest.TestCase):
         # Application completed successfully.
         self.assertIn("NetworkMapper is starting", stdout.getvalue())
         csv_exporter_mock.return_value.export.assert_called_once()
+        relationship_csv_exporter_mock.return_value.export.assert_called_once()
         markdown_exporter_mock.return_value.export.assert_called_once()
 
         # Discovery succeeded and Project.observations was populated.

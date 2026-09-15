@@ -31,6 +31,7 @@ class ReportRunPaths:
     run_directory: Path
     markdown_path: Path
     csv_path: Path
+    relationships_csv_path: Path
 
 
 def build_report_run_paths(
@@ -68,4 +69,5 @@ def build_report_run_paths(
         run_directory=run_directory,
         markdown_path=run_directory / "report.md",
         csv_path=run_directory / "devices.csv",
+        relationships_csv_path=run_directory / "relationships.csv",
     )

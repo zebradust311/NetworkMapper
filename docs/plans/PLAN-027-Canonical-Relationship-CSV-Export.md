@@ -1,8 +1,8 @@
 # Status
 
-Plan Proposed — Pending Review
+Approved — Architect-Reviewed
 
-Approval: Not yet architect-reviewed. Written as investigation authority in the style PLAN-025/PLAN-026 established. Do not implement against this plan until it is approved.
+Approval: Architect-approved for implementation (FEAT-027), including the Section 5.1 Provenance semantic clarification (presentation-level compression only; never recomputes, explains, validates, or derives Corroboration State). Written as investigation authority in the style PLAN-025/PLAN-026 established.
 
 Authority: [ARCH-025](../reports/ARCH-025-Canonical-Identity-Relationship-Presentation-Architecture.md) Section 8 ("Multi-Format Semantics"), and [PLAN-026](PLAN-026-Canonical-CSV-Presentation-Implementation.md) Section 4 ("Slice 2 — Designed, Implementation Deferred"), which fully specified this artifact's schema, one-row semantics, and ordering but explicitly deferred its implementation because producing a new report artifact requires touching `report_run.py` and `application.py` — a broader-touching class of change than PLAN-026's own single-file Slice 1. This plan re-grounds PLAN-026 Section 4's design directly against the current codebase (`canonical_presentation.py`, `markdown_exporter.py`, `csv_exporter.py`, `report_run.py`, `application.py`, `test_csv_exporter.py`, `test_report_run.py`, `test_application_cli.py`) and resolves the design questions PLAN-026 Section 4.2/8 left open (provenance representation, exact column semantics), so that a follow-on FEAT can implement without re-investigating.
 

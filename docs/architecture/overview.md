@@ -174,6 +174,8 @@ CanonicalPresentation (PLAN-025 Slice 1) is a sibling to ProjectSummary that der
 
 CsvExporter (PLAN-026/FEAT-026 Slice 1) is CanonicalPresentation's second consumer: it appends `Canonical Identity State` and `Conflicting Identity Properties` columns to the existing device-row CSV, matching each device row to a canonical identity by `IdentityPresentation.subject == Device.ip_address` only. This is a read-only, additive projection over data CanonicalPresentation already computed — CsvExporter performs no resolution of its own.
 
+RelationshipCsvExporter (PLAN-027/FEAT-027) is CanonicalPresentation's third consumer: it writes a dedicated `relationships.csv` artifact, one row per distinct `(subject, category, related_subject)` claim in `CanonicalPresentation.relationships`, with `Corroboration State` passed through unmodified and a `Provenance` column that deduplicates `(provider, collection_method)` pairs as presentation-level compression only — it never recomputes, explains, validates, or derives the canonical state. Like CsvExporter, it performs no resolution of its own.
+
 ## Data Flow
 
 The implemented data flow can be summarized as:

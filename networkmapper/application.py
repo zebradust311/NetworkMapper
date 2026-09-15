@@ -31,6 +31,7 @@ from networkmapper.project.models import Project
 from networkmapper.project.serializer import ProjectSerializer
 from networkmapper.exporters.csv_exporter import CsvExporter
 from networkmapper.exporters.markdown_exporter import MarkdownExporter
+from networkmapper.exporters.relationship_csv_exporter import RelationshipCsvExporter
 from networkmapper.reporting.discovery_summary import DiscoverySummary
 from networkmapper.reporting.report_run import RunMetadata, build_report_run_paths
 from networkmapper.runtime.cli_renderer import CliRuntimeEventRenderer, render_runtime_summary
@@ -229,6 +230,11 @@ class Application:
             str(report_paths.csv_path),
         )
 
+        RelationshipCsvExporter().export(
+            project,
+            str(report_paths.relationships_csv_path),
+        )
+
         MarkdownExporter().export(
             project,
             str(report_paths.markdown_path),
@@ -236,6 +242,7 @@ class Application:
         )
 
         print(f"✓ CSV exported to {report_paths.csv_path}")
+        print(f"✓ Relationships exported to {report_paths.relationships_csv_path}")
         print(f"✓ Markdown exported to {report_paths.markdown_path}")
         self._publish(
             event_bus, RuntimePhase.REPORT_GENERATION, RuntimeEventKind.PHASE_COMPLETED

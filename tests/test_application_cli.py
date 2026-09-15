@@ -20,14 +20,15 @@ def _fake_report_run_paths() -> ReportRunPaths:
 
     build_report_run_paths() creates a real directory as a side effect
     (REPORT-002); tests that don't explicitly isolate a temp working
-    directory must mock it out, the same way CsvExporter/MarkdownExporter
-    are already mocked below, so test runs don't litter the repo's real
-    output/ directory.
+    directory must mock it out, the same way CsvExporter/MarkdownExporter/
+    RelationshipCsvExporter are already mocked below, so test runs don't
+    litter the repo's real output/ directory.
     """
     return ReportRunPaths(
         run_directory=Path("output/fake-run"),
         markdown_path=Path("output/fake-run/report.md"),
         csv_path=Path("output/fake-run/devices.csv"),
+        relationships_csv_path=Path("output/fake-run/relationships.csv"),
     )
 
 
@@ -69,6 +70,8 @@ class ApplicationCliTest(unittest.TestCase):
         ) as fdb_provider_mock, patch(
             "networkmapper.application.CsvExporter"
         ) as csv_exporter_mock, patch(
+            "networkmapper.application.RelationshipCsvExporter"
+        ) as relationship_csv_exporter_mock, patch(
             "networkmapper.application.MarkdownExporter"
         ) as markdown_exporter_mock, patch(
             "networkmapper.application.ProjectSerializer"
@@ -104,6 +107,7 @@ class ApplicationCliTest(unittest.TestCase):
             "fdb_provider_mock": fdb_provider_mock,
             "discovery_engine_mock": discovery_engine_mock,
             "csv_exporter_mock": csv_exporter_mock,
+            "relationship_csv_exporter_mock": relationship_csv_exporter_mock,
             "markdown_exporter_mock": markdown_exporter_mock,
             "workbench_mock": workbench_mock,
             "report_run_paths_mock": report_run_paths_mock,
@@ -116,9 +120,11 @@ class ApplicationCliTest(unittest.TestCase):
 
         self.assertIn("NetworkMapper is starting", result["stdout"])
         self.assertIn("✓ CSV exported", result["stdout"])
+        self.assertIn("✓ Relationships exported", result["stdout"])
         self.assertIn("✓ Markdown exported", result["stdout"])
         result["workbench_mock"].assert_not_called()
         result["csv_exporter_mock"].assert_called_once()
+        result["relationship_csv_exporter_mock"].assert_called_once()
         result["markdown_exporter_mock"].assert_called_once()
         result["provider_mock"].assert_called_once_with(
             "172.16.100.0/24",
@@ -144,10 +150,16 @@ class ApplicationCliTest(unittest.TestCase):
         result["csv_exporter_mock"].return_value.export.assert_called_once_with(
             ANY, str(fake_paths.csv_path)
         )
+        result["relationship_csv_exporter_mock"].return_value.export.assert_called_once_with(
+            ANY, str(fake_paths.relationships_csv_path)
+        )
         result["markdown_exporter_mock"].return_value.export.assert_called_once_with(
             ANY, str(fake_paths.markdown_path), run_metadata=run_metadata
         )
         self.assertIn(f"✓ CSV exported to {fake_paths.csv_path}", result["stdout"])
+        self.assertIn(
+            f"✓ Relationships exported to {fake_paths.relationships_csv_path}", result["stdout"]
+        )
         self.assertIn(f"✓ Markdown exported to {fake_paths.markdown_path}", result["stdout"])
 
     def test_scan_profile_fast_is_supported(self):
@@ -210,6 +222,8 @@ class ApplicationCliTest(unittest.TestCase):
                 ) as detect_local_subnet_mock, patch(
                     "networkmapper.application.CsvExporter"
                 ) as csv_exporter_mock, patch(
+                    "networkmapper.application.RelationshipCsvExporter"
+                ) as relationship_csv_exporter_mock, patch(
                     "networkmapper.application.MarkdownExporter"
                 ) as markdown_exporter_mock, patch(
                     "networkmapper.application.ProjectSerializer"
@@ -239,6 +253,7 @@ class ApplicationCliTest(unittest.TestCase):
                     self.assertIn("✓ Classification Workbench exported", stdout.getvalue())
                     workbench_mock.assert_called_once()
                     csv_exporter_mock.assert_called_once()
+                    relationship_csv_exporter_mock.assert_called_once()
                     markdown_exporter_mock.assert_called_once()
                     provider_mock.assert_called_once_with(
                         "172.16.100.0/24",
@@ -715,7 +730,9 @@ class ApplicationCliTest(unittest.TestCase):
             "networkmapper.application.NmapProvider"
         ) as provider_mock, patch("networkmapper.application.detect_local_subnet"), patch(
             "networkmapper.application.CsvExporter"
-        ), patch("networkmapper.application.MarkdownExporter"), patch(
+        ), patch("networkmapper.application.RelationshipCsvExporter"), patch(
+            "networkmapper.application.MarkdownExporter"
+        ), patch(
             "networkmapper.application.ProjectSerializer"
         ) as serializer_mock, patch(
             "networkmapper.application.build_report_run_paths"

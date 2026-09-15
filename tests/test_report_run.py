@@ -58,6 +58,7 @@ class BuildReportRunPathsTest(unittest.TestCase):
 
         self.assertEqual(paths.markdown_path, paths.run_directory / "report.md")
         self.assertEqual(paths.csv_path, paths.run_directory / "devices.csv")
+        self.assertEqual(paths.relationships_csv_path, paths.run_directory / "relationships.csv")
 
     def test_run_directory_is_created_on_disk(self):
         run_metadata = RunMetadata(
