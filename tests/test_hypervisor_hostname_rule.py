@@ -403,6 +403,30 @@ class HypervisorHostnameRuleTest(unittest.TestCase):
         self.assertFalse(result.matched)
         self.assertIsNone(result.suggested_device_type)
 
+    def test_vsh_hostname_with_server_2022_build_still_matches_hypervisor(self):
+        """RULE-006: reproduces the real SCTVSH03 production evidence
+        exactly (hostname matching the "vsh" convention, operating_system
+        == "10.0.20348" -- the exact build WindowsServerRule also treats
+        as high-confidence SERVER evidence). HypervisorHostnameRule must
+        keep matching on its own, unaffected by WindowsServerRule's
+        introduction -- this is the real-data proof that WindowsServerRule
+        must run after this rule in DeviceClassifier's ordering."""
+        device = Device(
+            ip_address="172.16.100.28",
+            hostname="SCTVSH03.wrf.scterm.com",
+            vendor="Unknown",
+            operating_system="10.0.20348",
+        )
+
+        result = HypervisorHostnameRule().classify(device)
+
+        self.assertTrue(result.matched)
+        self.assertEqual(result.suggested_device_type, DeviceType.HYPERVISOR)
+        self.assertEqual(
+            result.reason,
+            "Hostname 'SCTVSH03.wrf.scterm.com' matched known hypervisor naming convention.",
+        )
+
     def test_hostname_match_with_vmware_tls_subject_enriches_reason(self):
         device = Device(
             ip_address="192.168.1.76",

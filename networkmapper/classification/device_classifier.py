@@ -12,6 +12,7 @@ from networkmapper.classification.rules.sonicwall_firewall_rule import SonicWall
 from networkmapper.classification.rules.switch_vendor_rule import SwitchVendorRule
 from networkmapper.classification.rules.ubiquiti_access_point_rule import UbiquitiAccessPointRule
 from networkmapper.classification.rules.voice_vendor_rule import VoiceVendorRule
+from networkmapper.classification.rules.windows_server_rule import WindowsServerRule
 from networkmapper.core.models import Device, DeviceType
 
 
@@ -49,6 +50,29 @@ class DeviceClassifier:
         position among the other, differently-typed rules is not
         safety-relevant; it is grouped here only to keep the vendor-based
         rules adjacent.
+
+        WindowsServerRule (RULE-006) runs immediately after CameraVendorRule
+        and immediately before PrinterVendorRule — this exact position is
+        safety-relevant in both directions, unlike the rules named above:
+
+        It must run after HypervisorHostnameRule: a real Hyper-V host
+        (hostname matching the "vsh" convention) can carry the exact
+        Windows Server 2022 build (10.0.20348) this rule also treats as
+        high-confidence evidence, and must remain HYPERVISOR, not be
+        reclassified SERVER. Confirmed against real production evidence
+        (three "vsh"-hostname hosts, one on that exact build).
+
+        It must run before PrinterVendorRule and DellWorkstationRule: a
+        Dell-vendor or Microsoft-vendor host with explicit Windows Server
+        evidence must be claimed here, not by DellWorkstationRule's bare
+        "dell" vendor match or PrinterVendorRule's networking tier.
+        DellWorkstationRule itself needs no defensive code for this — its
+        bare-vendor match can only ever be reached by a device this rule
+        has already declined, so ordering alone resolves the precedence.
+        (PrinterVendorRule additionally excludes Microsoft-branded
+        printer-networking evidence on its own, since one confirmed case
+        has no operating_system evidence for this rule to match at all —
+        see PrinterVendorRule's own docstring.)
         """
         self._rules: list[ClassificationRule] = [
             ServerHostnameRule(),
@@ -59,6 +83,7 @@ class DeviceClassifier:
             VoiceVendorRule(),
             SwitchVendorRule(),
             CameraVendorRule(),
+            WindowsServerRule(),
             PrinterVendorRule(),
             DellWorkstationRule(),
         ]

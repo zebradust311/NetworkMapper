@@ -327,6 +327,186 @@ class DeviceClassifierTest(unittest.TestCase):
         self.assertEqual(result.device_type, DeviceType.UNKNOWN)
 
 
+class WindowsServerRuleIntegrationTest(unittest.TestCase):
+    """RULE-006: full-pipeline regression tests, each reproducing one real
+    production device's exact evidence shape from PLAN-RULE-006 Section 2."""
+
+    def test_dell_poweredge_with_windows_server_evidence_classifies_server_not_workstation(self):
+        """Reproduces SCT0008 (172.16.100.19) exactly: the confirmed
+        DellWorkstationRule misclassification. Resolved entirely by
+        WindowsServerRule's position ahead of DellWorkstationRule --
+        DellWorkstationRule itself is unmodified."""
+        device = Device(
+            ip_address="172.16.100.19",
+            hostname="SCT0008.wrf.scterm.com",
+            vendor="Dell",
+            operating_system="Windows Server 2019 Standard 17763 (Windows Server 2019 Standard 6.3)",
+            services=[
+                ServiceEvidence(port=80, protocol="tcp", product="Microsoft HTTPAPI httpd"),
+                ServiceEvidence(
+                    port=445, protocol="tcp", service="microsoft-ds",
+                    product="Windows Server 2019 Standard 17763 microsoft-ds",
+                ),
+                ServiceEvidence(port=3389, protocol="tcp", service="ms-wbt-server"),
+            ],
+        )
+
+        result = DeviceClassifier().classify(device)
+
+        self.assertEqual(result.device_type, DeviceType.SERVER)
+
+    def test_genuine_dell_workstation_with_client_os_still_classifies_workstation(self):
+        """Guards against over-reach: a Dell device with an explicit
+        client OS caption (not Windows Server) must still reach and match
+        DellWorkstationRule, unaffected by WindowsServerRule's addition."""
+        device = Device(
+            ip_address="172.16.101.20",
+            hostname="SCT2087.wrf.scterm.com",
+            vendor="Dell",
+            operating_system="Windows 10 Enterprise 19045 (Windows 10 Enterprise 6.3)",
+        )
+
+        result = DeviceClassifier().classify(device)
+
+        self.assertEqual(result.device_type, DeviceType.WORKSTATION)
+
+    def test_windows_print_server_with_explicit_server_caption_classifies_server(self):
+        """Reproduces sct0003 (172.16.100.17) exactly: one of the four
+        confirmed PrinterVendorRule misclassifications. Both fixes combine
+        here -- PrinterVendorRule no longer claims it, and WindowsServerRule
+        (ahead of PrinterVendorRule) then claims it via its explicit
+        caption."""
+        device = Device(
+            ip_address="172.16.100.17",
+            hostname="sct0003.wrf.scterm.com",
+            vendor="Microsoft",
+            operating_system="Windows Server 2003 R2 3790 Service Pack 2 (Windows Server 2003 R2 5.2)",
+            services=[
+                ServiceEvidence(
+                    port=445, protocol="tcp", service="microsoft-ds",
+                    product="Windows Server 2003 R2 3790 Service Pack 2 microsoft-ds",
+                ),
+                ServiceEvidence(port=515, protocol="tcp", service="printer", product="Microsoft lpd"),
+                ServiceEvidence(port=3389, protocol="tcp", service="ms-wbt-server"),
+            ],
+        )
+
+        result = DeviceClassifier().classify(device)
+
+        self.assertEqual(result.device_type, DeviceType.SERVER)
+
+    def test_windows_print_server_with_no_os_evidence_falls_to_unknown_not_printer(self):
+        """Reproduces VM-3030-WIN7 (172.16.101.6) exactly: the fourth
+        confirmed PrinterVendorRule misclassification, with no
+        operating_system evidence at all -- WindowsServerRule cannot claim
+        it, and per this sprint's hard exclusions (no generic Windows
+        fallback), it correctly lands on UNKNOWN, not a guessed type."""
+        device = Device(
+            ip_address="172.16.101.6",
+            hostname="VM-3030-WIN7.wrf.scterm.com",
+            vendor="Microsoft",
+            operating_system=None,
+            services=[
+                ServiceEvidence(port=80, protocol="tcp", product="Microsoft IIS httpd", http_title="IIS7"),
+                ServiceEvidence(port=445, protocol="tcp", service="microsoft-ds"),
+                ServiceEvidence(port=515, protocol="tcp", service="printer", product="Microsoft lpd"),
+                ServiceEvidence(port=3389, protocol="tcp", service="ms-wbt-server", product="Microsoft Terminal Service"),
+            ],
+        )
+
+        result = DeviceClassifier().classify(device)
+
+        self.assertEqual(result.device_type, DeviceType.UNKNOWN)
+
+    def test_unresolved_caption_with_server_2022_build_classifies_server(self):
+        """Reproduces SCTRDS1 (172.16.100.54) exactly: previously UNKNOWN,
+        no explicit "Windows Server" caption, only the unambiguous
+        Server-2022 build number."""
+        device = Device(
+            ip_address="172.16.100.54",
+            hostname="SCTRDS1.wrf.scterm.com",
+            vendor="Microsoft",
+            operating_system="10.0.20348",
+            services=[
+                ServiceEvidence(port=80, protocol="tcp", product="Microsoft IIS httpd", http_title="IIS Windows Server"),
+                ServiceEvidence(port=445, protocol="tcp", service="microsoft-ds"),
+                ServiceEvidence(port=3389, protocol="tcp", service="ms-wbt-server"),
+            ],
+        )
+
+        result = DeviceClassifier().classify(device)
+
+        self.assertEqual(result.device_type, DeviceType.SERVER)
+
+    def test_vsh_hostname_with_server_2022_build_stays_hypervisor_via_full_pipeline(self):
+        """Reproduces SCTVSH03 (172.16.100.28) exactly: the real-data proof
+        that WindowsServerRule must run after HypervisorHostnameRule.
+        Confirms both the outcome AND which rule produced it, since this
+        is the load-bearing ordering guarantee for this sprint."""
+        device = Device(
+            ip_address="172.16.100.28",
+            hostname="SCTVSH03.wrf.scterm.com",
+            vendor="Unknown",
+            operating_system="10.0.20348",
+        )
+
+        classifier = DeviceClassifier()
+        result = classifier.classify(device)
+
+        self.assertEqual(result.device_type, DeviceType.HYPERVISOR)
+        rule_results = classifier.get_last_rule_results()
+        self.assertTrue(rule_results[0].matched is False)  # ServerHostnameRule: no match
+        self.assertTrue(rule_results[2].matched)  # HypervisorHostnameRule: the winner
+        self.assertEqual(
+            rule_results[2].reason,
+            "Hostname 'SCTVSH03.wrf.scterm.com' matched known hypervisor naming convention.",
+        )
+        self.assertEqual(len(rule_results), 3)  # classify() stops here -- WindowsServerRule never runs
+
+    def test_ambiguous_build_6_3_9600_stays_unknown_via_full_pipeline(self):
+        """Reproduces SCT0020/PWD/SCT00CA exactly: real devices sharing the
+        ambiguous Windows 8.1 / Server 2012 R2 build and a ranged, unresolved
+        product string. Must remain UNKNOWN -- this sprint's hard exclusion
+        against ambiguous-build guessing, proven against real evidence."""
+        device = Device(
+            ip_address="172.16.100.14",
+            hostname="SCT0020.wrf.scterm.com",
+            vendor="Microsoft",
+            operating_system="6.3.9600",
+            services=[
+                ServiceEvidence(
+                    port=445, protocol="tcp", service="microsoft-ds",
+                    product="Microsoft Windows Server 2008 R2 - 2012 microsoft-ds",
+                ),
+                ServiceEvidence(port=3389, protocol="tcp", service="ms-wbt-server"),
+            ],
+        )
+
+        result = DeviceClassifier().classify(device)
+
+        self.assertEqual(result.device_type, DeviceType.UNKNOWN)
+
+    def test_domain_controller_hostname_wins_via_server_hostname_rule_not_windows_server_rule(self):
+        """Reproduces SCT00DC1 (172.16.100.20) exactly: already correctly
+        SERVER via ServerHostnameRule's "dc" hostname match. Must continue
+        to resolve there, never reaching WindowsServerRule (position 9),
+        confirmed by rule identity, not just outcome."""
+        device = Device(
+            ip_address="172.16.100.20",
+            hostname="SCT00DC1.wrf.scterm.com",
+            vendor="Dell",
+            operating_system="Windows Server 2016 Standard 14393 (Windows Server 2016 Standard 6.3)",
+        )
+
+        classifier = DeviceClassifier()
+        result = classifier.classify(device)
+
+        self.assertEqual(result.device_type, DeviceType.SERVER)
+        rule_results = classifier.get_last_rule_results()
+        self.assertEqual(len(rule_results), 1)  # ServerHostnameRule wins immediately
+        self.assertTrue(rule_results[0].matched)
+
+
 class EvidenceHelpersTest(unittest.TestCase):
     def test_normalize_vendor_strip_defaults_to_true(self):
         self.assertEqual(normalize_vendor("  Cisco  "), "cisco")

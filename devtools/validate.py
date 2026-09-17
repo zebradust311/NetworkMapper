@@ -30,6 +30,7 @@ STANDARD_REGRESSION_TESTS: tuple[str, ...] = (
     "tests.test_sonicwall_firewall_rule",
     "tests.test_ubiquiti_access_point_rule",
     "tests.test_voice_vendor_rule",
+    "tests.test_windows_server_rule",
 )
 
 

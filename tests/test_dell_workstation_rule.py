@@ -52,6 +52,27 @@ class DellWorkstationRuleTest(unittest.TestCase):
             "Vendor 'Lenovo' and hostname 'ws-03' did not match known workstation indicators.",
         )
 
+    def test_bare_dell_vendor_still_matches_with_no_windows_server_evidence(self):
+        """RULE-006: confirms DellWorkstationRule itself needed no code
+        change -- its bare vendor match is unaffected when no Windows
+        Server evidence is present. The Dell PowerEdge + Windows Server
+        misclassification (SCT0008) is resolved entirely by
+        WindowsServerRule's position in DeviceClassifier's ordering, not
+        by any change inside this rule (see PLAN-RULE-006 Section 3.3)."""
+        device = Device(
+            ip_address="192.168.1.74",
+            hostname="ws-04",
+            vendor="Dell",
+            operating_system="10.0.19041",
+        )
+
+        result = DellWorkstationRule().classify(device)
+
+        self.assertIsInstance(result, RuleResult)
+        self.assertTrue(result.matched)
+        self.assertEqual(result.suggested_device_type, DeviceType.WORKSTATION)
+        self.assertEqual(result.reason, "Vendor 'Dell' matched known workstation vendor.")
+
     def test_dell_workstation_hostname_pattern_matches_without_vendor(self):
         device = Device(
             ip_address="192.168.1.73",

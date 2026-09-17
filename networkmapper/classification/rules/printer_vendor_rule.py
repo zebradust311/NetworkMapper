@@ -5,11 +5,7 @@ import dataclasses
 from networkmapper.classification.classification_rule import ClassificationRule
 from networkmapper.classification.evidence_helpers import (
     first_matching_identifier,
-    first_matching_port,
-    first_matching_service,
     normalize_vendor,
-    service_names,
-    service_ports,
 )
 from networkmapper.classification.rule_result import RuleResult
 from networkmapper.core.models import Device, DeviceType, ServiceEvidence
@@ -153,18 +149,48 @@ class PrinterVendorRule(ClassificationRule):
         ]
 
     def _find_printer_networking(self, device: Device) -> tuple[int | None, str | None]:
-        matched_port = first_matching_port(
-            service_ports(device.services),
-            PRINTER_PROTOCOL_PORTS,
-        )
+        """Return a (port, service) evidence pair from printer-networking
+        protocols, if any.
 
-        matched_service = first_matching_service(
-            service_names(device.services),
-            PRINTER_SERVICE_KEYWORDS,
-            return_lower=False,
-        )
-
+        RULE-006: independently scans for a matching port and a matching
+        service name (preserving the original two-tier behavior: a device
+        can be caught by either signal, from different service-evidence
+        entries), but excludes a candidate entry whose own `product`
+        field names a Microsoft-branded implementation (e.g. "Microsoft
+        lpd") -- a Windows host running a print-spooler service is not
+        itself a printer. Confirmed against real production evidence:
+        four Windows/Dell hosts running Terminal Services and SMB were
+        misclassified PRINTER solely because their LPD daemon's product
+        string is "Microsoft lpd," not a printer vendor's own LPD stack.
+        Scoped to the exact evidence entry producing each match, not the
+        device as a whole, so a genuine multi-function printer that also
+        exposes SMB (e.g. for scan-to-network-share) is unaffected.
+        """
+        matched_port = self._find_printer_port(device.services)
+        matched_service = self._find_printer_service(device.services)
         return matched_port, matched_service
+
+    def _find_printer_port(self, services: list[ServiceEvidence]) -> int | None:
+        for entry in services:
+            if entry.port in PRINTER_PROTOCOL_PORTS and not self._is_microsoft_product(
+                entry.product
+            ):
+                return entry.port
+        return None
+
+    def _find_printer_service(self, services: list[ServiceEvidence]) -> str | None:
+        for entry in services:
+            if not entry.service:
+                continue
+            value = entry.service.strip()
+            if value.lower() in PRINTER_SERVICE_KEYWORDS and not self._is_microsoft_product(
+                entry.product
+            ):
+                return value
+        return None
+
+    def _is_microsoft_product(self, product: str | None) -> bool:
+        return bool(product) and "microsoft" in product.lower()
 
     def _format_networking_reason(
         self,
