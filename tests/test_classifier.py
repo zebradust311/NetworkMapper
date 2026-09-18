@@ -507,6 +507,135 @@ class WindowsServerRuleIntegrationTest(unittest.TestCase):
         self.assertTrue(rule_results[0].matched)
 
 
+class WindowsWorkstationRuleIntegrationTest(unittest.TestCase):
+    """RULE-007: full-pipeline regression tests, each reproducing one real
+    production device's exact evidence shape from PLAN-RULE-007."""
+
+    def test_explicit_client_edition_classifies_workstation_via_full_pipeline(self):
+        """Reproduces MIS3030a (172.16.101.0) exactly: the one real
+        production device this sprint resolves, UNKNOWN -> WORKSTATION."""
+        device = Device(
+            ip_address="172.16.101.0",
+            hostname="MIS3030a.wrf.scterm.com",
+            vendor="ASUSTek Computer",
+            operating_system="Windows 10 Enterprise 19045 (Windows 10 Enterprise 6.3)",
+            services=[
+                ServiceEvidence(port=80, protocol="tcp", product="Microsoft IIS httpd"),
+                ServiceEvidence(
+                    port=445, protocol="tcp", service="microsoft-ds",
+                    product="Windows 10 Enterprise 19045 microsoft-ds",
+                ),
+                ServiceEvidence(port=3389, protocol="tcp", service="ms-wbt-server"),
+            ],
+        )
+
+        classifier = DeviceClassifier()
+        result = classifier.classify(device)
+
+        self.assertEqual(result.device_type, DeviceType.WORKSTATION)
+        rule_results = classifier.get_last_rule_results()
+        self.assertEqual(len(rule_results), 12)  # every other rule declined first
+        self.assertTrue(rule_results[-1].matched)  # WindowsWorkstationRule wins last
+
+    def test_explicit_windows_server_caption_still_resolves_server_before_workstation_rule(self):
+        """Requirement 11: an explicit Windows Server caption must still be
+        claimed by WindowsServerRule (position 9), never reaching
+        WindowsWorkstationRule (position 12)."""
+        device = Device(
+            ip_address="172.16.100.19",
+            hostname="SCT0008.wrf.scterm.com",
+            vendor="Dell",
+            operating_system="Windows Server 2019 Standard 17763 (Windows Server 2019 Standard 6.3)",
+        )
+
+        classifier = DeviceClassifier()
+        result = classifier.classify(device)
+
+        self.assertEqual(result.device_type, DeviceType.SERVER)
+        rule_results = classifier.get_last_rule_results()
+        self.assertEqual(len(rule_results), 9)  # WindowsServerRule wins, position 9
+        self.assertTrue(rule_results[-1].matched)
+
+    def test_hyperv_host_still_resolves_hypervisor_via_full_pipeline(self):
+        """Requirement 12: reproduces SCTVSH03's real shape (hostname
+        matching the "vsh" convention, ambiguous/exact build evidence) --
+        must remain HYPERVISOR, never reaching WindowsWorkstationRule."""
+        device = Device(
+            ip_address="172.16.100.28",
+            hostname="SCTVSH03.wrf.scterm.com",
+            vendor="Unknown",
+            operating_system="10.0.20348",
+        )
+
+        classifier = DeviceClassifier()
+        result = classifier.classify(device)
+
+        self.assertEqual(result.device_type, DeviceType.HYPERVISOR)
+        rule_results = classifier.get_last_rule_results()
+        self.assertEqual(len(rule_results), 3)  # HypervisorHostnameRule wins, position 3
+        self.assertTrue(rule_results[-1].matched)
+
+    def test_dell_workstation_still_resolves_via_dell_rule_before_workstation_rule(self):
+        """Requirement 13: reproduces SCT2053 (172.16.102.135) exactly --
+        a Dell-vendor device whose operating_system ALSO carries an
+        explicit client-edition caption. DellWorkstationRule (position 11)
+        must win first; WindowsWorkstationRule is never reached. This is
+        the one confirmed overlap named in PLAN-RULE-007 Section 10 --
+        resolved by ordering alone, no code change to DellWorkstationRule."""
+        device = Device(
+            ip_address="172.16.102.135",
+            hostname="SCT2053.wrf.scterm.com",
+            vendor="Dell",
+            operating_system="Windows 7 Professional 7601 Service Pack 1 (Windows 7 Professional 6.1)",
+        )
+
+        classifier = DeviceClassifier()
+        result = classifier.classify(device)
+
+        self.assertEqual(result.device_type, DeviceType.WORKSTATION)
+        rule_results = classifier.get_last_rule_results()
+        self.assertEqual(len(rule_results), 11)  # DellWorkstationRule wins, position 11
+        self.assertTrue(rule_results[-1].matched)
+        self.assertEqual(rule_results[-1].reason, "Vendor 'Dell' matched known workstation vendor.")
+
+    def test_ambiguous_build_only_device_remains_unknown_via_full_pipeline(self):
+        """Guards against over-reach: a device on an ambiguous build with
+        no explicit edition caption must fall through every rule,
+        including WindowsWorkstationRule, and remain UNKNOWN."""
+        device = Device(
+            ip_address="172.16.102.2",
+            hostname="SCTSG14.wrf.scterm.com",
+            vendor="Intel Corporate",
+            operating_system="10.0.26100",
+            services=[ServiceEvidence(port=3389, protocol="tcp", service="ms-wbt-server")],
+        )
+
+        result = DeviceClassifier().classify(device)
+
+        self.assertEqual(result.device_type, DeviceType.UNKNOWN)
+
+    def test_explicit_windows_10_home_caption_classifies_workstation_via_full_pipeline(self):
+        """PLAN-RULE-007 Section 21 amendment: minimal full-pipeline check
+        for the prospective Home-edition addition. No real device carries
+        this evidence today; this is a synthetic case, not a reproduction
+        of captured evidence. WindowsWorkstationRule still wins last,
+        after every other rule has declined -- no ordering change."""
+        device = Device(
+            ip_address="192.168.50.1",
+            hostname="HOMEPC01",
+            vendor="ASUSTek Computer",
+            operating_system="Windows 10 Home 19045 (Windows 10 Home 6.3)",
+        )
+
+        classifier = DeviceClassifier()
+        result = classifier.classify(device)
+
+        self.assertEqual(result.device_type, DeviceType.WORKSTATION)
+        rule_results = classifier.get_last_rule_results()
+        self.assertEqual(len(rule_results), 12)  # every other rule declined first
+        self.assertTrue(rule_results[-1].matched)  # WindowsWorkstationRule wins last
+
+
 class EvidenceHelpersTest(unittest.TestCase):
     def test_normalize_vendor_strip_defaults_to_true(self):
         self.assertEqual(normalize_vendor("  Cisco  "), "cisco")

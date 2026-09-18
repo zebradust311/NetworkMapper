@@ -13,6 +13,7 @@ from networkmapper.classification.rules.switch_vendor_rule import SwitchVendorRu
 from networkmapper.classification.rules.ubiquiti_access_point_rule import UbiquitiAccessPointRule
 from networkmapper.classification.rules.voice_vendor_rule import VoiceVendorRule
 from networkmapper.classification.rules.windows_server_rule import WindowsServerRule
+from networkmapper.classification.rules.windows_workstation_rule import WindowsWorkstationRule
 from networkmapper.core.models import Device, DeviceType
 
 
@@ -73,6 +74,22 @@ class DeviceClassifier:
         printer-networking evidence on its own, since one confirmed case
         has no operating_system evidence for this rule to match at all —
         see PrinterVendorRule's own docstring.)
+
+        WindowsWorkstationRule (RULE-007) runs last, after
+        DellWorkstationRule — unlike WindowsServerRule above, this
+        position carries no "must precede X" requirement in either
+        direction, because this rule corrects no existing rule's
+        over-broad match; it only ever assigns a type to a device every
+        other rule has already declined (PLAN-RULE-007 Section 13/14).
+        It cannot preempt ServerHostnameRule, HypervisorHostnameRule,
+        WindowsServerRule, PrinterVendorRule, or DellWorkstationRule
+        simply by virtue of running after all of them. Its one
+        confirmed overlap — a Dell-vendor device whose operating_system
+        also carries an explicit client-edition caption — is resolved
+        by DellWorkstationRule winning first, exactly as it does today;
+        DellWorkstationRule needs no defensive code for this, the same
+        ordering-only precedent WindowsServerRule already established
+        for its own overlap with DellWorkstationRule.
         """
         self._rules: list[ClassificationRule] = [
             ServerHostnameRule(),
@@ -86,6 +103,7 @@ class DeviceClassifier:
             WindowsServerRule(),
             PrinterVendorRule(),
             DellWorkstationRule(),
+            WindowsWorkstationRule(),
         ]
         self._last_rule_results: list[RuleResult] = []
 
