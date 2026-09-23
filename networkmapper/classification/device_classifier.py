@@ -4,6 +4,7 @@ from networkmapper.classification.classification_rule import ClassificationRule
 from networkmapper.classification.rule_result import RuleResult
 from networkmapper.classification.rules.camera_vendor_rule import CameraVendorRule
 from networkmapper.classification.rules.dell_workstation_rule import DellWorkstationRule
+from networkmapper.classification.rules.edge_router_rule import EdgeRouterRule
 from networkmapper.classification.rules.hypervisor_hostname_rule import HypervisorHostnameRule
 from networkmapper.classification.rules.network_appliance_rule import NetworkApplianceRule
 from networkmapper.classification.rules.printer_vendor_rule import PrinterVendorRule
@@ -90,12 +91,38 @@ class DeviceClassifier:
         DellWorkstationRule needs no defensive code for this, the same
         ordering-only precedent WindowsServerRule already established
         for its own overlap with DellWorkstationRule.
+
+        EdgeRouterRule (RULE-008) runs immediately after
+        UbiquitiAccessPointRule and immediately before
+        SonicWallFirewallRule. This exact position is not safety-relevant
+        in either direction — confirmed directly against real production
+        evidence, every EdgeOS device fails every UbiquitiAccessPointRule
+        check today (none carries an AP-shaped hostname or the UniFi
+        guest-portal HTTP title UbiquitiAccessPointRule looks for), and
+        EdgeRouterRule's own identifier keywords ("edgeos",
+        "ubiquitirouterui") share no overlap with any other rule's vendor
+        or identifier keywords, including SonicWallFirewallRule's
+        "sonicwall" and SwitchVendorRule's "procurve"/"edgeswitch"/
+        "tp-link switch". It is placed here only to keep the two
+        vendor-scoped Ubiquiti rules adjacent, the same "grouped, not
+        order-critical" precedent NetworkApplianceRule and
+        CameraVendorRule already established above. Like
+        WindowsServerRule, EdgeRouterRule deliberately has no bare-vendor
+        ("ubiquiti") match tier and no hostname tier, so it can never
+        preempt UbiquitiAccessPointRule's own hostname-based matches even
+        if a future device happened to carry both kinds of evidence.
+
+        SwitchVendorRule's own position is unchanged by RULE-008 — only
+        its identifier keyword set gained "tp-link switch", the same
+        product-identifier tier "procurve"/"edgeswitch" already use, so
+        no new ordering question is introduced by that change.
         """
         self._rules: list[ClassificationRule] = [
             ServerHostnameRule(),
             NetworkApplianceRule(),
             HypervisorHostnameRule(),
             UbiquitiAccessPointRule(),
+            EdgeRouterRule(),
             SonicWallFirewallRule(),
             VoiceVendorRule(),
             SwitchVendorRule(),

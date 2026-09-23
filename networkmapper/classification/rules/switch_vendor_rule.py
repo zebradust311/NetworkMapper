@@ -58,7 +58,18 @@ SWITCH_PRODUCT_KEYWORDS = {"cisco"}
 # specific rule ever sees it. The existing vendor-field "cisco" check
 # below carries the same ambiguity but is pre-existing, evidence-accepted
 # behavior; RULE-004 does not extend that same risk into a second field.
-SWITCH_IDENTIFIER_KEYWORDS = {"procurve", "edgeswitch"}
+#
+# RULE-008: "tp-link switch" was added after real production evidence
+# showed two TP-Link-vendor devices self-reporting the exact service
+# product string "TP-LINK switch http admin" -- the same identifier-tier
+# shape as "procurve"/"edgeswitch" above (an explicit product-class word,
+# not a bare vendor name). Two other real TP-Link-vendor devices carry no
+# product/title/TLS/auth-realm evidence at all and are deliberately left
+# unmatched by this keyword: a bare "tp-link"/"tplink" vendor keyword is
+# NOT added, and never will be, for the same "single weak indicator"
+# reason NetworkApplianceRule's docstring already establishes for bare
+# "netgear" -- TP-Link also makes routers and access points.
+SWITCH_IDENTIFIER_KEYWORDS = {"procurve", "edgeswitch", "tp-link switch"}
 
 
 class SwitchVendorRule(ClassificationRule):

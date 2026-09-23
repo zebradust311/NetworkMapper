@@ -248,6 +248,84 @@ class SwitchVendorRuleTest(unittest.TestCase):
         self.assertFalse(result.matched)
         self.assertIsNone(result.suggested_device_type)
 
+    def test_tp_link_switch_product_classifies_as_switch(self):
+        """RULE-008: the exact real production evidence shape -- a
+        TP-Link-vendor device self-reporting an explicit switch product
+        string, with no hostname or other switch signal."""
+        device = Device(
+            ip_address="172.16.102.12",
+            hostname=None,
+            vendor="TP-Link Technologies",
+            services=[
+                ServiceEvidence(
+                    port=80,
+                    protocol="tcp",
+                    product="TP-LINK switch http admin",
+                ),
+            ],
+        )
+
+        result = SwitchVendorRule().classify(device)
+
+        self.assertIsInstance(result, RuleResult)
+        self.assertTrue(result.matched)
+        self.assertEqual(result.suggested_device_type, DeviceType.SWITCH)
+        self.assertEqual(
+            result.reason,
+            "Detected service product 'TP-LINK switch http admin' matched known "
+            "switch identifier.",
+        )
+
+    def test_tp_link_switch_product_matching_is_case_insensitive(self):
+        device = Device(
+            ip_address="172.16.102.65",
+            hostname=None,
+            vendor="TP-Link Technologies",
+            services=[
+                ServiceEvidence(
+                    port=80,
+                    protocol="tcp",
+                    product="tp-link SWITCH http admin",
+                ),
+            ],
+        )
+
+        result = SwitchVendorRule().classify(device)
+
+        self.assertIsInstance(result, RuleResult)
+        self.assertTrue(result.matched)
+        self.assertEqual(result.suggested_device_type, DeviceType.SWITCH)
+
+    def test_tp_link_technologies_vendor_alone_does_not_match(self):
+        """RULE-008: the real production evidence shape for a TP-Link
+        device with no product/title/TLS/auth-realm evidence at all --
+        must remain unmatched. Bare TP-Link vendor is deliberately never
+        an independent trigger."""
+        device = Device(
+            ip_address="172.16.102.95",
+            hostname=None,
+            vendor="TP-Link Technologies",
+        )
+
+        result = SwitchVendorRule().classify(device)
+
+        self.assertIsInstance(result, RuleResult)
+        self.assertFalse(result.matched)
+        self.assertIsNone(result.suggested_device_type)
+
+    def test_tp_link_systems_vendor_alone_does_not_match(self):
+        device = Device(
+            ip_address="172.16.102.143",
+            hostname=None,
+            vendor="TP-Link Systems",
+        )
+
+        result = SwitchVendorRule().classify(device)
+
+        self.assertIsInstance(result, RuleResult)
+        self.assertFalse(result.matched)
+        self.assertIsNone(result.suggested_device_type)
+
 
 if __name__ == "__main__":
     unittest.main()

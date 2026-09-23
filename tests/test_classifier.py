@@ -489,7 +489,7 @@ class WindowsServerRuleIntegrationTest(unittest.TestCase):
     def test_domain_controller_hostname_wins_via_server_hostname_rule_not_windows_server_rule(self):
         """Reproduces SCT00DC1 (172.16.100.20) exactly: already correctly
         SERVER via ServerHostnameRule's "dc" hostname match. Must continue
-        to resolve there, never reaching WindowsServerRule (position 9),
+        to resolve there, never reaching WindowsServerRule (position 10),
         confirmed by rule identity, not just outcome."""
         device = Device(
             ip_address="172.16.100.20",
@@ -534,13 +534,13 @@ class WindowsWorkstationRuleIntegrationTest(unittest.TestCase):
 
         self.assertEqual(result.device_type, DeviceType.WORKSTATION)
         rule_results = classifier.get_last_rule_results()
-        self.assertEqual(len(rule_results), 12)  # every other rule declined first
+        self.assertEqual(len(rule_results), 13)  # every other rule declined first
         self.assertTrue(rule_results[-1].matched)  # WindowsWorkstationRule wins last
 
     def test_explicit_windows_server_caption_still_resolves_server_before_workstation_rule(self):
         """Requirement 11: an explicit Windows Server caption must still be
-        claimed by WindowsServerRule (position 9), never reaching
-        WindowsWorkstationRule (position 12)."""
+        claimed by WindowsServerRule (position 10), never reaching
+        WindowsWorkstationRule (position 13)."""
         device = Device(
             ip_address="172.16.100.19",
             hostname="SCT0008.wrf.scterm.com",
@@ -553,7 +553,7 @@ class WindowsWorkstationRuleIntegrationTest(unittest.TestCase):
 
         self.assertEqual(result.device_type, DeviceType.SERVER)
         rule_results = classifier.get_last_rule_results()
-        self.assertEqual(len(rule_results), 9)  # WindowsServerRule wins, position 9
+        self.assertEqual(len(rule_results), 10)  # WindowsServerRule wins, position 10
         self.assertTrue(rule_results[-1].matched)
 
     def test_hyperv_host_still_resolves_hypervisor_via_full_pipeline(self):
@@ -578,7 +578,7 @@ class WindowsWorkstationRuleIntegrationTest(unittest.TestCase):
     def test_dell_workstation_still_resolves_via_dell_rule_before_workstation_rule(self):
         """Requirement 13: reproduces SCT2053 (172.16.102.135) exactly --
         a Dell-vendor device whose operating_system ALSO carries an
-        explicit client-edition caption. DellWorkstationRule (position 11)
+        explicit client-edition caption. DellWorkstationRule (position 12)
         must win first; WindowsWorkstationRule is never reached. This is
         the one confirmed overlap named in PLAN-RULE-007 Section 10 --
         resolved by ordering alone, no code change to DellWorkstationRule."""
@@ -594,7 +594,7 @@ class WindowsWorkstationRuleIntegrationTest(unittest.TestCase):
 
         self.assertEqual(result.device_type, DeviceType.WORKSTATION)
         rule_results = classifier.get_last_rule_results()
-        self.assertEqual(len(rule_results), 11)  # DellWorkstationRule wins, position 11
+        self.assertEqual(len(rule_results), 12)  # DellWorkstationRule wins, position 12
         self.assertTrue(rule_results[-1].matched)
         self.assertEqual(rule_results[-1].reason, "Vendor 'Dell' matched known workstation vendor.")
 
@@ -632,8 +632,128 @@ class WindowsWorkstationRuleIntegrationTest(unittest.TestCase):
 
         self.assertEqual(result.device_type, DeviceType.WORKSTATION)
         rule_results = classifier.get_last_rule_results()
-        self.assertEqual(len(rule_results), 12)  # every other rule declined first
+        self.assertEqual(len(rule_results), 13)  # every other rule declined first
         self.assertTrue(rule_results[-1].matched)  # WindowsWorkstationRule wins last
+
+
+class EdgeRouterAndTpLinkSwitchIntegrationTest(unittest.TestCase):
+    """RULE-008: full-pipeline regression tests, each reproducing one real
+    production device's exact evidence shape from PLAN-RULE-008."""
+
+    def test_edgeos_device_classifies_router_via_edge_router_rule(self):
+        """Reproduces 172.16.100.4/.7/.240 exactly: a hostname-less
+        Ubiquiti device whose HTTP title and TLS certificate both
+        self-identify as EdgeOS/UbiquitiRouterUI. Must resolve via
+        EdgeRouterRule (position 5), never reaching SwitchVendorRule or
+        any later rule."""
+        device = Device(
+            ip_address="172.16.100.4",
+            hostname=None,
+            vendor="Ubiquiti",
+            services=[
+                ServiceEvidence(port=22, protocol="tcp", service="ssh", product="OpenSSH 8.4p1 Debian 5+deb11u3.ui1"),
+                ServiceEvidence(port=53, protocol="tcp", service="domain", product="dnsmasq 2.85"),
+                ServiceEvidence(port=80, protocol="tcp", service="http", http_title="Did not follow redirect to https://172.16.100.4:443/"),
+                ServiceEvidence(
+                    port=443, protocol="tcp", service="https", http_title="EdgeOS",
+                    tls_subject="commonName=UbiquitiRouterUI/organizationName=Ubiquiti Inc./stateOrProvinceName=New York/countryName=US",
+                    tls_issuer="commonName=UbiquitiRouterUI/organizationName=Ubiquiti Inc./stateOrProvinceName=New York/countryName=US",
+                ),
+            ],
+        )
+
+        classifier = DeviceClassifier()
+        result = classifier.classify(device)
+
+        self.assertEqual(result.device_type, DeviceType.ROUTER)
+        rule_results = classifier.get_last_rule_results()
+        self.assertEqual(len(rule_results), 5)  # EdgeRouterRule wins, position 5
+        self.assertTrue(rule_results[-1].matched)
+        self.assertEqual(
+            rule_results[-1].reason,
+            "Detected HTTP title 'EdgeOS' matched known EdgeOS router identifier.",
+        )
+
+    def test_ubiquiti_access_point_still_resolves_via_ap_rule_before_edge_router_rule(self):
+        """Guards against over-reach: a genuine UniFi access point (hostname
+        matching UbiquitiAccessPointRule's own "u6" convention, no EdgeOS
+        evidence) must still resolve via UbiquitiAccessPointRule (position
+        4), never reaching EdgeRouterRule."""
+        device = Device(
+            ip_address="172.16.100.51",
+            hostname="U6-LR-Lobby",
+            vendor="Ubiquiti",
+        )
+
+        classifier = DeviceClassifier()
+        result = classifier.classify(device)
+
+        self.assertEqual(result.device_type, DeviceType.ACCESS_POINT)
+        rule_results = classifier.get_last_rule_results()
+        self.assertEqual(len(rule_results), 4)  # UbiquitiAccessPointRule wins, position 4
+        self.assertTrue(rule_results[-1].matched)
+
+    def test_tp_link_switch_product_classifies_switch_via_full_pipeline(self):
+        """Reproduces 172.16.102.12/.65 exactly: a hostname-less TP-Link
+        device self-reporting an explicit switch product string. Must
+        resolve via SwitchVendorRule (position 8)."""
+        device = Device(
+            ip_address="172.16.102.12",
+            hostname=None,
+            vendor="TP-Link Technologies",
+            services=[
+                ServiceEvidence(port=80, protocol="tcp", service="http", product="TP-LINK switch http admin"),
+            ],
+        )
+
+        classifier = DeviceClassifier()
+        result = classifier.classify(device)
+
+        self.assertEqual(result.device_type, DeviceType.SWITCH)
+        rule_results = classifier.get_last_rule_results()
+        self.assertEqual(len(rule_results), 8)  # SwitchVendorRule wins, position 8
+        self.assertTrue(rule_results[-1].matched)
+
+    def test_tp_link_vendor_only_device_remains_unknown_via_full_pipeline(self):
+        """Reproduces 172.16.102.95/.143 exactly: a TP-Link-vendor device
+        with no product/title/TLS/auth-realm evidence at all. Must remain
+        UNKNOWN -- bare TP-Link vendor is never an independent trigger."""
+        device = Device(
+            ip_address="172.16.102.95",
+            hostname=None,
+            vendor="TP-Link Systems",
+        )
+
+        result = DeviceClassifier().classify(device)
+
+        self.assertEqual(result.device_type, DeviceType.UNKNOWN)
+
+    def test_unifi_os_cloud_key_device_remains_unknown_via_full_pipeline(self):
+        """Reproduces 172.16.100.89 exactly (Candidate C, rejected in
+        PLAN-RULE-008 Section 5): a UniFi OS / Cloud Key controller
+        appliance. No code in this sprint targets it; it must remain
+        UNKNOWN, exactly as before RULE-008."""
+        device = Device(
+            ip_address="172.16.100.89",
+            hostname=None,
+            vendor="Ubiquiti",
+            services=[
+                ServiceEvidence(port=22, protocol="tcp", service="ssh", product="OpenSSH 8.4p1 Debian 5+deb11u7"),
+                ServiceEvidence(port=80, protocol="tcp", service="http", product="nginx", http_title="Did not follow redirect to https://172.16.100.89/"),
+                ServiceEvidence(port=443, protocol="tcp", service="http", product="nginx", http_title="UniFi OS", tls_subject="commonName=unifi.local", tls_issuer="commonName=unifi.local"),
+                ServiceEvidence(port=8080, protocol="tcp", service="http", product="Apache Tomcat", http_title="HTTP Status 400 – Bad Request"),
+                ServiceEvidence(
+                    port=8443, protocol="tcp", service="http", product="Apache Tomcat",
+                    http_title="Site doesn't have a title.",
+                    tls_subject="commonName=CloudKey/organizationName=Ubiquiti Networks/stateOrProvinceName=CA/countryName=US",
+                    tls_issuer="commonName=CloudKey/organizationName=Ubiquiti Networks/stateOrProvinceName=CA/countryName=US",
+                ),
+            ],
+        )
+
+        result = DeviceClassifier().classify(device)
+
+        self.assertEqual(result.device_type, DeviceType.UNKNOWN)
 
 
 class EvidenceHelpersTest(unittest.TestCase):
