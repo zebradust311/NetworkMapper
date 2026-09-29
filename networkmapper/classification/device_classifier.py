@@ -7,6 +7,7 @@ from networkmapper.classification.rules.dell_workstation_rule import DellWorksta
 from networkmapper.classification.rules.edge_router_rule import EdgeRouterRule
 from networkmapper.classification.rules.hypervisor_hostname_rule import HypervisorHostnameRule
 from networkmapper.classification.rules.network_appliance_rule import NetworkApplianceRule
+from networkmapper.classification.rules.pfsense_firewall_rule import PfSenseFirewallRule
 from networkmapper.classification.rules.printer_vendor_rule import PrinterVendorRule
 from networkmapper.classification.rules.server_hostname_rule import ServerHostnameRule
 from networkmapper.classification.rules.sonicwall_firewall_rule import SonicWallFirewallRule
@@ -116,6 +117,32 @@ class DeviceClassifier:
         its identifier keyword set gained "tp-link switch", the same
         product-identifier tier "procurve"/"edgeswitch" already use, so
         no new ordering question is introduced by that change.
+
+        PfSenseFirewallRule (RULE-010) runs immediately after
+        SonicWallFirewallRule and immediately before VoiceVendorRule,
+        grouping the two identifier-tier FIREWALL-producing rules
+        adjacently — the same "grouped" precedent NetworkApplianceRule/
+        ServerHostnameRule (both SERVER) and UbiquitiAccessPointRule/
+        EdgeRouterRule already established. This grouping is deliberate,
+        not incidental: it is not claimed to be order-irrelevant merely
+        because both rules happen to produce the same final DeviceType.
+        Its sole identifier keyword ("pfsense") shares no overlap with any
+        other rule's vendor or identifier keywords, including
+        SonicWallFirewallRule's "sonicwall" and EdgeRouterRule's
+        "edgeos"/"ubiquitirouterui" — confirmed against current production
+        evidence, no overlap exists — and it has no bare-vendor or
+        hostname tier of its own, so it can never preempt any other rule's
+        match. This absence of overlap is a property of the evidence
+        observed so far, not a permanent guarantee: `classify()` is a
+        first-match pipeline, so which of two adjacent rules runs first
+        remains observable behavior even when their suggested_device_type
+        values coincide — the winning rule's identity and its `reason`
+        text differ by which rule matched, and `get_last_rule_results()`
+        exposes that difference directly. Should a future device ever
+        satisfy both rules' keyword sets, whichever rule is listed first
+        would win, and that outcome would need to be verified again
+        against evidence at that time, not assumed safe from this
+        docstring alone.
         """
         self._rules: list[ClassificationRule] = [
             ServerHostnameRule(),
@@ -124,6 +151,7 @@ class DeviceClassifier:
             UbiquitiAccessPointRule(),
             EdgeRouterRule(),
             SonicWallFirewallRule(),
+            PfSenseFirewallRule(),
             VoiceVendorRule(),
             SwitchVendorRule(),
             CameraVendorRule(),

@@ -489,7 +489,7 @@ class WindowsServerRuleIntegrationTest(unittest.TestCase):
     def test_domain_controller_hostname_wins_via_server_hostname_rule_not_windows_server_rule(self):
         """Reproduces SCT00DC1 (172.16.100.20) exactly: already correctly
         SERVER via ServerHostnameRule's "dc" hostname match. Must continue
-        to resolve there, never reaching WindowsServerRule (position 10),
+        to resolve there, never reaching WindowsServerRule (position 11),
         confirmed by rule identity, not just outcome."""
         device = Device(
             ip_address="172.16.100.20",
@@ -534,13 +534,13 @@ class WindowsWorkstationRuleIntegrationTest(unittest.TestCase):
 
         self.assertEqual(result.device_type, DeviceType.WORKSTATION)
         rule_results = classifier.get_last_rule_results()
-        self.assertEqual(len(rule_results), 13)  # every other rule declined first
+        self.assertEqual(len(rule_results), 14)  # every other rule declined first
         self.assertTrue(rule_results[-1].matched)  # WindowsWorkstationRule wins last
 
     def test_explicit_windows_server_caption_still_resolves_server_before_workstation_rule(self):
         """Requirement 11: an explicit Windows Server caption must still be
-        claimed by WindowsServerRule (position 10), never reaching
-        WindowsWorkstationRule (position 13)."""
+        claimed by WindowsServerRule (position 11), never reaching
+        WindowsWorkstationRule (position 14)."""
         device = Device(
             ip_address="172.16.100.19",
             hostname="SCT0008.wrf.scterm.com",
@@ -553,7 +553,7 @@ class WindowsWorkstationRuleIntegrationTest(unittest.TestCase):
 
         self.assertEqual(result.device_type, DeviceType.SERVER)
         rule_results = classifier.get_last_rule_results()
-        self.assertEqual(len(rule_results), 10)  # WindowsServerRule wins, position 10
+        self.assertEqual(len(rule_results), 11)  # WindowsServerRule wins, position 11
         self.assertTrue(rule_results[-1].matched)
 
     def test_hyperv_host_still_resolves_hypervisor_via_full_pipeline(self):
@@ -578,7 +578,7 @@ class WindowsWorkstationRuleIntegrationTest(unittest.TestCase):
     def test_dell_workstation_still_resolves_via_dell_rule_before_workstation_rule(self):
         """Requirement 13: reproduces SCT2053 (172.16.102.135) exactly --
         a Dell-vendor device whose operating_system ALSO carries an
-        explicit client-edition caption. DellWorkstationRule (position 12)
+        explicit client-edition caption. DellWorkstationRule (position 13)
         must win first; WindowsWorkstationRule is never reached. This is
         the one confirmed overlap named in PLAN-RULE-007 Section 10 --
         resolved by ordering alone, no code change to DellWorkstationRule."""
@@ -594,7 +594,7 @@ class WindowsWorkstationRuleIntegrationTest(unittest.TestCase):
 
         self.assertEqual(result.device_type, DeviceType.WORKSTATION)
         rule_results = classifier.get_last_rule_results()
-        self.assertEqual(len(rule_results), 12)  # DellWorkstationRule wins, position 12
+        self.assertEqual(len(rule_results), 13)  # DellWorkstationRule wins, position 13
         self.assertTrue(rule_results[-1].matched)
         self.assertEqual(rule_results[-1].reason, "Vendor 'Dell' matched known workstation vendor.")
 
@@ -632,7 +632,7 @@ class WindowsWorkstationRuleIntegrationTest(unittest.TestCase):
 
         self.assertEqual(result.device_type, DeviceType.WORKSTATION)
         rule_results = classifier.get_last_rule_results()
-        self.assertEqual(len(rule_results), 13)  # every other rule declined first
+        self.assertEqual(len(rule_results), 14)  # every other rule declined first
         self.assertTrue(rule_results[-1].matched)  # WindowsWorkstationRule wins last
 
 
@@ -696,7 +696,7 @@ class EdgeRouterAndTpLinkSwitchIntegrationTest(unittest.TestCase):
     def test_tp_link_switch_product_classifies_switch_via_full_pipeline(self):
         """Reproduces 172.16.102.12/.65 exactly: a hostname-less TP-Link
         device self-reporting an explicit switch product string. Must
-        resolve via SwitchVendorRule (position 8)."""
+        resolve via SwitchVendorRule (position 9)."""
         device = Device(
             ip_address="172.16.102.12",
             hostname=None,
@@ -711,7 +711,7 @@ class EdgeRouterAndTpLinkSwitchIntegrationTest(unittest.TestCase):
 
         self.assertEqual(result.device_type, DeviceType.SWITCH)
         rule_results = classifier.get_last_rule_results()
-        self.assertEqual(len(rule_results), 8)  # SwitchVendorRule wins, position 8
+        self.assertEqual(len(rule_results), 9)  # SwitchVendorRule wins, position 9
         self.assertTrue(rule_results[-1].matched)
 
     def test_tp_link_vendor_only_device_remains_unknown_via_full_pipeline(self):
@@ -754,6 +754,64 @@ class EdgeRouterAndTpLinkSwitchIntegrationTest(unittest.TestCase):
         result = DeviceClassifier().classify(device)
 
         self.assertEqual(result.device_type, DeviceType.UNKNOWN)
+
+
+class PfSenseFirewallRuleIntegrationTest(unittest.TestCase):
+    """RULE-010: full-pipeline regression test reproducing the one real
+    production device's exact evidence shape from PLAN-RULE-010."""
+
+    def test_pfsense_device_classifies_firewall_via_pfsense_firewall_rule(self):
+        """Reproduces 172.16.100.8 exactly: a hostname-less Silicom-vendor
+        device whose HTTP title and TLS certificate both self-identify as
+        Netgate pfSense. Must resolve via PfSenseFirewallRule (position 7),
+        never reaching EdgeRouterRule, SonicWallFirewallRule, or any later
+        rule."""
+        device = Device(
+            ip_address="172.16.100.8",
+            hostname=None,
+            vendor="Silicom",
+            services=[
+                ServiceEvidence(port=53, protocol="tcp", service="domain", product="Unbound"),
+                ServiceEvidence(port=80, protocol="tcp", service="http", product="nginx", http_title="Did not follow redirect to https://172.16.100.8/"),
+                ServiceEvidence(
+                    port=443, protocol="tcp", service="http", product="nginx",
+                    http_title="Netgate pfSense Plus - Login",
+                    tls_subject="commonName=pfSense-697b4472a5cba/organizationName=Netgate pfSense Plus GUI default Self-Signed Certificate",
+                    tls_issuer="commonName=pfSense-697b4472a5cba/organizationName=Netgate pfSense Plus GUI default Self-Signed Certificate",
+                ),
+            ],
+        )
+
+        classifier = DeviceClassifier()
+        result = classifier.classify(device)
+
+        self.assertEqual(result.device_type, DeviceType.FIREWALL)
+        rule_results = classifier.get_last_rule_results()
+        self.assertEqual(len(rule_results), 7)  # PfSenseFirewallRule wins, position 7
+        self.assertTrue(rule_results[-1].matched)
+        self.assertEqual(
+            rule_results[-1].reason,
+            "Detected HTTP title 'Netgate pfSense Plus - Login' matched known "
+            "pfSense firewall identifier.",
+        )
+
+    def test_sonicwall_device_still_resolves_via_sonicwall_rule_before_pfsense_rule(self):
+        """Guards against over-reach: a genuine SonicWall firewall must
+        still resolve via SonicWallFirewallRule (position 6), never
+        reaching PfSenseFirewallRule."""
+        device = Device(
+            ip_address="192.168.1.30",
+            hostname="fw-01",
+            vendor="SonicWall",
+        )
+
+        classifier = DeviceClassifier()
+        result = classifier.classify(device)
+
+        self.assertEqual(result.device_type, DeviceType.FIREWALL)
+        rule_results = classifier.get_last_rule_results()
+        self.assertEqual(len(rule_results), 6)  # SonicWallFirewallRule wins, position 6
+        self.assertTrue(rule_results[-1].matched)
 
 
 class EvidenceHelpersTest(unittest.TestCase):
