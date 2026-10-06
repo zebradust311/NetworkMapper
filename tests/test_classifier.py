@@ -814,6 +814,66 @@ class PfSenseFirewallRuleIntegrationTest(unittest.TestCase):
         self.assertTrue(rule_results[-1].matched)
 
 
+class CiscoMerakiSwitchHardeningIntegrationTest(unittest.TestCase):
+    """RULE-011: full-pipeline regression tests, each reproducing one real
+    production device's exact evidence shape from PLAN-RULE-011."""
+
+    def _assert_meraki_vendor_only_device_is_unknown(self, ip_address):
+        device = Device(
+            ip_address=ip_address,
+            hostname=None,
+            vendor="Cisco Meraki",
+        )
+
+        classifier = DeviceClassifier()
+        result = classifier.classify(device)
+
+        self.assertEqual(result.device_type, DeviceType.UNKNOWN)
+        rule_results = classifier.get_last_rule_results()
+        self.assertEqual(len(rule_results), 14)  # every rule evaluated
+        self.assertFalse(any(rule_result.matched for rule_result in rule_results))
+
+    def test_cisco_meraki_172_16_100_70_classifies_unknown_via_full_pipeline(self):
+        """Reproduces 172.16.100.70 exactly: vendor "Cisco Meraki" with no
+        other evidence. Previously SWITCH via SwitchVendorRule's bare vendor
+        tier; must now fall through all 14 rules to UNKNOWN."""
+        self._assert_meraki_vendor_only_device_is_unknown("172.16.100.70")
+
+    def test_cisco_meraki_172_16_102_80_classifies_unknown_via_full_pipeline(self):
+        """Reproduces 172.16.102.80 exactly, identical shape to .70."""
+        self._assert_meraki_vendor_only_device_is_unknown("172.16.102.80")
+
+    def test_genuine_cisco_switch_still_classifies_switch_via_switch_vendor_rule(self):
+        """Reproduces 172.16.100.40 exactly: a hostname-less "Cisco
+        Systems" device with a Cisco-branded TLS certificate. Must remain
+        SWITCH via SwitchVendorRule's bare vendor tier (position 9)."""
+        device = Device(
+            ip_address="172.16.100.40",
+            hostname=None,
+            vendor="Cisco Systems",
+            services=[
+                ServiceEvidence(
+                    port=443, protocol="tcp", service="https",
+                    http_title="Login Page",
+                    tls_subject="organizationName=Cisco Systems, Inc.",
+                    tls_issuer="organizationName=Cisco Systems, Inc.",
+                ),
+            ],
+        )
+
+        classifier = DeviceClassifier()
+        result = classifier.classify(device)
+
+        self.assertEqual(result.device_type, DeviceType.SWITCH)
+        rule_results = classifier.get_last_rule_results()
+        self.assertEqual(len(rule_results), 9)  # SwitchVendorRule wins, position 9
+        self.assertTrue(rule_results[-1].matched)
+        self.assertEqual(
+            rule_results[-1].reason,
+            "Vendor 'Cisco Systems' matched known switch vendor.",
+        )
+
+
 class EvidenceHelpersTest(unittest.TestCase):
     def test_normalize_vendor_strip_defaults_to_true(self):
         self.assertEqual(normalize_vendor("  Cisco  "), "cisco")

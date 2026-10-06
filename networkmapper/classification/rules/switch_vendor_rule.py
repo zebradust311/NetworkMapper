@@ -80,7 +80,14 @@ class SwitchVendorRule(ClassificationRule):
         raw_vendor = device.vendor
         raw_hostname = device.hostname
         vendor = normalize_vendor(raw_vendor, strip=False)
-        if "cisco" in vendor:
+        # RULE-011: "Cisco Meraki" is Cisco's cloud-managed brand spanning
+        # switches, access points, and MX security appliances, so the bare
+        # vendor string alone cannot assert SWITCH. The exclusion is scoped to
+        # this bare-vendor tier only and must never become an early return:
+        # a Meraki device that declines here still falls through to the
+        # identifier and hostname tiers below, exactly as any other
+        # non-matching vendor does.
+        if "cisco" in vendor and "meraki" not in vendor:
             return RuleResult(
                 matched=True,
                 confidence_contribution=0,

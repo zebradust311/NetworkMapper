@@ -326,6 +326,139 @@ class SwitchVendorRuleTest(unittest.TestCase):
         self.assertFalse(result.matched)
         self.assertIsNone(result.suggested_device_type)
 
+    def test_cisco_meraki_vendor_alone_does_not_match(self):
+        """RULE-011: the exact real production evidence shape for
+        172.16.100.70/172.16.102.80 -- vendor "Cisco Meraki" with no other
+        evidence of any kind. Meraki spans switches, access points, and MX
+        security appliances, so bare vendor identity cannot assert SWITCH."""
+        device = Device(
+            ip_address="172.16.100.70",
+            hostname=None,
+            vendor="Cisco Meraki",
+        )
+
+        result = SwitchVendorRule().classify(device)
+
+        self.assertIsInstance(result, RuleResult)
+        self.assertFalse(result.matched)
+        self.assertIsNone(result.suggested_device_type)
+        self.assertEqual(result.reason, "Vendor 'Cisco Meraki' is not a known switch vendor.")
+
+    def test_cisco_meraki_exclusion_is_case_insensitive(self):
+        for vendor in ("cisco meraki", "CISCO MERAKI", "Cisco MERAKI"):
+            with self.subTest(vendor=vendor):
+                device = Device(
+                    ip_address="172.16.102.80",
+                    hostname=None,
+                    vendor=vendor,
+                )
+
+                result = SwitchVendorRule().classify(device)
+
+                self.assertFalse(result.matched)
+                self.assertIsNone(result.suggested_device_type)
+
+    def test_genuine_cisco_systems_device_still_matches_bare_vendor_tier(self):
+        """RULE-011 regression guard: reproduces 172.16.100.1's real
+        evidence shape. A non-Meraki Cisco vendor string must still match
+        through the bare vendor tier, unchanged."""
+        device = Device(
+            ip_address="172.16.100.1",
+            hostname=None,
+            vendor="Cisco Systems",
+            services=[
+                ServiceEvidence(port=22, protocol="tcp", service="ssh", product="Cisco SSH"),
+                ServiceEvidence(
+                    port=80, protocol="tcp", service="http",
+                    product="Cisco IOS http config",
+                    http_title="Site doesn't have a title.",
+                    http_auth_realm="level_15_access",
+                ),
+                ServiceEvidence(
+                    port=443, protocol="tcp", service="https",
+                    tls_subject="commonName=IOS-Self-Signed-Certificate-1970477952",
+                    tls_issuer="commonName=IOS-Self-Signed-Certificate-1970477952",
+                ),
+            ],
+        )
+
+        result = SwitchVendorRule().classify(device)
+
+        self.assertTrue(result.matched)
+        self.assertEqual(result.suggested_device_type, DeviceType.SWITCH)
+        self.assertEqual(result.reason, "Vendor 'Cisco Systems' matched known switch vendor.")
+
+    def test_cisco_meraki_with_existing_identifier_still_matches_identifier_tier(self):
+        """RULE-011 exclusion-scope regression guard (PLAN-RULE-011 Section
+        6, Section 12 criterion 7). The Meraki exclusion applies only inside
+        the bare Cisco vendor branch; it must never short-circuit later,
+        higher-confidence tiers. A "Cisco Meraki" device carrying an
+        already-supported identifier keyword must still match SWITCH via the
+        identifier tier. If the exclusion were ever turned into an early
+        return or a matched=False short-circuit, this test would fail."""
+        device = Device(
+            ip_address="192.168.1.60",
+            hostname=None,
+            vendor="Cisco Meraki",
+            services=[
+                ServiceEvidence(port=80, protocol="tcp", product="EdgeSwitch"),
+            ],
+        )
+
+        result = SwitchVendorRule().classify(device)
+
+        self.assertTrue(result.matched)
+        self.assertEqual(result.suggested_device_type, DeviceType.SWITCH)
+        self.assertEqual(
+            result.reason,
+            "Detected service product 'EdgeSwitch' matched known switch identifier.",
+        )
+        self.assertNotIn("known switch vendor", result.reason)
+
+    def test_cisco_meraki_with_switch_hostname_and_management_signal_still_matches(self):
+        """RULE-011 exclusion-scope guard: the hostname + management-signal
+        tier also remains reachable for a "Cisco Meraki" vendor string."""
+        device = Device(
+            ip_address="192.168.1.61",
+            hostname="core-sw-01",
+            vendor="Cisco Meraki",
+            services=[ServiceEvidence(port=22, protocol="tcp", service="ssh")],
+        )
+
+        result = SwitchVendorRule().classify(device)
+
+        self.assertTrue(result.matched)
+        self.assertEqual(result.suggested_device_type, DeviceType.SWITCH)
+        self.assertEqual(
+            result.reason,
+            "Hostname 'core-sw-01' with open port 22 and service 'ssh' matched "
+            "known switch management evidence.",
+        )
+
+    def test_cisco_meraki_with_unsupported_cisco_product_documents_future_intent(self):
+        """RULE-011 documented hypothetical (PLAN-RULE-011 Section 11). A
+        "Cisco Meraki" device with a Cisco product-line identifier such as
+        "Cisco Catalyst Switch" must remain reachable by a future,
+        evidence-backed identifier-tier Cisco keyword. No "catalyst" (or any
+        other Cisco/Meraki) keyword exists in this sprint, so today this
+        device does not match -- because that identifier keyword is missing,
+        not because of the Meraki exclusion, which declines only inside the
+        bare vendor branch. If a later sprint adds such a keyword, this
+        expectation should flip to SWITCH via the identifier tier."""
+        device = Device(
+            ip_address="192.168.1.62",
+            hostname=None,
+            vendor="Cisco Meraki",
+            services=[
+                ServiceEvidence(port=443, protocol="tcp", product="Cisco Catalyst Switch"),
+            ],
+        )
+
+        result = SwitchVendorRule().classify(device)
+
+        self.assertFalse(result.matched)
+        self.assertIsNone(result.suggested_device_type)
+
 
 if __name__ == "__main__":
     unittest.main()
