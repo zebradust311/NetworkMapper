@@ -1291,6 +1291,8 @@ Each of the above requires its own approved sprint and, per
 
 **Status:** Accepted
 
+**Amended by:** Amendment 1 — Relationship Cardinality (2026-10-07), appended at the end of this ADR. The original text below is unchanged.
+
 ### Context
 
 ADR-011 established a bounded retained observation model serving
@@ -1603,3 +1605,90 @@ ADR:
 Each of the above requires its own approved sprint and, per
 [ENGINEERING.md](../ENGINEERING.md), its own updates to `ROADMAP.md`,
 `docs/architecture/`, and `docs/ADR.md`.
+
+### Amendment 1 — Relationship Cardinality
+
+**Status:** Accepted
+
+**Date:** 2026-10-07
+
+**Source:** ARCH-027 (Relationship Cardinality and Corroboration Semantics) and ARCH-026 (Gateway Relationship Evidence Readiness).
+
+**Nature:** This amendment adds to ADR-013. It replaces nothing. Everything above it stays in force exactly as written: Context, Decision, every Relationship Principle, Endpoints, Categories, Evidence, Corroboration, Lifecycle, State, Provenance, Explainability, Independence, Future Topology, Alternatives, Rationale, Consequences and Future Work. Where this amendment settles something ADR-013 deferred, the original deferral is left in place as the historical record and this section says what it settles.
+
+#### Context
+
+ADR-013 requires that conflicting relationship observations be "retained and surfaced, never silently arbitrated", but it does not say what makes two observations conflict. It defers "relationship resolver algorithms" and "relationship identifiers and how they are assigned" to future work.
+
+The first resolver (ARCH-018, FEAT-009A) filled that gap by analogy with identity resolution. It groups relationship observations by `(subject, category)`, treats `related_subject` as the value being corroborated, and marks a group `CONFLICTING` whenever it holds more than one distinct `related_subject`. That rule is correct only for categories where a subject can have **at most one** related subject. ARCH-018's own motivating conflict ("LLDP says port 3 connects to switch B; CDP says the same port connects to switch C") was such a claim, but only at the granularity of a local port. With no Interface model, the port was dropped from the key and the claim became per device.
+
+ARCH-027 found that every category produced today is naturally **one-to-many** when reported from the infrastructure side:
+
+- `arp_neighbor` (ARCH-020): a router or firewall's ARP table lists many hosts.
+- `bridge_fdb` (ARCH-024): a switch's forwarding table lists many hosts.
+- `connected_to` (ARCH-023): a switch has many LLDP neighbors.
+
+Under the current resolver, the normal operation of every gateway and switch therefore surfaces as `CONFLICTING`. This was confirmed against the real resolver. The label is wrong, not merely untidy: it reports disagreement where there is only ordinary fan-out.
+
+#### Decision
+
+**1. Relationship categories have resolver-owned cardinality semantics.**
+
+Every relationship category has a **cardinality**, which describes how many related subjects one subject may legitimately have in that category:
+
+- **Single-valued:** at most one related subject per subject. Example: a host's default gateway, if and when such a category exists.
+- **Multi-valued:** any number of related subjects per subject is normal. Examples: `arp_neighbor`, `bridge_fdb`, `connected_to` at device granularity.
+
+Cardinality is part of the **interpretation** of a category. It is declared by the relationship-resolution layer, in a deterministic policy keyed by category name. It is not declared by providers and is not carried on observations. A category the policy does not list is treated as **multi-valued**, so an unregistered category can never manufacture a conflict.
+
+This is a narrow, deliberate exception to ADR-013 §Relationship Categories, which "does not freeze an implementation taxonomy". The policy attaches exactly one property (cardinality) to categories that already exist. It does not create, rename, restrict or enumerate categories, and `RelationshipObservation.category` stays free text.
+
+**2. Conflict is defined relative to cardinality.**
+
+- **Single-valued categories:** if the observations for one subject and category name more than one distinct related subject, that is a conflict. It is retained and surfaced, never arbitrated, exactly as ADR-013 §Corroboration requires.
+- **Multi-valued categories:** several related subjects are **not** a conflict. Each related subject is corroborated on its own. Because retained observations record positive claims only (ADR-011), nothing currently expressible contradicts an edge in a multi-valued category. Stale or vanished edges are a lifecycle concern (ADR-013 §Relationship Lifecycle), not a conflict.
+
+Corroboration still requires independent evidence (ADR-013 §Relationship Independence). Each edge is supported by its own independent sources, and repeated observations from the same source never count as several confirmations.
+
+**3. The evaluation key is distinct from the canonical output identity.**
+
+- **Evaluation key:** `(subject, category)`. Observations are evaluated together under this key, which is what lets a conflict in a single-valued category be detected. This preserves the reason ARCH-018 rejected grouping by the full triple.
+- **Canonical output identity:** `(subject, category, related_subject)`. One canonical relationship is one **edge** between two canonical identities, carrying its own corroboration state and the retained observations that support that edge.
+
+This settles, for relationship *identity*, the deferred ADR-013 Future Work item "Relationship identifiers and how they are assigned". It does not settle how identifiers are persisted or kept stable across runs; that remains deferred with persistence.
+
+#### Preserved Without Change
+
+- **Providers emit observations only.** Providers never create canonical relationships, never declare cardinality and never report a relationship state. Provider output stays immutable retained evidence (ADR-011). Cardinality changes how observations are *interpreted*, never what is collected.
+- **Determinism and order-independence.** The cardinality policy is fixed and keyed by category. The same retained observation set produces the same canonical relationships in any input order. Cardinality is never inferred from the evidence itself (for example, "this source reported many values, so the category must be multi-valued"), because that would make an interpretation depend on which evidence happened to arrive.
+- **Provenance retention.** Every canonical relationship keeps the retained observations that support it, and conflicting observations are never discarded. Explainability (ADR-013 §Relationship Explainability) holds for every edge. For a single-valued conflict, the explanation is the set of edges sharing the subject and category.
+- **Endpoints.** Canonical relationships still exist only between canonical identities (ADR-013 §Relationship Endpoints). Observations whose endpoints have not been resolved are still retained, and still do not become canonical relationships.
+- **Topology remains a consumer only** (ADR-013 §Relationship with Future Topology).
+
+#### Explicit Limits
+
+- **Gateway relationships are not enabled by this amendment.** It defines how a single-valued category *would* be corroborated. It does not introduce a gateway category, a gateway provider or any gateway inference, and it authorizes none of them.
+- **ARP alone does not identify a host's default gateway.** An `arp_neighbor` edge from device G to host H proves only that G resolved H on one of G's interfaces. Every layer-3 device on a shared segment can legitimately hold such an entry for the same host. Deterministic gateway evidence is host-side (the host's own default route, or the gateway its DHCP lease assigned), and NetworkMapper does not collect it (ARCH-026). Inverting, ranking or filtering `arp_neighbor` edges to nominate a gateway is not authorized.
+- **Current production data cannot infer gateway relationships.** The 244-device production dataset analysed in ARCH-026 contains no SNMP or other relationship evidence and yields zero canonical relationships. Nothing in this amendment changes that, and no classification result, IP-address convention or service heuristic may stand in for relationship evidence.
+- **Topology providers must wait.** No new relationship-evidence provider and no topology consumer may be built until the resolver implements the cardinality semantics above. Until then, any multi-valued category would surface as false conflicts. Existing providers are not removed or changed by this amendment.
+- **Not decided here:** symmetric-category canonicalization, per-port or interface-level relationships, cross-category corroboration, negative evidence, cross-run corroboration, persistence, and refinements to the independence taxonomy. All remain deferred as ADR-013 and ARCH-018 already recorded.
+
+#### Authorization
+
+This amendment authorizes one future implementation sprint, **resolver cardinality support**, limited to:
+
+- a resolver-owned cardinality policy keyed by category, defaulting unregistered categories to multi-valued, together with a test that every category a provider emits is registered;
+- evaluation by `(subject, category)` and canonical output of one relationship per `(subject, category, related_subject)` edge, each carrying its cardinality, state and supporting observations;
+- `CONFLICTING` produced only for single-valued categories;
+- matching updates to the canonical relationship presentation and its Markdown and CSV renderers, which must continue to read states and never recompute them;
+- end-to-end tests that send multi-entry ARP, forwarding-table and LLDP evidence through the resolver and assert that no false conflicts appear.
+
+It does not authorize provider changes beyond optionally relocating the existing category-name constants, new categories, gateway inference, topology rendering or persistence.
+
+#### Consequences
+
+- `arp_neighbor`, `bridge_fdb` and `connected_to` evidence becomes interpretable without false conflicts once the authorized sprint lands.
+- The meaning of `CONFLICTING` narrows to genuine disagreement about a single-valued claim. Consumers reading today's output will see multi-valued relationships change from `CONFLICTING` to `WEAK` or `CONFIRMED` per edge.
+- Conflict detection for per-port adjacency (ARCH-018's port-3 example) stays unavailable until an Interface model exists. It was never correctly detectable at device granularity.
+- A future category must declare its cardinality when it is introduced; one table entry is the entire change.
+- Single-valued categories keep the corroboration behavior the resolver applies today.
