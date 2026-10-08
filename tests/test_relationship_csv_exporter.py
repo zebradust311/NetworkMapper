@@ -12,6 +12,7 @@ from networkmapper.identity.models import CanonicalIdentity, IdentityCorroborati
 from networkmapper.observations.models import RelationshipObservation
 from networkmapper.observations.provenance import ObservationProvenance
 from networkmapper.project.models import Project
+from networkmapper.relationships.categories import RelationshipCardinality
 from networkmapper.relationships.models import CanonicalRelationship, RelationshipCorroborationState
 from networkmapper.relationships.resolver import RelationshipResolver
 
@@ -79,6 +80,8 @@ class RelationshipCsvExporterTest(unittest.TestCase):
         relationship = CanonicalRelationship(
             subject="192.168.1.10",
             category="connected_to",
+            related_subject="192.168.1.20",
+            cardinality=RelationshipCardinality.MULTIPLE,
             state=RelationshipCorroborationState.WEAK,
             observations=(_relationship_observation("192.168.1.10", "192.168.1.20", "connected_to"),),
         )
@@ -96,6 +99,8 @@ class RelationshipCsvExporterTest(unittest.TestCase):
         relationship = CanonicalRelationship(
             subject="192.168.1.10",
             category="connected_to",
+            related_subject="192.168.1.20",
+            cardinality=RelationshipCardinality.MULTIPLE,
             state=RelationshipCorroborationState.CONFIRMED,
             observations=(
                 _relationship_observation(
@@ -112,36 +117,86 @@ class RelationshipCsvExporterTest(unittest.TestCase):
 
         self.assertEqual(rows[1][5], "confirmed")
 
-    def test_conflicting_relationship_expands_to_one_row_per_distinct_related_subject(self):
-        relationship = CanonicalRelationship(
-            subject="192.168.1.10",
-            category="connected_to",
-            state=RelationshipCorroborationState.CONFLICTING,
-            observations=(
-                _relationship_observation(
-                    "192.168.1.10", "192.168.1.20", "connected_to", provider="lldp"
+    def test_single_valued_conflict_exports_one_conflicting_row_per_competing_edge(self):
+        # PLAN-028 Section 2.1: a SINGLE-category conflict arrives as one
+        # CONFLICTING edge per competing related subject; each edge is one
+        # row, and the competing rows share Subject and Category.
+        relationships = tuple(
+            CanonicalRelationship(
+                subject="192.168.1.10",
+                category="default_route_test",
+                related_subject=related_subject,
+                cardinality=RelationshipCardinality.SINGLE,
+                state=RelationshipCorroborationState.CONFLICTING,
+                observations=(
+                    _relationship_observation(
+                        "192.168.1.10", related_subject, "default_route_test", provider=provider
+                    ),
                 ),
-                _relationship_observation(
-                    "192.168.1.10", "192.168.1.30", "connected_to", provider="snmp"
-                ),
-            ),
+            )
+            for related_subject, provider in (("192.168.1.20", "lldp"), ("192.168.1.30", "snmp"))
         )
-        project = Project(customer_name="Acme", canonical_relationships=(relationship,))
+        project = Project(customer_name="Acme", canonical_relationships=relationships)
 
         rows = self._export_rows(project)
 
         self.assertEqual(len(rows), 3)
-        related_subjects = {row[3] for row in rows[1:]}
-        self.assertEqual(related_subjects, {"192.168.1.20", "192.168.1.30"})
+        self.assertEqual([row[3] for row in rows[1:]], ["192.168.1.20", "192.168.1.30"])
         for row in rows[1:]:
             self.assertEqual(row[0], "192.168.1.10")
-            self.assertEqual(row[2], "connected_to")
+            self.assertEqual(row[2], "default_route_test")
             self.assertEqual(row[5], "conflicting")
+        self.assertEqual([row[6] for row in rows[1:]], ["lldp/lldp-neighbor", "snmp/lldp-neighbor"])
+
+    def test_multi_valued_fan_out_rows_carry_each_edge_state(self):
+        # PLAN-028 D5: the Corroboration State column is per edge — a
+        # multi-valued subject with several related subjects is never
+        # "conflicting", and edges can differ from one another.
+        weak_edge = CanonicalRelationship(
+            subject="192.168.1.1",
+            category="arp_neighbor",
+            related_subject="192.168.1.20",
+            cardinality=RelationshipCardinality.MULTIPLE,
+            state=RelationshipCorroborationState.WEAK,
+            observations=(
+                _relationship_observation(
+                    "192.168.1.1", "192.168.1.20", "arp_neighbor",
+                    provider="snmp", collection_method="ipNetToPhysicalTable",
+                ),
+            ),
+        )
+        confirmed_edge = CanonicalRelationship(
+            subject="192.168.1.1",
+            category="arp_neighbor",
+            related_subject="192.168.1.30",
+            cardinality=RelationshipCardinality.MULTIPLE,
+            state=RelationshipCorroborationState.CONFIRMED,
+            observations=(
+                _relationship_observation(
+                    "192.168.1.1", "192.168.1.30", "arp_neighbor", provider="nmap", collection_method="arp-scan"
+                ),
+                _relationship_observation(
+                    "192.168.1.1", "192.168.1.30", "arp_neighbor",
+                    provider="snmp", collection_method="ipNetToPhysicalTable",
+                ),
+            ),
+        )
+        project = Project(customer_name="Acme", canonical_relationships=(weak_edge, confirmed_edge))
+
+        rows = self._export_rows(project)
+
+        self.assertEqual(
+            [(row[3], row[5]) for row in rows[1:]],
+            [("192.168.1.20", "weak"), ("192.168.1.30", "confirmed")],
+        )
+        self.assertEqual(rows[2][6], "nmap/arp-scan,snmp/ipNetToPhysicalTable")
 
     def test_multiple_observations_for_one_related_subject_do_not_create_duplicate_rows(self):
         relationship = CanonicalRelationship(
             subject="192.168.1.10",
             category="connected_to",
+            related_subject="192.168.1.20",
+            cardinality=RelationshipCardinality.MULTIPLE,
             state=RelationshipCorroborationState.CONFIRMED,
             observations=(
                 _relationship_observation(
@@ -163,6 +218,8 @@ class RelationshipCsvExporterTest(unittest.TestCase):
         relationship = CanonicalRelationship(
             subject="192.168.1.10",
             category="connected_to",
+            related_subject="192.168.1.20",
+            cardinality=RelationshipCardinality.MULTIPLE,
             state=RelationshipCorroborationState.CONFIRMED,
             observations=(
                 _relationship_observation(
@@ -183,6 +240,8 @@ class RelationshipCsvExporterTest(unittest.TestCase):
         relationship = CanonicalRelationship(
             subject="192.168.1.10",
             category="connected_to",
+            related_subject="192.168.1.20",
+            cardinality=RelationshipCardinality.MULTIPLE,
             state=RelationshipCorroborationState.WEAK,
             observations=(_relationship_observation("192.168.1.10", "192.168.1.20", "connected_to"),),
         )
@@ -197,6 +256,8 @@ class RelationshipCsvExporterTest(unittest.TestCase):
         relationship = CanonicalRelationship(
             subject="192.168.1.10",
             category="connected_to",
+            related_subject="192.168.1.20",
+            cardinality=RelationshipCardinality.MULTIPLE,
             state=RelationshipCorroborationState.WEAK,
             observations=(_relationship_observation("192.168.1.10", "192.168.1.20", "connected_to"),),
         )
@@ -211,6 +272,8 @@ class RelationshipCsvExporterTest(unittest.TestCase):
         relationship = CanonicalRelationship(
             subject="192.168.1.10",
             category="connected_to",
+            related_subject="192.168.1.20",
+            cardinality=RelationshipCardinality.MULTIPLE,
             state=RelationshipCorroborationState.WEAK,
             observations=(_relationship_observation("192.168.1.10", "192.168.1.20", "connected_to"),),
         )
@@ -225,6 +288,8 @@ class RelationshipCsvExporterTest(unittest.TestCase):
         relationship = CanonicalRelationship(
             subject="192.168.1.10",
             category="future_category",
+            related_subject="192.168.1.20",
+            cardinality=RelationshipCardinality.MULTIPLE,
             state=RelationshipCorroborationState.WEAK,
             observations=(
                 _relationship_observation("192.168.1.10", "192.168.1.20", "future_category"),
@@ -240,12 +305,16 @@ class RelationshipCsvExporterTest(unittest.TestCase):
         forward = CanonicalRelationship(
             subject="192.168.1.10",
             category="connected_to",
+            related_subject="192.168.1.20",
+            cardinality=RelationshipCardinality.MULTIPLE,
             state=RelationshipCorroborationState.WEAK,
             observations=(_relationship_observation("192.168.1.10", "192.168.1.20", "connected_to"),),
         )
         reverse = CanonicalRelationship(
             subject="192.168.1.20",
             category="connected_to",
+            related_subject="192.168.1.10",
+            cardinality=RelationshipCardinality.MULTIPLE,
             state=RelationshipCorroborationState.WEAK,
             observations=(_relationship_observation("192.168.1.20", "192.168.1.10", "connected_to"),),
         )

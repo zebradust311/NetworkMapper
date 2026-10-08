@@ -5,10 +5,11 @@ from pathlib import Path
 
 from networkmapper.core.models import Device, DeviceType, ServiceEvidence
 from networkmapper.identity.models import CanonicalIdentity, IdentityCorroborationState
-from networkmapper.observations.models import IdentityObservation
+from networkmapper.observations.models import IdentityObservation, RelationshipObservation
 from networkmapper.observations.provenance import ObservationProvenance
 from networkmapper.project.models import Project
 from networkmapper.project.serializer import ProjectSerializer
+from networkmapper.relationships.categories import RelationshipCardinality
 from networkmapper.relationships.models import CanonicalRelationship, RelationshipCorroborationState
 
 
@@ -220,8 +221,22 @@ class ProjectSerializerTest(unittest.TestCase):
                 CanonicalRelationship(
                     subject="10.0.0.20",
                     category="connected_to",
+                    related_subject="10.0.0.21",
+                    cardinality=RelationshipCardinality.MULTIPLE,
                     state=RelationshipCorroborationState.WEAK,
-                    observations=(),
+                    observations=(
+                        RelationshipObservation(
+                            subject="10.0.0.20",
+                            related_subject="10.0.0.21",
+                            category="connected_to",
+                            provenance=ObservationProvenance(
+                                provider="snmp",
+                                collection_method="lldpRemManAddr",
+                                observed_at=datetime(2026, 1, 1, 12, 0, 0),
+                                source_run="run-001",
+                            ),
+                        ),
+                    ),
                 ),
             ),
         )

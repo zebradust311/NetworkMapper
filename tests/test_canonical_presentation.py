@@ -12,6 +12,7 @@ from networkmapper.identity.resolver import IdentityResolver
 from networkmapper.observations.models import IdentityObservation, RelationshipObservation
 from networkmapper.observations.provenance import ObservationProvenance
 from networkmapper.project.models import Project
+from networkmapper.relationships.categories import RelationshipCardinality
 from networkmapper.relationships.models import CanonicalRelationship, RelationshipCorroborationState
 from networkmapper.relationships.resolver import RelationshipResolver
 from networkmapper.reporting.canonical_presentation import CanonicalPresentation
@@ -160,6 +161,8 @@ class CanonicalPresentationRelationshipTest(unittest.TestCase):
         relationship = CanonicalRelationship(
             subject="10.0.0.1",
             category="arp_neighbor",
+            related_subject="10.0.0.2",
+            cardinality=RelationshipCardinality.MULTIPLE,
             state=RelationshipCorroborationState.WEAK,
             observations=(_relationship_observation("10.0.0.1", "10.0.0.2", "arp_neighbor"),),
         )
@@ -182,6 +185,8 @@ class CanonicalPresentationRelationshipTest(unittest.TestCase):
         relationship = CanonicalRelationship(
             subject="10.0.0.1",
             category="connected_to",
+            related_subject="10.0.0.2",
+            cardinality=RelationshipCardinality.MULTIPLE,
             state=RelationshipCorroborationState.WEAK,
             observations=(_relationship_observation("10.0.0.1", "10.0.0.2", "connected_to"),),
         )
@@ -195,32 +200,134 @@ class CanonicalPresentationRelationshipTest(unittest.TestCase):
         self.assertIs(rendered.device, subject_device)
         self.assertIs(rendered.related[0].device, related_device)
 
-    def test_conflicting_relationship_preserves_every_distinct_related_subject(self):
-        observations = (
-            _relationship_observation(
-                "10.0.0.1", "10.0.0.2", "arp_neighbor", provider="nmap", collection_method="arp-scan"
-            ),
-            _relationship_observation(
-                "10.0.0.1", "10.0.0.9", "arp_neighbor", provider="snmp", collection_method="ipNetToMediaTable"
-            ),
+    def test_single_valued_conflict_preserves_every_competing_related_subject(self):
+        # PLAN-028 Section 2.1: a SINGLE-category conflict arrives as one
+        # CONFLICTING edge per competing related subject; presentation
+        # regroups them under one (subject, category) entry and never
+        # collapses them to one value.
+        edges = tuple(
+            CanonicalRelationship(
+                subject="10.0.0.1",
+                category="default_route_test",
+                related_subject=related_subject,
+                cardinality=RelationshipCardinality.SINGLE,
+                state=RelationshipCorroborationState.CONFLICTING,
+                observations=(
+                    _relationship_observation(
+                        "10.0.0.1", related_subject, "default_route_test",
+                        provider=provider, collection_method=method,
+                    ),
+                ),
+            )
+            for related_subject, provider, method in (
+                ("10.0.0.2", "wmi", "route-table"),
+                ("10.0.0.9", "wmi", "dhcp-lease"),
+            )
         )
-        relationship = CanonicalRelationship(
-            subject="10.0.0.1",
-            category="arp_neighbor",
-            state=RelationshipCorroborationState.CONFLICTING,
-            observations=observations,
-        )
-        project = Project(customer_name="Acme", canonical_relationships=(relationship,))
+        project = Project(customer_name="Acme", canonical_relationships=edges)
 
         presentation = CanonicalPresentation.from_project(project)
 
-        related_subjects = {related.related_subject for related in presentation.relationships[0].related}
-        self.assertEqual(related_subjects, {"10.0.0.2", "10.0.0.9"})
+        self.assertEqual(len(presentation.relationships), 1)
+        rendered = presentation.relationships[0]
+        self.assertEqual(rendered.cardinality, RelationshipCardinality.SINGLE)
+        self.assertEqual([related.related_subject for related in rendered.related], ["10.0.0.2", "10.0.0.9"])
+        self.assertTrue(
+            all(related.state == RelationshipCorroborationState.CONFLICTING for related in rendered.related)
+        )
+
+    def test_multi_valued_edges_group_under_one_entry_with_their_own_states(self):
+        # PLAN-028 D4: edges sharing (subject, category) are grouped for
+        # display; each related subject keeps its own edge's state, copied
+        # rather than recomputed.
+        weak_edge = CanonicalRelationship(
+            subject="10.0.0.1",
+            category="arp_neighbor",
+            related_subject="10.0.0.2",
+            cardinality=RelationshipCardinality.MULTIPLE,
+            state=RelationshipCorroborationState.WEAK,
+            observations=(_relationship_observation("10.0.0.1", "10.0.0.2", "arp_neighbor"),),
+        )
+        confirmed_edge = CanonicalRelationship(
+            subject="10.0.0.1",
+            category="arp_neighbor",
+            related_subject="10.0.0.9",
+            cardinality=RelationshipCardinality.MULTIPLE,
+            state=RelationshipCorroborationState.CONFIRMED,
+            observations=(
+                _relationship_observation("10.0.0.1", "10.0.0.9", "arp_neighbor", provider="nmap"),
+                _relationship_observation(
+                    "10.0.0.1", "10.0.0.9", "arp_neighbor", provider="snmp", collection_method="ipNetToPhysicalTable"
+                ),
+            ),
+        )
+        project = Project(customer_name="Acme", canonical_relationships=(weak_edge, confirmed_edge))
+
+        presentation = CanonicalPresentation.from_project(project)
+
+        self.assertEqual(len(presentation.relationships), 1)
+        rendered = presentation.relationships[0]
+        self.assertEqual(rendered.cardinality, RelationshipCardinality.MULTIPLE)
+        self.assertEqual(
+            [(related.related_subject, related.state) for related in rendered.related],
+            [
+                ("10.0.0.2", RelationshipCorroborationState.WEAK),
+                ("10.0.0.9", RelationshipCorroborationState.CONFIRMED),
+            ],
+        )
+        self.assertEqual(rendered.related[1].observations, confirmed_edge.observations)
+
+    def test_mixed_cardinality_for_one_subject_and_category_is_rejected(self):
+        # Cardinality belongs to the category, so edges sharing
+        # (subject, category) must agree. Inconsistent input is rejected
+        # rather than presented with one edge's cardinality picked silently.
+        single_edge = CanonicalRelationship(
+            subject="10.0.0.1",
+            category="arp_neighbor",
+            related_subject="10.0.0.2",
+            cardinality=RelationshipCardinality.SINGLE,
+            state=RelationshipCorroborationState.WEAK,
+            observations=(_relationship_observation("10.0.0.1", "10.0.0.2", "arp_neighbor"),),
+        )
+        multiple_edge = CanonicalRelationship(
+            subject="10.0.0.1",
+            category="arp_neighbor",
+            related_subject="10.0.0.9",
+            cardinality=RelationshipCardinality.MULTIPLE,
+            state=RelationshipCorroborationState.WEAK,
+            observations=(_relationship_observation("10.0.0.1", "10.0.0.9", "arp_neighbor"),),
+        )
+        project = Project(customer_name="Acme", canonical_relationships=(single_edge, multiple_edge))
+
+        with self.assertRaisesRegex(ValueError, "inconsistent cardinality"):
+            CanonicalPresentation.from_project(project)
+
+    def test_same_category_for_different_subjects_may_be_presented_independently(self):
+        # The consistency check is scoped to one (subject, category) group;
+        # separate subjects form separate groups.
+        edges = tuple(
+            CanonicalRelationship(
+                subject=subject,
+                category="arp_neighbor",
+                related_subject="10.0.0.9",
+                cardinality=RelationshipCardinality.MULTIPLE,
+                state=RelationshipCorroborationState.WEAK,
+                observations=(_relationship_observation(subject, "10.0.0.9", "arp_neighbor"),),
+            )
+            for subject in ("10.0.0.1", "10.0.0.2")
+        )
+        project = Project(customer_name="Acme", canonical_relationships=edges)
+
+        presentation = CanonicalPresentation.from_project(project)
+
+        self.assertEqual([r.subject for r in presentation.relationships], ["10.0.0.1", "10.0.0.2"])
 
     def test_unknown_category_falls_back_to_deterministic_generic_label(self):
         relationship = CanonicalRelationship(
             subject="10.0.0.1",
             category="cdp_neighbor",
+            related_subject="10.0.0.2",
+            cardinality=RelationshipCardinality.MULTIPLE,
             state=RelationshipCorroborationState.WEAK,
             observations=(_relationship_observation("10.0.0.1", "10.0.0.2", "cdp_neighbor"),),
         )
@@ -238,6 +345,8 @@ class CanonicalPresentationRelationshipTest(unittest.TestCase):
         relationship = CanonicalRelationship(
             subject="10.0.0.1",
             category="connected_to",
+            related_subject="10.0.0.2",
+            cardinality=RelationshipCardinality.MULTIPLE,
             state=RelationshipCorroborationState.WEAK,
             observations=(_relationship_observation("10.0.0.1", "10.0.0.2", "connected_to"),),
         )
@@ -251,6 +360,8 @@ class CanonicalPresentationRelationshipTest(unittest.TestCase):
         relationship = CanonicalRelationship(
             subject="10.0.0.1",
             category="bridge_fdb",
+            related_subject="10.0.0.2",
+            cardinality=RelationshipCardinality.MULTIPLE,
             state=RelationshipCorroborationState.WEAK,
             observations=(_relationship_observation("10.0.0.1", "10.0.0.2", "bridge_fdb"),),
         )

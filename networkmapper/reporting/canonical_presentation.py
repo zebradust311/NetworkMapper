@@ -14,9 +14,13 @@ Read-only and side-effect free throughout:
   directly as its primary axis (never `project.network_graph.all_devices()`
   — ARCH-025 Section 6/7).
 - Reads `CanonicalIdentity.state` / `PropertyCorroboration.state` /
-  `CanonicalRelationship.state` as authoritative and never recomputes them.
+  `CanonicalRelationship.state` / `CanonicalRelationship.cardinality` as
+  authoritative and never recomputes them.
 - Never collapses a `CONFLICTING` group to one value — every distinct value
   (identity) or distinct `related_subject` (relationship) is preserved.
+- Relationships arrive from the resolver as one record per edge (ADR-013
+  Amendment 1); they are regrouped by `(subject, category)` for display only
+  (PLAN-028 D4), each related subject keeping its own edge's state.
 - Uses `NetworkGraph.get_device(ip_address)` only as optional, read-only
   enrichment; a lookup miss falls back to the raw subject string, never
   drops the record and never invents a placeholder `Device`.
@@ -35,6 +39,7 @@ from networkmapper.core.models import Device
 from networkmapper.identity.models import CanonicalIdentity, IdentityCorroborationState
 from networkmapper.observations.models import IdentityObservation, RelationshipObservation
 from networkmapper.project.models import Project
+from networkmapper.relationships.categories import RelationshipCardinality
 from networkmapper.relationships.models import CanonicalRelationship, RelationshipCorroborationState
 
 # PLAN-025 Section 4, item 3 / architect-review correction: a category label
@@ -99,30 +104,36 @@ class IdentityPresentation:
 
 @dataclass(frozen=True)
 class RelatedSubjectPresentation:
-    """One distinct `related_subject` claimed under a `CanonicalRelationship`,
-    grouped with every observation that reported it, and enriched with an
-    optional matching `Device` the same way `IdentityPresentation.device` is."""
+    """One edge's related subject: its own `CanonicalRelationship.state`
+    (copied, never recomputed), every observation supporting that edge, and
+    an optional matching `Device` the same way `IdentityPresentation.device`
+    is enriched."""
 
     related_subject: str
     device: Optional[Device]
+    state: RelationshipCorroborationState
     observations: tuple[RelationshipObservation, ...]
 
 
 @dataclass(frozen=True)
 class RelationshipPresentation:
-    """One `CanonicalRelationship`, enriched with an optional matching
-    `Device` for `subject`, plus a deterministic friendly `category_label`.
+    """Every canonical relationship edge sharing one `(subject, category)`,
+    grouped for display, enriched with an optional matching `Device` for
+    `subject`, plus a deterministic friendly `category_label`.
 
-    `related` holds every distinct `related_subject` the group's
-    observations report — exactly one for `WEAK`/`CONFIRMED`, more than one
-    for `CONFLICTING` (never collapsed to a single value).
+    There is no group-level state (PLAN-028 D4): each entry in `related`
+    carries its own edge's state. `cardinality` is the category's
+    resolver-owned cardinality, read from the edges, never looked up here.
+    A `SINGLE` category with more than one entry is a conflict, and every
+    entry is then `CONFLICTING`; a `MULTIPLE` category may list any number
+    of entries, none of them conflicting.
     """
 
     subject: str
     device: Optional[Device]
     category: str
     category_label: str
-    state: RelationshipCorroborationState
+    cardinality: RelationshipCardinality
     related: tuple[RelatedSubjectPresentation, ...]
 
 
@@ -151,10 +162,7 @@ class CanonicalPresentation:
             identities=tuple(
                 _present_identity(identity, project) for identity in project.canonical_identities
             ),
-            relationships=tuple(
-                _present_relationship(relationship, project)
-                for relationship in project.canonical_relationships
-            ),
+            relationships=_present_relationships(project.canonical_relationships, project),
         )
 
 
@@ -192,34 +200,53 @@ def _group_property_values(
     )
 
 
-def _present_relationship(
-    relationship: CanonicalRelationship, project: Project
-) -> RelationshipPresentation:
-    return RelationshipPresentation(
-        subject=relationship.subject,
-        device=project.network_graph.get_device(relationship.subject),
-        category=relationship.category,
-        category_label=_category_label(relationship.category),
-        state=relationship.state,
-        related=_group_related_subjects(relationship.observations, project),
+def _present_relationships(
+    relationships: tuple[CanonicalRelationship, ...], project: Project
+) -> tuple[RelationshipPresentation, ...]:
+    """Group edges by their shared `(subject, category)` into one
+    `RelationshipPresentation` each. Groups appear in the order their first
+    edge appears, and edges within a group keep their input order, so the
+    resolver's deterministic `(subject, category, related_subject)` sort is
+    preserved. No state is recomputed; each edge's state is copied onto its
+    entry."""
+    edges_by_group: dict[tuple[str, str], list[CanonicalRelationship]] = {}
+    for relationship in relationships:
+        edges_by_group.setdefault((relationship.subject, relationship.category), []).append(relationship)
+
+    return tuple(
+        _present_relationship_group(subject, category, edges, project)
+        for (subject, category), edges in edges_by_group.items()
     )
 
 
-def _group_related_subjects(
-    observations: tuple[RelationshipObservation, ...], project: Project
-) -> tuple[RelatedSubjectPresentation, ...]:
-    """Group observations by their distinct `related_subject`, preserving
-    the resolver's own deterministic observation order, and enrich each
-    distinct related subject with an optional matching `Device`."""
-    observations_by_related_subject: dict[str, list[RelationshipObservation]] = {}
-    for observation in observations:
-        observations_by_related_subject.setdefault(observation.related_subject, []).append(observation)
-
-    return tuple(
-        RelatedSubjectPresentation(
-            related_subject=related_subject,
-            device=project.network_graph.get_device(related_subject),
-            observations=tuple(related_observations),
+def _present_relationship_group(
+    subject: str, category: str, edges: list[CanonicalRelationship], project: Project
+) -> RelationshipPresentation:
+    # Cardinality belongs to the category, so every edge sharing
+    # (subject, category) must agree. The resolver guarantees this; anything
+    # else is inconsistent input and is rejected rather than resolved by
+    # silently picking one edge's value.
+    cardinalities = {edge.cardinality for edge in edges}
+    if len(cardinalities) != 1:
+        raise ValueError(
+            f"Relationship edges for subject {subject!r} and category {category!r} "
+            f"have inconsistent cardinality: {sorted(c.value for c in cardinalities)}."
         )
-        for related_subject, related_observations in observations_by_related_subject.items()
+    (cardinality,) = cardinalities
+
+    return RelationshipPresentation(
+        subject=subject,
+        device=project.network_graph.get_device(subject),
+        category=category,
+        category_label=_category_label(category),
+        cardinality=cardinality,
+        related=tuple(
+            RelatedSubjectPresentation(
+                related_subject=edge.related_subject,
+                device=project.network_graph.get_device(edge.related_subject),
+                state=edge.state,
+                observations=edge.observations,
+            )
+            for edge in edges
+        ),
     )

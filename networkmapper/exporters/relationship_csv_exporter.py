@@ -11,8 +11,10 @@ class RelationshipCsvExporter:
     """Export canonical relationships to a dedicated CSV artifact."""
 
     def export(self, project: Project, output_path: str) -> None:
-        """Write one CSV row per distinct (subject, category, related_subject)
-        claim to the given output path.
+        """Write one CSV row per canonical relationship edge — one per
+        distinct (subject, category, related_subject) — to the given output
+        path. Each row's Corroboration State is that edge's own state
+        (ADR-013 Amendment 1; PLAN-028 D5); the header is unchanged.
 
         Args:
             project: The NetworkMapper project whose canonical relationships
@@ -44,7 +46,7 @@ class RelationshipCsvExporter:
                             relationship.category,
                             related.related_subject,
                             _hostname(related.device),
-                            relationship.state.value,
+                            related.state.value,
                             _provenance_cell(related),
                         ]
                     )
@@ -66,8 +68,9 @@ def _provenance_cell(related: RelatedSubjectPresentation) -> str:
 
     Presentation-level compression only: this never recomputes, explains,
     validates, or derives the canonical relationship's Corroboration
-    State. Each row's tokens describe only this related subject's own
-    observations, never the complete evidence behind the group's state.
+    State. Each row is one edge, so its tokens are that edge's complete
+    supporting evidence. For a single-valued conflict, the competing edges
+    are sibling rows sharing Subject and Category.
     """
     seen: set[tuple[str, str]] = set()
     tokens: list[str] = []

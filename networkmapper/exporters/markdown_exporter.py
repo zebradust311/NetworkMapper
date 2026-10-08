@@ -10,6 +10,7 @@ from networkmapper.core.models import Device, DeviceType, ServiceEvidence
 from networkmapper.identity.models import IdentityCorroborationState
 from networkmapper.observations.provenance import ObservationProvenance
 from networkmapper.project.models import Project
+from networkmapper.relationships.categories import RelationshipCardinality
 from networkmapper.relationships.models import RelationshipCorroborationState
 from networkmapper.reporting.canonical_presentation import CanonicalPresentation
 from networkmapper.reporting.project_summary import ProjectSummary
@@ -423,9 +424,10 @@ class MarkdownExporter:
         return lines
 
     def _render_canonical_relationships(self, presentation: CanonicalPresentation) -> list[str]:
-        """Render one entry per `CanonicalRelationship`: directional,
-        category-labeled, corroboration state, and every distinct related
-        subject with its supporting provenance."""
+        """Render one entry per `(subject, category)` group: directional,
+        category-labeled, the category's cardinality, then every related
+        subject with its own edge's corroboration state and supporting
+        provenance (ADR-013 Amendment 1; PLAN-028 D4)."""
         lines: list[str] = ["# Canonical Relationships", ""]
 
         if not presentation.relationships:
@@ -436,13 +438,14 @@ class MarkdownExporter:
             subject_label = self._subject_label(relationship.subject, relationship.device)
             lines.append(f"## {subject_label} — {relationship.category_label}")
             lines.append("")
-            lines.append(
-                f"- Corroboration State: {self._corroboration_label(relationship.state)}"
-            )
+            lines.append(f"- Cardinality: {self._cardinality_label(relationship.cardinality)}")
             lines.append("- Related:")
             for related in relationship.related:
                 related_label = self._subject_label(related.related_subject, related.device)
                 lines.append(f"  - {subject_label} → {related_label}")
+                lines.append(
+                    f"    - Corroboration State: {self._corroboration_label(related.state)}"
+                )
                 for observation in related.observations:
                     lines.append(f"    - {self._format_provenance(observation.provenance)}")
             lines.append("")
@@ -463,6 +466,12 @@ class MarkdownExporter:
         """Render a resolver-provided corroboration state as-is, title-cased
         for display. Never recomputed — this is formatting only."""
         return state.value.replace("_", " ").title()
+
+    def _cardinality_label(self, cardinality: RelationshipCardinality) -> str:
+        """Render a resolver-provided category cardinality for display."""
+        if cardinality == RelationshipCardinality.SINGLE:
+            return "Single-valued"
+        return "Multi-valued"
 
     def _format_provenance(self, provenance: ObservationProvenance) -> str:
         """Render one observation's provider/method/timestamp provenance."""

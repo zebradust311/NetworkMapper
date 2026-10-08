@@ -16,6 +16,7 @@ from networkmapper.identity.models import (
 from networkmapper.observations.models import IdentityObservation, RelationshipObservation
 from networkmapper.observations.provenance import ObservationProvenance
 from networkmapper.project.models import Project
+from networkmapper.relationships.categories import RelationshipCardinality
 from networkmapper.relationships.models import CanonicalRelationship, RelationshipCorroborationState
 from networkmapper.reporting.project_summary import ProjectSummary
 from networkmapper.reporting.report_run import RunMetadata
@@ -602,6 +603,8 @@ class MarkdownExporterTest(unittest.TestCase):
             CanonicalRelationship(
                 subject="10.0.0.1",
                 category="connected_to",
+                related_subject="10.0.0.2",
+                cardinality=RelationshipCardinality.MULTIPLE,
                 state=RelationshipCorroborationState.WEAK,
                 observations=(
                     _relationship_observation(
@@ -615,38 +618,70 @@ class MarkdownExporterTest(unittest.TestCase):
         section = markdown[markdown.index("# Canonical Relationships") :]
 
         self.assertIn("## SW1 (10.0.0.1) — Connected To", section)
-        self.assertIn("- Corroboration State: Weak", section)
-        self.assertIn("SW1 (10.0.0.1) → SW2 (10.0.0.2)", section)
+        self.assertIn("- Cardinality: Multi-valued", section)
+        # PLAN-028 D4: the state is per related subject, nested under its line.
+        self.assertIn("  - SW1 (10.0.0.1) → SW2 (10.0.0.2)\n    - Corroboration State: Weak", section)
         self.assertIn("lldp / lldp-neighbor", section)
         # Architect-review correction: the label must not bake the current
         # evidence provider (LLDP) into the canonical category label itself.
         self.assertNotIn("Connected To (LLDP)", section)
 
     def test_canonical_relationships_section_shows_all_conflicting_related_subjects(self):
+        # A SINGLE-category conflict: every competing related subject is
+        # shown, each with its own Conflicting state (PLAN-028 Section 2.1).
         project = self._project()
-        project.canonical_relationships = (
+        project.canonical_relationships = tuple(
             CanonicalRelationship(
                 subject="10.0.0.1",
-                category="arp_neighbor",
+                category="default_route_test",
+                related_subject=related_subject,
+                cardinality=RelationshipCardinality.SINGLE,
                 state=RelationshipCorroborationState.CONFLICTING,
                 observations=(
                     _relationship_observation(
-                        "10.0.0.1", "10.0.0.2", "arp_neighbor", provider="nmap", collection_method="arp-scan"
-                    ),
-                    _relationship_observation(
-                        "10.0.0.1", "10.0.0.9", "arp_neighbor", provider="snmp", collection_method="ipNetToMediaTable"
+                        "10.0.0.1", related_subject, "default_route_test",
+                        provider="wmi", collection_method=method,
                     ),
                 ),
-            ),
+            )
+            for related_subject, method in (("10.0.0.2", "route-table"), ("10.0.0.9", "dhcp-lease"))
         )
 
         markdown = self._export(project)
         section = markdown[markdown.index("# Canonical Relationships") :]
 
-        self.assertIn("## 10.0.0.1 — ARP Neighbor", section)
-        self.assertIn("- Corroboration State: Conflicting", section)
-        self.assertIn("10.0.0.1 → 10.0.0.2", section)
-        self.assertIn("10.0.0.1 → 10.0.0.9", section)
+        self.assertEqual(section.count("## 10.0.0.1 — Default Route Test"), 1)
+        self.assertIn("- Cardinality: Single-valued", section)
+        self.assertIn("  - 10.0.0.1 → 10.0.0.2\n    - Corroboration State: Conflicting", section)
+        self.assertIn("  - 10.0.0.1 → 10.0.0.9\n    - Corroboration State: Conflicting", section)
+
+    def test_canonical_relationships_section_shows_multi_valued_fan_out_without_conflict(self):
+        project = self._project()
+        project.canonical_relationships = tuple(
+            CanonicalRelationship(
+                subject="10.0.0.1",
+                category="arp_neighbor",
+                related_subject=related_subject,
+                cardinality=RelationshipCardinality.MULTIPLE,
+                state=RelationshipCorroborationState.WEAK,
+                observations=(
+                    _relationship_observation(
+                        "10.0.0.1", related_subject, "arp_neighbor",
+                        provider="snmp", collection_method="ipNetToPhysicalTable",
+                    ),
+                ),
+            )
+            for related_subject in ("10.0.0.2", "10.0.0.9")
+        )
+
+        markdown = self._export(project)
+        section = markdown[markdown.index("# Canonical Relationships") :]
+
+        self.assertEqual(section.count("## 10.0.0.1 — ARP Neighbor"), 1)
+        self.assertIn("- Cardinality: Multi-valued", section)
+        self.assertIn("  - 10.0.0.1 → 10.0.0.2\n    - Corroboration State: Weak", section)
+        self.assertIn("  - 10.0.0.1 → 10.0.0.9\n    - Corroboration State: Weak", section)
+        self.assertNotIn("Conflicting", section)
 
     def test_unknown_relationship_category_falls_back_to_generic_label(self):
         project = self._project()
@@ -654,6 +689,8 @@ class MarkdownExporterTest(unittest.TestCase):
             CanonicalRelationship(
                 subject="10.0.0.1",
                 category="cdp_neighbor",
+                related_subject="10.0.0.2",
+                cardinality=RelationshipCardinality.MULTIPLE,
                 state=RelationshipCorroborationState.WEAK,
                 observations=(_relationship_observation("10.0.0.1", "10.0.0.2", "cdp_neighbor"),),
             ),

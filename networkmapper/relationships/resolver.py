@@ -1,25 +1,29 @@
-"""Canonical relationship resolver (ADR-013; ARCH-018 Stage 1; FEAT-009A).
+"""Canonical relationship resolver (ADR-013 and its Amendment 1; ARCH-018;
+FEAT-009A; PLAN-028).
 
 `RelationshipResolver` is a pure function from retained observations and
-canonical identities to canonical relationships. It is not wired into
-`DiscoveryEngine`, `Application`, classification, reporting, or
-persistence — nothing in the existing pipeline calls it. It exists as
-standalone, inert, independently testable code, per this sprint's explicit
-scope, the same posture `IdentityResolver` already established.
+canonical identities to canonical relationships. `Application.run()` calls
+it once per run (FEAT-009B); it never touches `Device`, `NetworkGraph`,
+classification, reporting, or persistence.
 """
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 
 from networkmapper.identity.models import CanonicalIdentity
 from networkmapper.observations.models import IdentityObservation, RelationshipObservation
+from networkmapper.relationships.categories import (
+    CATEGORY_CARDINALITY,
+    RelationshipCardinality,
+    cardinality_for,
+)
 from networkmapper.relationships.models import CanonicalRelationship, RelationshipCorroborationState
 
 
 class RelationshipResolver:
     """Derives canonical relationships from retained observations and
-    canonical identities (ADR-013).
+    canonical identities (ADR-013, as amended by Amendment 1).
 
     Consumes only `RelationshipObservation`s from whatever mixed
     observation collection it is given (e.g. `Project.observations`); any
@@ -38,43 +42,74 @@ class RelationshipResolver:
     excluded, not erased; it remains exactly where it already was, in
     whatever collection was passed in as `observations`.
 
-    Groups by `(subject, category)`, not the naive `(subject,
-    related_subject, category)` triple: `RelationshipObservation` carries
-    no `value` field two observations can disagree about the way
-    `IdentityObservation.value` does — `subject`, `related_subject`, and
-    `category` together are the claim, not a value under a claim. Grouping
-    by the full triple would put every observation sharing that triple in
-    the same group by construction, making conflicting evidence (e.g. LLDP
-    and CDP naming different neighbors for the same local claim)
-    structurally undetectable. Grouping by `(subject, category)` instead,
-    with `related_subject` as the value under evaluation, restores the
-    identical independent-source-counting mechanism `IdentityResolver`
-    already uses for identity properties.
+    Evaluation key versus output identity (ADR-013 Amendment 1, Decision
+    3). Observations are *evaluated* together by `(subject, category)`, so
+    that a single-valued category can see more than one distinct
+    `related_subject` and report the conflict; grouping by the full
+    `(subject, category, related_subject)` triple would make that conflict
+    structurally undetectable (ARCH-018). The canonical *output* identity,
+    however, is the edge `(subject, category, related_subject)`: one
+    `CanonicalRelationship` is emitted per distinct related subject.
+
+    Cardinality (ADR-013 Amendment 1, Decisions 1-2) comes from the
+    resolver-owned category policy (`networkmapper.relationships.categories`),
+    never from providers or observations:
+    - Each edge's independent sources are the distinct
+      `(provider, collection_method)` pairs among that edge's own
+      observations. One source is `WEAK`; two or more are `CONFIRMED`.
+    - `SINGLE`: if the group holds more than one distinct `related_subject`,
+      every edge in the group is `CONFLICTING`, regardless of how well any
+      one edge is corroborated. This preserves the pre-amendment
+      corroboration semantics; only the output shape changed.
+    - `MULTIPLE` (and any unregistered category): several related subjects
+      are normal, so `CONFLICTING` is never produced.
 
     Preprocessing (endpoint resolution, unresolved-endpoint exclusion,
-    self-loop exclusion) always runs before Grouping, never after. This
-    ordering is required, not stylistic: because the grouping key does not
-    include `related_subject`, a self-loop artifact or an
+    self-loop exclusion) always runs before grouping, never after. This
+    ordering is required, not stylistic: a self-loop artifact or an
     unresolved-endpoint observation sharing a subject and category with a
-    genuine observation would otherwise present more than one distinct
-    `related_subject` value under the group's corroboration count —
-    incorrectly producing `CONFLICTING` for a relationship that has only
-    one genuine, single-source claim behind it. Excluding such
-    observations before any group exists avoids this by construction.
+    genuine observation would otherwise add a spurious `related_subject` to
+    the group — producing a false `CONFLICTING` for a single-valued
+    category. Excluding such observations before any group exists avoids
+    this by construction.
 
-    Stage 1 does not canonicalize `(subject, related_subject)` ordering
-    for symmetric categories (e.g. "connected_to" reported from either
-    endpoint): every category is grouped exactly as reported. This is a
-    known, accepted limitation — a symmetric category's evidence produces
-    two independent, non-corroborating `WEAK` relationships rather than
-    one `CONFIRMED` one — never a false conflict, since the two directions
-    land in separate `(subject, category)` groups rather than colliding.
+    Every category is grouped exactly as reported; `(subject,
+    related_subject)` ordering is not canonicalized for symmetric
+    categories (e.g. "connected_to" reported from either endpoint). This
+    is a known, accepted limitation — a symmetric link reported from both
+    ends produces two independent `WEAK` edges rather than one `CONFIRMED`
+    one — never a false conflict, since the two directions are separate
+    `(subject, category)` groups.
 
-    Deterministic and order-independent: `resolve()` produces
-    byte-identical output regardless of either input sequence's order, by
-    grouping into sets/dicts and then explicitly sorting every output
-    collection rather than relying on incidental input or iteration order.
+    Deterministic and order-independent: `resolve()` produces identical
+    output regardless of either input sequence's order. Output records are
+    sorted by `(subject, category, related_subject)`. Observations within
+    each record are sorted by `(provider, collection_method,
+    related_subject, source_run, observed_at.isoformat())` (PLAN-028 D6).
+    `related_subject` is constant within an edge but kept so the key is
+    self-documenting. The timestamp is compared through its ISO string so
+    the sort is total even if naive and timezone-aware datetimes were ever
+    mixed. Observations identical in every sorted field are equal by value,
+    so their relative order is not significant: the output is deterministic
+    by value, not by object identity.
     """
+
+    def __init__(
+        self,
+        cardinality_policy: Mapping[str, RelationshipCardinality] | None = None,
+    ) -> None:
+        """Create a resolver.
+
+        Args:
+            cardinality_policy: Category-to-cardinality policy. Defaults to
+                the module policy (`CATEGORY_CARDINALITY`). Production code
+                never passes one; it exists so tests can exercise
+                `SINGLE` semantics before any production category is
+                single-valued (PLAN-028 D1).
+        """
+        self._cardinality_policy = (
+            CATEGORY_CARDINALITY if cardinality_policy is None else cardinality_policy
+        )
 
     def resolve(
         self,
@@ -82,7 +117,7 @@ class RelationshipResolver:
         identities: Sequence[CanonicalIdentity],
     ) -> tuple[CanonicalRelationship, ...]:
         """Return one canonical relationship per distinct, resolvable
-        `(subject, category)` pairing observed.
+        `(subject, category, related_subject)` edge observed.
 
         Never mutates its inputs, never touches `Device`, `NetworkGraph`,
         classification, reporting, or persistence.
@@ -92,9 +127,9 @@ class RelationshipResolver:
         ]
 
         # Order-independent membership test, not a subject -> identity
-        # lookup: Stage 1 only needs to know whether an endpoint resolves,
-        # never the CanonicalIdentity object itself (CanonicalRelationship
-        # stores subject as a plain str). A dict keyed by subject would be
+        # lookup: only whether an endpoint resolves matters, never the
+        # CanonicalIdentity object itself (CanonicalRelationship stores
+        # subject as a plain str). A dict keyed by subject would be
         # order-dependent under a pathological duplicate-subject input
         # (last write wins), violating the determinism guarantee above; a
         # frozenset has no such failure mode.
@@ -114,55 +149,83 @@ class RelationshipResolver:
             observations_by_group.setdefault(group_key, []).append(observation)
 
         relationships = [
-            self._resolve_group(subject, category, group_observations)
+            relationship
             for (subject, category), group_observations in observations_by_group.items()
+            for relationship in self._resolve_group(subject, category, group_observations)
         ]
 
         return tuple(
-            sorted(relationships, key=lambda relationship: (relationship.subject, relationship.category))
-        )
-
-    def _resolve_group(
-        self, subject: str, category: str, observations: list[RelationshipObservation]
-    ) -> CanonicalRelationship:
-        """Determine one `(subject, category)` group's corroboration state.
-
-        Independence is judged by (provider, collection_method), per
-        ADR-013's Relationship Independence section — two observations
-        sharing both are the same underlying claim and must not count as
-        two confirmations, even if they happen to disagree.
-        """
-        values_by_independent_source: dict[tuple[str, str], set[str]] = {}
-        for observation in observations:
-            source_key = (observation.provenance.provider, observation.provenance.collection_method)
-            values_by_independent_source.setdefault(source_key, set()).add(observation.related_subject)
-
-        distinct_values = {
-            value for values in values_by_independent_source.values() for value in values
-        }
-        independent_source_count = len(values_by_independent_source)
-
-        if len(distinct_values) > 1:
-            state = RelationshipCorroborationState.CONFLICTING
-        elif independent_source_count >= 2:
-            state = RelationshipCorroborationState.CONFIRMED
-        else:
-            state = RelationshipCorroborationState.WEAK
-
-        sorted_observations = tuple(
             sorted(
-                observations,
-                key=lambda observation: (
-                    observation.provenance.provider,
-                    observation.provenance.collection_method,
-                    observation.related_subject,
+                relationships,
+                key=lambda relationship: (
+                    relationship.subject,
+                    relationship.category,
+                    relationship.related_subject,
                 ),
             )
         )
 
-        return CanonicalRelationship(
-            subject=subject,
-            category=category,
-            state=state,
-            observations=sorted_observations,
+    def _resolve_group(
+        self, subject: str, category: str, observations: list[RelationshipObservation]
+    ) -> list[CanonicalRelationship]:
+        """Resolve one `(subject, category)` group into one edge per
+        distinct `related_subject`.
+
+        Independence is judged per edge by (provider, collection_method),
+        per ADR-013's Relationship Independence section — two observations
+        sharing both are the same underlying claim and must not count as
+        two confirmations.
+        """
+        cardinality = cardinality_for(category, self._cardinality_policy)
+
+        observations_by_edge: dict[str, list[RelationshipObservation]] = {}
+        for observation in observations:
+            observations_by_edge.setdefault(observation.related_subject, []).append(observation)
+
+        group_conflicts = (
+            cardinality == RelationshipCardinality.SINGLE and len(observations_by_edge) > 1
         )
+
+        relationships: list[CanonicalRelationship] = []
+        for related_subject, edge_observations in observations_by_edge.items():
+            independent_sources = {
+                (observation.provenance.provider, observation.provenance.collection_method)
+                for observation in edge_observations
+            }
+
+            if group_conflicts:
+                state = RelationshipCorroborationState.CONFLICTING
+            elif len(independent_sources) >= 2:
+                state = RelationshipCorroborationState.CONFIRMED
+            else:
+                state = RelationshipCorroborationState.WEAK
+
+            relationships.append(
+                CanonicalRelationship(
+                    subject=subject,
+                    category=category,
+                    related_subject=related_subject,
+                    cardinality=cardinality,
+                    state=state,
+                    observations=tuple(sorted(edge_observations, key=_edge_observation_sort_key)),
+                )
+            )
+
+        return relationships
+
+
+def _edge_observation_sort_key(
+    observation: RelationshipObservation,
+) -> tuple[str, str, str, str, str]:
+    """Total, deterministic order for one edge's observations (PLAN-028 D6).
+
+    The timestamp is compared through its ISO string, never as a
+    `datetime`, so mixed naive/aware values can't raise `TypeError`.
+    """
+    return (
+        observation.provenance.provider,
+        observation.provenance.collection_method,
+        observation.related_subject,
+        observation.provenance.source_run,
+        observation.provenance.observed_at.isoformat(),
+    )

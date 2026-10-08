@@ -43,6 +43,7 @@ from networkmapper.discovery.scan_profile import ScanProfile
 from networkmapper.identity.models import CanonicalIdentity, IdentityCorroborationState
 from networkmapper.observations.models import IdentityObservation, RelationshipObservation
 from networkmapper.observations.provenance import ObservationProvenance
+from networkmapper.relationships.categories import RelationshipCardinality
 from networkmapper.relationships.models import CanonicalRelationship, RelationshipCorroborationState
 from networkmapper.reporting.report_run import ReportRunPaths
 
@@ -187,6 +188,8 @@ class IdentityPipelineIntegrationTest(unittest.TestCase):
         self.assertIsInstance(relationship, CanonicalRelationship)
         self.assertEqual(relationship.subject, "172.16.100.10")
         self.assertEqual(relationship.category, "connected_to")
+        self.assertEqual(relationship.related_subject, "172.16.100.11")
+        self.assertEqual(relationship.cardinality, RelationshipCardinality.MULTIPLE)
         self.assertEqual(relationship.state, RelationshipCorroborationState.WEAK)
 
 

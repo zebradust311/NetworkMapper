@@ -2,9 +2,10 @@ import unittest
 from datetime import datetime
 
 from networkmapper.identity.models import CanonicalIdentity, IdentityCorroborationState
-from networkmapper.observations.models import IdentityObservation
+from networkmapper.observations.models import IdentityObservation, RelationshipObservation
 from networkmapper.observations.provenance import ObservationProvenance
 from networkmapper.project.models import Project
+from networkmapper.relationships.categories import RelationshipCardinality
 from networkmapper.relationships.models import CanonicalRelationship, RelationshipCorroborationState
 
 
@@ -58,11 +59,24 @@ class ProjectCanonicalOutputsTest(unittest.TestCase):
         identity = CanonicalIdentity(
             subject="10.0.0.1", state=IdentityCorroborationState.WEAK, properties=()
         )
+        observation = RelationshipObservation(
+            subject="10.0.0.1",
+            related_subject="10.0.0.2",
+            category="connected_to",
+            provenance=ObservationProvenance(
+                provider="snmp",
+                collection_method="lldpRemManAddr",
+                observed_at=datetime(2026, 8, 20, 9, 0, 0),
+                source_run="run-001",
+            ),
+        )
         relationship = CanonicalRelationship(
             subject="10.0.0.1",
             category="connected_to",
+            related_subject="10.0.0.2",
+            cardinality=RelationshipCardinality.MULTIPLE,
             state=RelationshipCorroborationState.WEAK,
-            observations=(),
+            observations=(observation,),
         )
 
         project = Project(
