@@ -660,6 +660,8 @@ ADR:
 
 **Status:** Accepted
 
+**Amended by:** Amendment 1 — Replay Observation Export (2026-10-09), appended at the end of this ADR. The original text below is unchanged.
+
 ### Context
 
 ARCH-014 (Relationship Evidence Architecture) found that relationship
@@ -979,6 +981,80 @@ ADR:
 Each of the above requires its own approved sprint and, per
 [ENGINEERING.md](../ENGINEERING.md), its own updates to `ROADMAP.md`,
 `docs/architecture/`, and `docs/ADR.md`.
+
+### Amendment 1 — Replay Observation Export
+
+**Status:** Accepted
+
+**Date:** 2026-10-09
+
+**Source:** ARCH-028 (Observation JSON Export Authorization); OPS-001.
+
+**Nature:** This amendment adds to ADR-011. It replaces nothing. Every section above remains in force exactly as written. It settles one deferred Future Work item, "Persistence/storage format for retained observations", for one purpose only: a per-run replay artifact. Every other deferred item, including the full design of observation persistence and storage, remains deferred.
+
+#### Context
+
+Retained observations currently exist only for the duration of one run. Canonical identities and relationships are interpretations (ADR-012, ADR-013). The CSV and Markdown reports contain those interpretations, and for relationships they contain only observations whose endpoints resolved. When a run ends, everything else is lost: observations excluded at the relationship resolver's endpoint gate, and every observation's `source_run` and full-precision `observed_at`. Evidence collected from a network therefore cannot be re-interpreted later, for example by a corrected resolver. That contradicts this ADR's premise that interpretations may change while retained observations do not. OPS-001 is blocked on exactly this gap.
+
+#### Decision
+
+1. **A replay artifact is authorized.** Every run writes its retained observations to one file, `observations.json`, in that run's report output directory, alongside the run's other report artifacts. It is written on every run, not behind an opt-in flag, and it is written once. Its sole purpose is replay: re-running the committed identity and relationship resolvers against exactly the evidence that run collected.
+
+2. **A read-only exporter writes it.** The artifact is produced by a read-only exporter that consumes the run's retained observations without modifying them or any other project data (ADR-005).
+
+3. **The artifact is lossless.** It contains every retained observation of the run, including relationship observations whose endpoints never resolved and duplicate observations. For each, it records every observation field and the complete provenance this ADR requires (provider, collection method, observation timestamp, source/run identity), verbatim. In particular:
+   - `observed_at` round-trips exactly, including sub-second precision and the presence or absence of timezone information;
+   - `source_run` round-trips exactly as the opaque value the provider assigned.
+
+4. **The artifact is deterministic and versioned.** The same set of retained observations always produces a byte-identical file, regardless of the order in which they were collected. The file carries an explicit format identifier and format version, and contains no wall-clock, host, operator or credential data of its own.
+
+5. **Unknown content is rejected, never skipped.** Anything that reads the artifact must reject an unknown format identifier, an unsupported format version, or an unknown observation type explicitly. It must never silently skip or drop content.
+
+6. **Replay is the only consumer.** The artifact may be read only by a loader and replay path used for replay verification: reconstructing the retained observations and re-running the committed resolvers on them. Replay must reproduce the run's canonical identities and canonical relationships exactly. A read-only developer command, `python -m devtools replay-observations <run_dir>`, is authorized as part of that replay path. It reads a run directory's artifact, replays it, and reports or compares the result. It never modifies the run directory, the project file, or any report.
+
+7. **Credentials never appear.** Credentials are never observations and must never appear in the artifact. The implementation must test this directly.
+
+#### Boundaries
+
+This amendment does not authorize the following. Each remains deferred exactly as in Future Work above, or is outside this ADR's scope:
+
+- any change to the `.nmproj` project format;
+- any change to `ProjectSerializer`;
+- loading observations into a `Project` or into any normal run, report, comparison, workbench or benchmark workflow;
+- any cross-run observation storage, accumulation or merging, and therefore cross-run corroboration;
+- observation identifiers, retention policies, or any long-term evidence database or event store;
+- persistence of canonical identities or canonical relationships (interpretations);
+- any change to provider, observation-type, resolver, classification or existing report behavior;
+- any gateway inference or topology behavior;
+- committing raw observation artifacts, or any other raw production artifact, to the repository.
+
+#### Relationship to ADR-013
+
+ADR-013's Future Work defers observation storage as "shared with ADR-011's own deferred scope". This amendment is that decision, for the replay artifact only, so no ADR-013 amendment is needed. ADR-013's separate deferral of persisting relationship *interpretations* is unaffected: the artifact contains observations only.
+
+#### Data Handling
+
+The artifact is a raw production artifact. It contains discovery-time subjects and identity values exactly as observed, and is therefore production-sensitive. It is written only beneath the run's output directory, which is excluded from version control, and must never be committed. Reports about replay results follow the project's sanitization rules for production evidence.
+
+#### Authorization
+
+This amendment authorizes one implementation sprint, **FEAT-OBSERVATION-JSON-EXPORT**, limited to:
+
+- the read-only exporter, invoked on every run alongside the existing report exporters;
+- one additional report-run artifact path for `observations.json`;
+- the loader and replay path, used only for replay verification;
+- the read-only `python -m devtools replay-observations <run_dir>` command;
+- tests proving a lossless round trip, exact `observed_at` and `source_run` fidelity, determinism, rejection of unknown format, version and type, exact replay of canonical identities and relationships, and the absence of credentials.
+
+The sprint requires its own approved implementation plan and verification before OPS-001 may be unblocked.
+
+#### Consequences
+
+- Evidence a run collects becomes re-interpretable: any future resolver can be replayed against that run's exact retained observations.
+- OPS-001 can be unblocked once the authorized sprint is implemented and verified.
+- The artifact's format becomes a versioned contract. A breaking change requires a new format version, and readers reject versions they don't support.
+- Every run writes one additional local file. Its size grows with collected evidence (for example, large forwarding tables). It stays local and uncommitted.
+- Full observation persistence remains undecided and requires its own approved decision.
 
 ---
 
