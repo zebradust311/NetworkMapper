@@ -5,6 +5,7 @@ import sys
 from devtools.benchmark import format_benchmark_report, parse_args, run_benchmark_command
 from devtools.compare import compare_reports, format_compare_report, parse_args as parse_compare_args
 from devtools.diagnostics import format_diagnostics_report, run_diagnostics
+from devtools.replay_observations import format_replay_report, run_replay_command
 from devtools.validate import (
     format_full_validation_report,
     format_full_validation_summary,
@@ -22,6 +23,7 @@ def _print_usage() -> int:
     print("  benchmark  Run canonical benchmark workflow")
     print("  compare    Compare two benchmark JSON reports")
     print("  diagnostics  Run canonical developer environment diagnostics")
+    print("  replay-observations <run_dir>  Replay a run's observations.json (read-only)")
     return 1
 
 
@@ -64,6 +66,11 @@ def main(argv: list[str] | None = None) -> int:
 
         result = compare_reports(compare_args)
         print(format_compare_report(result))
+        return result.exit_code
+
+    if command == "replay-observations" and len(args) == 2:
+        result = run_replay_command(args[1])
+        print(format_replay_report(result))
         return result.exit_code
 
     if command == "diagnostics" and len(args) == 1:

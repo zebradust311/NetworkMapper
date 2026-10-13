@@ -128,6 +128,7 @@ class IdentityPipelineIntegrationTest(unittest.TestCase):
             markdown_path=Path("output/identity-pipeline-test-run/report.md"),
             csv_path=Path("output/identity-pipeline-test-run/devices.csv"),
             relationships_csv_path=Path("output/identity-pipeline-test-run/relationships.csv"),
+            observations_json_path=Path("output/identity-pipeline-test-run/observations.json"),
         )
 
         with patch("networkmapper.application.NmapProvider", _FakeNetworkProvider), patch(
@@ -137,6 +138,8 @@ class IdentityPipelineIntegrationTest(unittest.TestCase):
         ) as relationship_csv_exporter_mock, patch(
             "networkmapper.application.MarkdownExporter"
         ) as markdown_exporter_mock, patch(
+            "networkmapper.application.ObservationJsonExporter"
+        ) as observation_json_exporter_mock, patch(
             "networkmapper.application.ProjectSerializer"
         ) as serializer_mock, patch(
             "networkmapper.application.build_report_run_paths", return_value=fake_report_paths
@@ -156,6 +159,7 @@ class IdentityPipelineIntegrationTest(unittest.TestCase):
         csv_exporter_mock.return_value.export.assert_called_once()
         relationship_csv_exporter_mock.return_value.export.assert_called_once()
         markdown_exporter_mock.return_value.export.assert_called_once()
+        observation_json_exporter_mock.return_value.export.assert_called_once()
 
         # Discovery succeeded and Project.observations was populated.
         self.assertEqual(len(captured_projects), 1)

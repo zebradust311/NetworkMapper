@@ -414,6 +414,8 @@ python -m devtools validate --all
 python -m devtools benchmark
 
 python -m devtools compare
+
+python -m devtools replay-observations <run_dir>
 ```
 
 `validate` runs the fast, classifier-only regression suite. `validate --all`
@@ -767,6 +769,10 @@ python -m devtools benchmark
 Comparison
 
 python -m devtools compare
+
+Observation replay (read-only; replays a run's `observations.json`)
+
+python -m devtools replay-observations <run_dir>
 
 Review
 

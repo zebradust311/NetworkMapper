@@ -31,6 +31,7 @@ from networkmapper.project.models import Project
 from networkmapper.project.serializer import ProjectSerializer
 from networkmapper.exporters.csv_exporter import CsvExporter
 from networkmapper.exporters.markdown_exporter import MarkdownExporter
+from networkmapper.exporters.observation_json_exporter import ObservationJsonExporter
 from networkmapper.exporters.relationship_csv_exporter import RelationshipCsvExporter
 from networkmapper.reporting.discovery_summary import DiscoverySummary
 from networkmapper.reporting.report_run import RunMetadata, build_report_run_paths
@@ -225,6 +226,14 @@ class Application:
         )
         report_paths = build_report_run_paths("output", run_metadata)
 
+        # Written first (PLAN-029 D8): the retained observations are the one
+        # artifact that cannot be regenerated, so they are on disk before
+        # any other exporter runs.
+        ObservationJsonExporter().export(
+            project,
+            str(report_paths.observations_json_path),
+        )
+
         CsvExporter().export(
             project,
             str(report_paths.csv_path),
@@ -241,6 +250,7 @@ class Application:
             run_metadata=run_metadata,
         )
 
+        print(f"✓ Observations exported to {report_paths.observations_json_path}")
         print(f"✓ CSV exported to {report_paths.csv_path}")
         print(f"✓ Relationships exported to {report_paths.relationships_csv_path}")
         print(f"✓ Markdown exported to {report_paths.markdown_path}")

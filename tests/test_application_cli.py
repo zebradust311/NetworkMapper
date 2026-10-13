@@ -21,14 +21,15 @@ def _fake_report_run_paths() -> ReportRunPaths:
     build_report_run_paths() creates a real directory as a side effect
     (REPORT-002); tests that don't explicitly isolate a temp working
     directory must mock it out, the same way CsvExporter/MarkdownExporter/
-    RelationshipCsvExporter are already mocked below, so test runs don't
-    litter the repo's real output/ directory.
+    RelationshipCsvExporter/ObservationJsonExporter are already mocked below,
+    so test runs don't litter the repo's real output/ directory.
     """
     return ReportRunPaths(
         run_directory=Path("output/fake-run"),
         markdown_path=Path("output/fake-run/report.md"),
         csv_path=Path("output/fake-run/devices.csv"),
         relationships_csv_path=Path("output/fake-run/relationships.csv"),
+        observations_json_path=Path("output/fake-run/observations.json"),
     )
 
 
@@ -74,6 +75,8 @@ class ApplicationCliTest(unittest.TestCase):
         ) as relationship_csv_exporter_mock, patch(
             "networkmapper.application.MarkdownExporter"
         ) as markdown_exporter_mock, patch(
+            "networkmapper.application.ObservationJsonExporter"
+        ) as observation_json_exporter_mock, patch(
             "networkmapper.application.ProjectSerializer"
         ) as serializer_mock, patch(
             "networkmapper.application.ClassificationWorkbench"
@@ -93,6 +96,17 @@ class ApplicationCliTest(unittest.TestCase):
             fdb_provider_mock.return_value.run_diagnostics = bridge_fdb_run_diagnostics
             report_run_paths_mock.return_value = _fake_report_run_paths()
 
+            export_call_order: list[str] = []
+            for name, exporter_mock in (
+                ("observations", observation_json_exporter_mock),
+                ("csv", csv_exporter_mock),
+                ("relationships", relationship_csv_exporter_mock),
+                ("markdown", markdown_exporter_mock),
+            ):
+                exporter_mock.return_value.export.side_effect = (
+                    lambda *_args, _name=name, **_kwargs: export_call_order.append(_name)
+                )
+
             stdout = io.StringIO()
             stderr = io.StringIO()
             with redirect_stdout(stdout), redirect_stderr(stderr):
@@ -109,6 +123,8 @@ class ApplicationCliTest(unittest.TestCase):
             "csv_exporter_mock": csv_exporter_mock,
             "relationship_csv_exporter_mock": relationship_csv_exporter_mock,
             "markdown_exporter_mock": markdown_exporter_mock,
+            "observation_json_exporter_mock": observation_json_exporter_mock,
+            "export_call_order": export_call_order,
             "workbench_mock": workbench_mock,
             "report_run_paths_mock": report_run_paths_mock,
             "stdout": stdout.getvalue(),
@@ -147,6 +163,9 @@ class ApplicationCliTest(unittest.TestCase):
         self.assertEqual(run_metadata.device_count, 1)
 
         fake_paths = _fake_report_run_paths()
+        result["observation_json_exporter_mock"].return_value.export.assert_called_once_with(
+            ANY, str(fake_paths.observations_json_path)
+        )
         result["csv_exporter_mock"].return_value.export.assert_called_once_with(
             ANY, str(fake_paths.csv_path)
         )
@@ -156,11 +175,31 @@ class ApplicationCliTest(unittest.TestCase):
         result["markdown_exporter_mock"].return_value.export.assert_called_once_with(
             ANY, str(fake_paths.markdown_path), run_metadata=run_metadata
         )
+        self.assertIn(
+            f"✓ Observations exported to {fake_paths.observations_json_path}", result["stdout"]
+        )
         self.assertIn(f"✓ CSV exported to {fake_paths.csv_path}", result["stdout"])
         self.assertIn(
             f"✓ Relationships exported to {fake_paths.relationships_csv_path}", result["stdout"]
         )
         self.assertIn(f"✓ Markdown exported to {fake_paths.markdown_path}", result["stdout"])
+
+    def test_observations_are_exported_on_every_run_before_the_other_report_artifacts(self):
+        # PLAN-029 D8: no opt-in flag, and the retained observations are on
+        # disk before any other exporter runs.
+        result = self._run_application(["networkmapper", "--subnet", "172.16.100.0/24"])
+
+        result["observation_json_exporter_mock"].return_value.export.assert_called_once()
+        self.assertEqual(
+            result["export_call_order"], ["observations", "csv", "relationships", "markdown"]
+        )
+
+    def test_observation_exporter_receives_the_same_project_as_the_other_exporters(self):
+        result = self._run_application(["networkmapper", "--subnet", "172.16.100.0/24"])
+
+        observation_project = result["observation_json_exporter_mock"].return_value.export.call_args.args[0]
+        csv_project = result["csv_exporter_mock"].return_value.export.call_args.args[0]
+        self.assertIs(observation_project, csv_project)
 
     def test_scan_profile_fast_is_supported(self):
         result = self._run_application(
@@ -226,6 +265,8 @@ class ApplicationCliTest(unittest.TestCase):
                 ) as relationship_csv_exporter_mock, patch(
                     "networkmapper.application.MarkdownExporter"
                 ) as markdown_exporter_mock, patch(
+                    "networkmapper.application.ObservationJsonExporter"
+                ), patch(
                     "networkmapper.application.ProjectSerializer"
                 ) as serializer_mock, patch(
                     "networkmapper.application.ClassificationWorkbench"
@@ -732,7 +773,7 @@ class ApplicationCliTest(unittest.TestCase):
             "networkmapper.application.CsvExporter"
         ), patch("networkmapper.application.RelationshipCsvExporter"), patch(
             "networkmapper.application.MarkdownExporter"
-        ), patch(
+        ), patch("networkmapper.application.ObservationJsonExporter"), patch(
             "networkmapper.application.ProjectSerializer"
         ) as serializer_mock, patch(
             "networkmapper.application.build_report_run_paths"

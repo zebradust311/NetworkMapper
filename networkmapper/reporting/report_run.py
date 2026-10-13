@@ -32,6 +32,7 @@ class ReportRunPaths:
     markdown_path: Path
     csv_path: Path
     relationships_csv_path: Path
+    observations_json_path: Path
 
 
 def build_report_run_paths(
@@ -39,14 +40,14 @@ def build_report_run_paths(
     run_metadata: RunMetadata,
 ) -> ReportRunPaths:
     """Compute and create the unique per-run output directory and the
-    Markdown/CSV artifact paths inside it.
+    Markdown/CSV/observation-replay artifact paths inside it.
 
     Keying the directory name on the run's generation timestamp and scan
     profile (`<YYYY-MM-DD_HHMMSS>_<profile>`) means consecutive runs never
     collide or overwrite a previous run's artifacts, and related artifacts
-    from the same run (Markdown report, CSV export) stay together in one
-    directory. Second-level precision is used rather than the
-    minute-level precision shown in REPORT-002's own example structure,
+    from the same run (Markdown report, CSV exports, the observation
+    replay artifact) stay together in one directory. Second-level
+    precision is used rather than the minute-level precision shown in REPORT-002's own example structure,
     specifically so back-to-back runs (as happen in automated tests, or
     when a technician re-runs a scan moments later) still land in
     distinct directories.
@@ -57,7 +58,7 @@ def build_report_run_paths(
             derive the run directory name.
 
     Returns:
-        The created run directory and the Markdown/CSV paths within it.
+        The created run directory and the artifact paths within it.
     """
     run_directory_name = (
         f"{run_metadata.generated_at:%Y-%m-%d_%H%M%S}_{run_metadata.scan_profile.value}"
@@ -70,4 +71,5 @@ def build_report_run_paths(
         markdown_path=run_directory / "report.md",
         csv_path=run_directory / "devices.csv",
         relationships_csv_path=run_directory / "relationships.csv",
+        observations_json_path=run_directory / "observations.json",
     )
