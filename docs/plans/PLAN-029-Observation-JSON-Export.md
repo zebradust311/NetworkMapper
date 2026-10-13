@@ -1,6 +1,8 @@
 # Status
 
-Proposed — Architect Rulings Applied; Awaiting Approval
+Approved — Architect-Reviewed
+
+Approval: Architect-approved on 2026-10-13 for implementation as FEAT-OBSERVATION-JSON-EXPORT, including decisions D1–D10 (Section 2) and architect rulings 1–4 (Section 2.1).
 
 Revision: architect rulings 1–4 applied (Section 2.1). No open questions remain.
 
