@@ -43,7 +43,15 @@ class IdentityResolver:
     Principles: `resolve()` produces byte-identical output regardless of
     the input sequence's order, by grouping into sets/dicts and then
     explicitly sorting every output collection rather than relying on
-    incidental input or iteration order.
+    incidental input or iteration order. Observations within each property
+    are sorted by `(provider, collection_method, value, source_run,
+    observed_at.isoformat())`, the identity counterpart of
+    `RelationshipResolver`'s edge ordering (PLAN-028 D6). The timestamp is
+    compared through its ISO string so the sort is total even if naive and
+    timezone-aware datetimes were ever mixed. Observations identical in
+    every sorted field are equal by value, so their relative order is not
+    significant: the output is deterministic by value, not by object
+    identity.
     """
 
     def resolve(
@@ -120,16 +128,7 @@ class IdentityResolver:
         else:
             state = IdentityCorroborationState.WEAK
 
-        sorted_observations = tuple(
-            sorted(
-                observations,
-                key=lambda observation: (
-                    observation.provenance.provider,
-                    observation.provenance.collection_method,
-                    observation.value,
-                ),
-            )
-        )
+        sorted_observations = tuple(sorted(observations, key=_property_observation_sort_key))
 
         return PropertyCorroboration(
             property_name=property_name,
@@ -162,3 +161,24 @@ class IdentityResolver:
             return IdentityCorroborationState.PROBABLE
 
         return IdentityCorroborationState.WEAK
+
+
+def _property_observation_sort_key(
+    observation: IdentityObservation,
+) -> tuple[str, str, str, str, str]:
+    """Total, deterministic order for one property's observations.
+
+    `source_run` and the timestamp break ties between observations that
+    share a source and a value; without them such ties would fall back to
+    input order, and identity resolution would depend on the order
+    observations were collected in (ADR-012). The timestamp is compared
+    through its ISO string, never as a `datetime`, so mixed naive/aware
+    values can't raise `TypeError`.
+    """
+    return (
+        observation.provenance.provider,
+        observation.provenance.collection_method,
+        observation.value,
+        observation.provenance.source_run,
+        observation.provenance.observed_at.isoformat(),
+    )

@@ -54,7 +54,8 @@ class PropertyCorroboration:
             property, preserved in full — never collapsed to a single
             resolved value, per ADR-011/ADR-012's explainability
             requirement. Sorted deterministically (provider, collection
-            method, value) so this field never depends on input order.
+            method, value, source run, observation timestamp) so this
+            field never depends on input order.
     """
 
     property_name: str

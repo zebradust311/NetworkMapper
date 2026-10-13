@@ -1,6 +1,6 @@
 import random
 import unittest
-from datetime import datetime
+from datetime import datetime, timezone
 
 from networkmapper.identity.models import IdentityCorroborationState
 from networkmapper.identity.resolver import IdentityResolver
@@ -16,6 +16,7 @@ def _identity_observation(
     provider: str = "nmap",
     collection_method: str = "host-discovery",
     source_run: str = "run-001",
+    observed_at: datetime = datetime(2026, 8, 19, 9, 0, 0),
 ) -> IdentityObservation:
     return IdentityObservation(
         subject=subject,
@@ -24,7 +25,7 @@ def _identity_observation(
         provenance=ObservationProvenance(
             provider=provider,
             collection_method=collection_method,
-            observed_at=datetime(2026, 8, 19, 9, 0, 0),
+            observed_at=observed_at,
             source_run=source_run,
         ),
     )
@@ -236,6 +237,120 @@ class IdentityResolverDeterminismTest(unittest.TestCase):
             result = IdentityResolver().resolve(shuffled)
 
             self.assertEqual(result, baseline)
+
+    def test_observations_differing_only_in_source_run_resolve_in_the_same_order(self):
+        # Same subject, property, provider, collection method and value:
+        # only source_run tells these apart, so it must decide their order.
+        run_b = _identity_observation("10.0.0.1", "hostname", "dc-01", source_run="run-b")
+        run_a = _identity_observation("10.0.0.1", "hostname", "dc-01", source_run="run-a")
+
+        forward = IdentityResolver().resolve([run_b, run_a])
+        backward = IdentityResolver().resolve([run_a, run_b])
+
+        self.assertEqual(forward, backward)
+        self.assertEqual(
+            [observation.provenance.source_run for observation in forward[0].properties[0].observations],
+            ["run-a", "run-b"],
+        )
+
+    def test_observations_differing_only_in_observed_at_resolve_in_the_same_order(self):
+        later = _identity_observation(
+            "10.0.0.1", "hostname", "dc-01", observed_at=datetime(2026, 8, 19, 9, 0, 0, 500000)
+        )
+        earlier = _identity_observation(
+            "10.0.0.1", "hostname", "dc-01", observed_at=datetime(2026, 8, 19, 9, 0, 0, 250000)
+        )
+
+        forward = IdentityResolver().resolve([later, earlier])
+        backward = IdentityResolver().resolve([earlier, later])
+
+        self.assertEqual(forward, backward)
+        self.assertEqual(forward[0].properties[0].observations, (earlier, later))
+
+    def test_source_run_orders_before_observed_at(self):
+        first = _identity_observation(
+            "10.0.0.1", "hostname", "dc-01", source_run="run-a", observed_at=datetime(2026, 8, 19, 10, 0, 0)
+        )
+        second = _identity_observation(
+            "10.0.0.1", "hostname", "dc-01", source_run="run-b", observed_at=datetime(2026, 8, 19, 9, 0, 0)
+        )
+
+        identities = IdentityResolver().resolve([second, first])
+
+        self.assertEqual(identities[0].properties[0].observations, (first, second))
+
+    def test_tied_observations_with_mixed_naive_and_aware_timestamps_sort_without_error(self):
+        naive = _identity_observation("10.0.0.1", "hostname", "dc-01", observed_at=datetime(2026, 8, 19, 9, 0, 0))
+        aware = _identity_observation(
+            "10.0.0.1", "hostname", "dc-01", observed_at=datetime(2026, 8, 19, 9, 0, 0, tzinfo=timezone.utc)
+        )
+
+        forward = IdentityResolver().resolve([aware, naive])
+        backward = IdentityResolver().resolve([naive, aware])
+
+        self.assertEqual(forward, backward)
+        self.assertEqual(forward[0].properties[0].observations, (naive, aware))
+
+    def test_resolve_is_order_independent_with_tied_observations_across_many_permutations(self):
+        base_observations = [
+            _identity_observation("10.0.0.1", "hostname", "dc-01", source_run="run-c"),
+            _identity_observation("10.0.0.1", "hostname", "dc-01", source_run="run-a"),
+            _identity_observation("10.0.0.1", "hostname", "dc-01", source_run="run-b"),
+            _identity_observation(
+                "10.0.0.1", "hostname", "dc-01", source_run="run-a", observed_at=datetime(2026, 8, 19, 9, 0, 1)
+            ),
+            _identity_observation("10.0.0.1", "hostname", "dc-01", source_run="run-a"),
+            _identity_observation("10.0.0.1", "hostname", "dc-01", provider="snmp", collection_method="sysName"),
+            _identity_observation(
+                "10.0.0.1", "hostname", "dc-01", provider="snmp", collection_method="sysName", source_run="run-z"
+            ),
+            _identity_observation("10.0.0.2", "hostname", "ws-01", source_run="run-b"),
+            _identity_observation("10.0.0.2", "hostname", "ws-99", source_run="run-a"),
+            _identity_observation("10.0.0.2", "hostname", "ws-01", source_run="run-a"),
+        ]
+
+        baseline = IdentityResolver().resolve(base_observations)
+
+        rng = random.Random(29)
+        for _ in range(200):
+            shuffled = list(base_observations)
+            rng.shuffle(shuffled)
+
+            self.assertEqual(IdentityResolver().resolve(shuffled), baseline)
+
+    def test_tie_ordering_does_not_change_corroboration_states(self):
+        # The same source repeated across runs is still one source: the tie
+        # ordering sorts these observations, it never counts them differently.
+        repeated = [
+            _identity_observation("10.0.0.1", "hostname", "dc-01", source_run="run-b"),
+            _identity_observation("10.0.0.1", "hostname", "dc-01", source_run="run-a"),
+        ]
+        conflicting = [
+            _identity_observation("10.0.0.2", "hostname", "ws-01", source_run="run-b"),
+            _identity_observation("10.0.0.2", "hostname", "ws-99", source_run="run-a"),
+        ]
+        confirmed = [
+            _identity_observation("10.0.0.3", "hostname", "sw-01", source_run="run-b"),
+            _identity_observation(
+                "10.0.0.3", "hostname", "sw-01", provider="snmp", collection_method="sysName", source_run="run-a"
+            ),
+        ]
+
+        identities = IdentityResolver().resolve(repeated + conflicting + confirmed)
+
+        self.assertEqual(
+            [(identity.subject, identity.state) for identity in identities],
+            [
+                ("10.0.0.1", IdentityCorroborationState.WEAK),
+                ("10.0.0.2", IdentityCorroborationState.CONFLICTING),
+                ("10.0.0.3", IdentityCorroborationState.CONFIRMED),
+            ],
+        )
+        # Value still orders before source_run within one source.
+        self.assertEqual(
+            [observation.value for observation in identities[1].properties[0].observations],
+            ["ws-01", "ws-99"],
+        )
 
 
 if __name__ == "__main__":

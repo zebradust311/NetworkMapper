@@ -227,6 +227,44 @@ class ExactReplayTest(_RunDirectoryTestCase):
         )
         self.assertEqual(replay.identities, project.canonical_identities)
 
+    def test_replay_is_exact_for_identity_observations_that_tie_on_source_and_value(self):
+        # Same subject, property, provider, collection method and value,
+        # told apart only by source_run or observed_at. The artifact stores
+        # them in its own sorted order, not the order the run collected them
+        # in, so replay is exact only if the identity resolver orders such
+        # ties by value rather than by input position (ADR-012).
+        tied = [
+            _identity(_A, "hostname", "host-a.example", source_run="run-c"),
+            _identity(_A, "hostname", "host-a.example", source_run="run-a"),
+            _identity(_A, "hostname", "host-a.example", source_run="run-b"),
+            _identity(
+                _A, "hostname", "host-a.example", source_run="run-a", observed_at=datetime(2026, 10, 13, 9, 15, 3)
+            ),
+            _identity(
+                _A,
+                "hostname",
+                "host-a.example",
+                source_run="run-a",
+                observed_at=datetime(2026, 10, 13, 9, 15, 2, tzinfo=timezone.utc),
+            ),
+            _identity(_B, "mac_address", "02:00:5E:00:53:0A", source_run="run-b"),
+            _identity(_B, "mac_address", "02:00:5E:00:53:0A", source_run="run-a"),
+        ]
+        rng = random.Random(29)
+
+        for _ in range(50):
+            collected = list(tied)
+            rng.shuffle(collected)
+            project = _write_run(self.run_dir, collected)
+
+            replay = replay_observations(self.run_dir)
+
+            self.assertEqual(replay.identities, project.canonical_identities)
+            self.assertEqual(
+                [o.provenance.source_run for o in replay.identities[0].properties[0].observations],
+                ["run-a", "run-a", "run-a", "run-b", "run-c"],
+            )
+
     def test_replay_is_exact_whatever_order_the_run_collected_observations_in(self):
         observations = _mixed_observations()
         expected = _resolve_project(observations)
