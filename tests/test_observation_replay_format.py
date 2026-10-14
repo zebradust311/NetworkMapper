@@ -337,6 +337,36 @@ class DeterminismTest(unittest.TestCase):
 
         self.assertEqual(sorted(document), ["format", "format_version", "observations"])
 
+    def _assert_source_run_alone_orders_records(self, run_b, run_a) -> None:
+        """`run_b` and `run_a` are identical in every field except
+        `source_run`, so only `source_run` can decide their order. Without
+        it in the sort key they would keep input order and the bytes would
+        depend on collection order (ADR-011 Amendment 1, Decision 4;
+        PLAN-029 Section 5)."""
+        self.assertNotEqual(run_b, run_a)
+        self.assertEqual(run_b.provenance.observed_at, run_a.provenance.observed_at)
+
+        forward = serialize_observations([run_b, run_a])
+        backward = serialize_observations([run_a, run_b])
+
+        self.assertEqual(forward, backward)
+        records = json.loads(forward)["observations"]
+        self.assertEqual(len(records), 2)
+        self.assertEqual([record["provenance"]["source_run"] for record in records], ["run-a", "run-b"])
+        self.assertEqual(Counter(parse_observations(forward)), Counter([run_b, run_a]))
+
+    def test_identity_records_differing_only_in_source_run_are_ordered_by_source_run(self):
+        self._assert_source_run_alone_orders_records(
+            _identity(source_run="run-b"),
+            _identity(source_run="run-a"),
+        )
+
+    def test_relationship_records_differing_only_in_source_run_are_ordered_by_source_run(self):
+        self._assert_source_run_alone_orders_records(
+            _relationship(source_run="run-b"),
+            _relationship(source_run="run-a"),
+        )
+
 
 class RejectionTest(unittest.TestCase):
     def _assert_rejected(self, document, expected_message: str) -> None:
