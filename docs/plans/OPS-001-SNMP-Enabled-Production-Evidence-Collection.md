@@ -1,6 +1,8 @@
 # Status
 
-**Prerequisite feature and verification complete; procedure revised, awaiting owner approval. Production execution not authorized.**
+**Closed, not executed; no production evidence collected.**
+
+Outcome: see [OPS-001 Results](../reports/OPS-001-SNMP-Production-Evidence-Collection-Results.md). Authorized for one collection run on 2026-10-19. Launches 1–4 stopped before collection. No collection evidence was found for launches 5–6; their termination remains unconfirmed. The operator reported that SNMP is not enabled on any production device. The project owner closed OPS-001. The procedure below is retained unchanged as the historical record.
 
 Revision: procedure revised against `84492b7` to the implemented observation export, the replay command and the ARCH-029 replay-verification ruling. Architect rulings D1–D4 (Section 2) still apply. Collection has **not** been run.
 
