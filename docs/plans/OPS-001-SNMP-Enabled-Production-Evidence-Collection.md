@@ -4,6 +4,8 @@
 
 Revision: procedure revised against `84492b7` to the implemented observation export, the replay command and the ARCH-029 replay-verification ruling. Architect rulings D1–D4 (Section 2) still apply. Collection has **not** been run.
 
+Amendment (after `897884a`): step 3 now states the operator scope confirmation as an explicit gate. It accepts only the complete word `YES`, ignoring case and surrounding whitespace. No other step changed.
+
 Authority:
 - [ARCH-026](../reports/ARCH-026-Gateway-Relationship-Evidence-Readiness.md): the current production dataset contains zero relationship observations and no deterministic gateway evidence. Recommends OPS-001.
 - [ADR-013 Amendment 1](../ADR.md), [PLAN-028](PLAN-028-Relationship-Cardinality-Resolver-Support.md), FEAT-RELATIONSHIP-CARDINALITY (`7668763`) and [VER-028](../reports/VER-028-Relationship-Cardinality-Resolver-Support.md) (`11bd9d5`): resolver cardinality semantics are corrected and verified.
@@ -278,11 +280,17 @@ if ((Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash -ne $baselineHash
 - Device and classification differences between the two are expected findings, reported as aggregate counts, never treated as failures.
 
 **Step 3: Derive the explicit baseline subnets locally (D3).** The result goes to a gitignored file and is never committed.
+
+The operator confirms the listed subnets match the authorized scope. Only the complete word `YES` continues, in any letter case and with surrounding whitespace ignored. Empty input, whitespace only, `y` or any other answer stops the procedure.
+
+<!-- ps:targets -->
 ```powershell
 New-Item -ItemType Directory -Force output\ops-001 | Out-Null
 python -c "import json,ipaddress; d=json.load(open(r'output\baselines\2026-09-04_Test-Network.nmproj',encoding='utf-8'))['devices']; print('\n'.join(sorted({str(ipaddress.ip_network(x['ip_address']+'/24',strict=False)) for x in d})))" | Out-File -Encoding ascii output\ops-001\targets.local.txt
 if ($LASTEXITCODE -ne 0) { throw "STOP: target derivation failed" }
 Get-Content output\ops-001\targets.local.txt   # operator confirms the list matches the authorized scope
+$confirmation = Read-Host "Confirm the subnets listed above match the authorized scope. Type YES to continue"
+if (-not (([string]$confirmation).Trim() -ieq 'YES')) { throw "STOP: targets not confirmed by the operator" }
 $subnetArgs = Get-Content output\ops-001\targets.local.txt | ForEach-Object { "--subnet"; $_ }
 ```
 
@@ -766,7 +774,7 @@ The harness runs the script as the operator will: `python -I output\ops-001\gate
 
 **Error-output check.** Five malformed artifacts each carried a distinctive identifier: as an unknown type, an unknown key, a non-canonical timestamp, an unknown format identifier, and in a run-directory name. A missing input was tested separately. In every case the script exits 2, prints only the fixed category and exit code, and echoes no distinctive value. Before the change, all five malformed cases echoed it, through the loader message or the file path.
 
-### B.2 PowerShell control flow: 28 of 28 checks passed
+### B.2 PowerShell control flow: 28 of 28 checks passed, plus 11 of 11 for the step 3 amendment
 
 The harness extracts the **exact** blocks marked `ps:` in Section 6 and runs them in Windows PowerShell 5.1 inside a scratch sandbox. `git`, `python` (for the scan), `nmap` and `Read-Host` are replaced by stubs, so nothing scans.
 
@@ -779,5 +787,6 @@ The harness extracts the **exact** blocks marked `ps:` in Section 6 and runs the
 | Native exit code | A real Python process exiting 3 through `2>&1 \| Tee-Object` leaves `$LASTEXITCODE` = 3. The `Tee-Object` file is UTF-16 LE with a BOM |
 | Encoding check (real Python) | The exact step 1 check exits 1 without `PYTHONIOENCODING`, so it catches the hazard, and exits 0 with `PYTHONIOENCODING=utf-8` |
 | Leak scan | A clean tree gives "0 matches", printing counts only. A credential planted in a UTF-16 file, an empty search value, and a locked (unreadable) file each stop the scan. The search value is cleared every time |
+| Scope confirmation (step 3 amendment) | `YES`, `yes`, `Yes` and whitespace-padded `yes` continue. Empty input, whitespace only, `y` and unrelated text stop with "targets not confirmed". A null answer also stops |
 
 **Not validated:** behavior on the production scanner, real SNMP agents, real artifact sizes, and Ctrl+C. Ctrl+C is covered by `finally` and Section 9's interrupted-run row, but was not exercised.
